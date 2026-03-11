@@ -47,7 +47,7 @@ export default function NotificationsPage() {
               {notifications.map((n: { id: number; type: string; title: string; body: string; read: boolean; createdAt: string }) => (
                 <li
                   key={n.id}
-                  className={`rounded-lg border p-4 ${n.read ? "border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50" : "border-slate-300 dark:border-slate-700"}`}
+                  className={`rounded-lg border p-4 ${n.read ? "border-slate-100 bg-slate-50/50" : "border-slate-200 bg-white"}`}
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div>

@@ -9,6 +9,7 @@ import {
   FileText,
   Bell,
   AlertTriangle,
+  KeyRound,
 } from "lucide-react";
 import { LogoutButton } from "@/components/logout-button";
 import { useAuth } from "@/hooks/use-auth";
@@ -22,6 +23,7 @@ const nav = [
   { href: "/audit", label: "Audit Log", icon: FileText },
   { href: "/sla", label: "SLA & Breaches", icon: AlertTriangle },
   { href: "/notifications", label: "Notifications", icon: Bell },
+  { href: "/admin", label: "Admin", icon: KeyRound, superAdminOnly: true },
 ];
 
 export default function DashboardLayout({
@@ -34,7 +36,7 @@ export default function DashboardLayout({
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
+      <div className="min-h-screen flex items-center justify-center bg-white">
         <div className="animate-pulse text-slate-500">Loading...</div>
       </div>
     );
@@ -42,9 +44,9 @@ export default function DashboardLayout({
 
   if (!user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
+      <div className="min-h-screen flex items-center justify-center bg-white">
         <div className="text-center">
-          <p className="text-slate-600 dark:text-slate-400 mb-4">Please sign in.</p>
+          <p className="text-slate-600 mb-4">Please sign in.</p>
           <Button asChild>
             <Link href="/login">Sign in</Link>
           </Button>
@@ -54,16 +56,17 @@ export default function DashboardLayout({
   }
 
   const filteredNav = nav.filter((item) => {
+    if ("superAdminOnly" in item && item.superAdminOnly && user.role !== "SUPER_ADMIN") return false;
     if (item.href === "/audit" && !["SUPER_ADMIN", "MANAGER"].includes(user.role)) return false;
     if (item.href === "/sla" && !["SUPER_ADMIN", "MANAGER"].includes(user.role)) return false;
     return true;
   });
 
   return (
-    <div className="min-h-screen flex bg-slate-50 dark:bg-slate-950">
-      <aside className="w-64 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col">
-        <div className="p-6 border-b border-slate-200 dark:border-slate-800">
-          <Link href="/dashboard" className="font-semibold text-lg text-slate-900 dark:text-white">
+    <div className="min-h-screen flex bg-white">
+      <aside className="w-64 border-r border-slate-100 bg-slate-50/80 flex flex-col">
+        <div className="p-6 border-b border-slate-100">
+          <Link href="/dashboard" className="font-semibold text-lg text-slate-900">
             Order Management
           </Link>
         </div>
@@ -77,8 +80,8 @@ export default function DashboardLayout({
                 className={cn(
                   "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                   pathname === item.href
-                    ? "bg-slate-100 text-slate-900 dark:bg-slate-800 dark:text-white"
-                    : "text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
+                    ? "bg-white text-slate-900 shadow-sm border border-slate-100"
+                    : "text-slate-600 hover:bg-white/60 hover:text-slate-900"
                 )}
               >
                 <Icon className="h-5 w-5" />
@@ -87,14 +90,14 @@ export default function DashboardLayout({
             );
           })}
         </nav>
-        <div className="p-3 border-t border-slate-200 dark:border-slate-800">
-          <div className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400">
+        <div className="p-3 border-t border-slate-100">
+          <div className="px-3 py-2 text-xs text-slate-500">
             {user.name} · {user.role.replace("_", " ")}
           </div>
           <LogoutButton />
         </div>
       </aside>
-      <main className="flex-1 overflow-auto p-6 md:p-8">{children}</main>
+      <main className="flex-1 overflow-auto p-6 md:p-8 bg-white">{children}</main>
     </div>
   );
 }

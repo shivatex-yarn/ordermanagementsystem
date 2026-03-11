@@ -35,10 +35,10 @@ export default function DashboardPage() {
         {[1, 2, 3, 4].map((i) => (
           <Card key={i} className="animate-pulse">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <div className="h-4 w-32 bg-slate-200 dark:bg-slate-700 rounded" />
+              <div className="h-4 w-32 bg-slate-200 rounded" />
             </CardHeader>
             <CardContent>
-              <div className="h-8 w-16 bg-slate-200 dark:bg-slate-700 rounded" />
+              <div className="h-8 w-16 bg-slate-200 rounded" />
             </CardContent>
           </Card>
         ))}
@@ -57,7 +57,7 @@ export default function DashboardPage() {
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-slate-500 dark:text-slate-400 mt-1">
+        <p className="text-slate-500 mt-1">
           Welcome back, {user?.name}. Here’s an overview of your orders and SLA.
         </p>
       </div>
@@ -65,12 +65,12 @@ export default function DashboardPage() {
         {cards.map((card) => {
           const Icon = card.icon;
           return (
-            <Card key={card.title} className={card.alert ? "border-amber-200 dark:border-amber-800" : ""}>
+            <Card key={card.title} className={card.alert ? "border-amber-200" : ""}>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-slate-500 dark:text-slate-400">
+                <CardTitle className="text-sm font-medium text-slate-500">
                   {card.title}
                 </CardTitle>
-                <Icon className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+                <Icon className="h-4 w-4 text-slate-500" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{card.value}</div>

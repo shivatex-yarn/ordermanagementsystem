@@ -33,7 +33,7 @@ export default function AuditPage() {
           ) : (
             <div className="space-y-2">
               {data.logs.map((log: { id: number; action: string; orderId: number; user?: { name: string }; createdAt: string }) => (
-                <div key={log.id} className="rounded-lg border border-slate-200 dark:border-slate-800 p-3 text-sm">
+                <div key={log.id} className="rounded-lg border border-slate-100 p-3 text-sm">
                   <span className="font-medium">{log.action}</span> — Order #{log.orderId}
                   {log.user && ` by ${log.user.name}`} — {new Date(log.createdAt).toLocaleString()}
                 </div>

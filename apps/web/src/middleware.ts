@@ -11,7 +11,7 @@ export function middleware(request: NextRequest) {
   if (pathname.startsWith("/api/") && !pathname.includes("/auth/")) {
     return NextResponse.next();
   }
-  if (pathname.startsWith("/dashboard") || pathname.startsWith("/orders") || pathname.startsWith("/divisions") || pathname.startsWith("/audit") || pathname.startsWith("/sla") || pathname.startsWith("/notifications")) {
+  if (pathname.startsWith("/dashboard") || pathname.startsWith("/orders") || pathname.startsWith("/divisions") || pathname.startsWith("/audit") || pathname.startsWith("/sla") || pathname.startsWith("/notifications") || pathname.startsWith("/admin")) {
     const token = request.cookies.get("oms_token")?.value;
     if (!token) {
       const url = new URL("/login", request.url);
