@@ -77,7 +77,7 @@ export default function NewOrderPage() {
         <CardContent>
           <form onSubmit={onSubmit} className="space-y-4">
             {error && (
-              <div className="rounded-lg bg-red-50 dark:bg-red-950/50 text-red-700 dark:text-red-400 text-sm p-3">
+              <div className="rounded-lg bg-red-50 border border-red-100 text-red-700 text-sm p-3">
                 {error}
               </div>
             )}

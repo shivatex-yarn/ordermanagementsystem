@@ -32,7 +32,7 @@ export default function DivisionsPage() {
           ) : (
             <ul className="space-y-4">
               {divisions.map((d: { id: number; name: string; managers?: { user: { name: string; email: string } }[] }) => (
-                <li key={d.id} className="flex items-center justify-between rounded-lg border border-slate-200 dark:border-slate-800 p-4">
+                <li key={d.id} className="flex items-center justify-between rounded-lg border border-slate-100 p-4">
                   <span className="font-medium">{d.name}</span>
                   {d.managers?.length ? (
                     <span className="text-sm text-slate-500">

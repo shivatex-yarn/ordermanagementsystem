@@ -2,11 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -39,48 +37,108 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-slate-100 dark:bg-slate-900">
-      <Card className="w-full max-w-md shadow-lg">
-        <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold">Sign in</CardTitle>
-          <CardDescription>Enter your credentials to access the order management system.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={onSubmit} className="space-y-4">
+    <div className="min-h-screen flex bg-white">
+      {/* Left: Branding */}
+      <div className="hidden lg:flex lg:w-1/2 xl:w-[55%] bg-slate-50 border-r border-slate-100 flex-col justify-between p-12 xl:p-16">
+        <div>
+          <div className="flex items-center gap-2">
+            <div className="h-8 w-8 rounded-lg bg-slate-900" />
+            <span className="text-xl font-semibold tracking-tight text-slate-900">
+              Order Management
+            </span>
+          </div>
+        </div>
+        <div>
+          <h2 className="text-3xl xl:text-4xl font-semibold text-slate-900 tracking-tight max-w-md">
+            Enterprise order workflow with SLA, audit, and full control.
+          </h2>
+          <p className="mt-4 text-slate-500 max-w-sm text-base">
+            Sign in to manage orders, divisions, and compliance—all in one place.
+          </p>
+        </div>
+        <p className="text-sm text-slate-400">© Order Management System</p>
+      </div>
+
+      {/* Right: Form */}
+      <div className="w-full lg:w-1/2 xl:w-[45%] flex items-center justify-center p-6 sm:p-10 lg:p-12">
+        <div className="w-full max-w-[400px]">
+          <div className="lg:hidden mb-10">
+            <div className="flex items-center gap-2">
+              <div className="h-8 w-8 rounded-lg bg-slate-900" />
+              <span className="text-xl font-semibold tracking-tight text-slate-900">
+                Order Management
+              </span>
+            </div>
+          </div>
+
+          <h1 className="text-2xl sm:text-3xl font-semibold text-slate-900 tracking-tight">
+            Welcome back
+          </h1>
+          <p className="mt-2 text-slate-500 text-base">
+            Enter your credentials to continue.
+          </p>
+
+          <form onSubmit={onSubmit} className="mt-10 space-y-6">
             {error && (
-              <div className="rounded-lg bg-red-50 dark:bg-red-950/50 text-red-700 dark:text-red-400 text-sm p-3">
+              <div
+                role="alert"
+                className="rounded-xl bg-red-50 border border-red-100 text-red-700 text-sm px-4 py-3"
+              >
                 {error}
               </div>
             )}
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label
+                htmlFor="email"
+                className="text-slate-700 font-medium text-sm"
+              >
+                Email
+              </Label>
               <Input
                 id="email"
                 type="email"
-                placeholder="you@company.com"
+                placeholder="name@company.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 autoComplete="email"
+                className="h-12 rounded-xl border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 focus-visible:ring-slate-900 focus-visible:ring-2"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <div className="flex items-center justify-between">
+                <Label
+                  htmlFor="password"
+                  className="text-slate-700 font-medium text-sm"
+                >
+                  Password
+                </Label>
+              </div>
               <Input
                 id="password"
                 type="password"
+                placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 autoComplete="current-password"
+                className="h-12 rounded-xl border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 focus-visible:ring-slate-900 focus-visible:ring-2"
               />
             </div>
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Signing in..." : "Sign in"}
+            <Button
+              type="submit"
+              className="w-full h-12 rounded-xl text-base font-medium bg-slate-900 hover:bg-slate-800 text-white"
+              disabled={loading}
+            >
+              {loading ? "Signing in…" : "Sign in"}
             </Button>
           </form>
-        </CardContent>
-      </Card>
+
+          <p className="mt-8 text-center text-sm text-slate-400">
+            Secure access. Your data is protected.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }
