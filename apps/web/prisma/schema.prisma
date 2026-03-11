@@ -1,0 +1,202 @@
+// Enterprise Order Management System - Prisma Schema
+// Supports 500-2000+ concurrent users, audit trail, SLA, multi-division workflow
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPER_ADMIN
+  MANAGER
+  SUPERVISOR
+  USER
+}
+
+enum OrderStatus {
+  PLACED
+  IN_PROGRESS
+  TRANSFERRED
+  REJECTED
+  COMPLETED
+}
+
+model User {
+  id           Int       @id @default(autoincrement())
+  name         String
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  role         Role      @default(USER)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  // Division assignment for Managers/Supervisors
+  divisionId Int? @map("division_id")
+  division   Division? @relation("UserDivision", fields: [divisionId], references: [id])
+
+  // Relations
+  createdOrders     Order[]         @relation("OrderCreatedBy")
+  acceptedOrders    Order[]         @relation("OrderAcceptedBy")
+  rejectedOrders    Order[]         @relation("OrderRejectedBy")
+  completedOrders   Order[]         @relation("OrderCompletedBy")
+  receivedOrders    Order[]         @relation("OrderReceivedBy")
+  transfers         OrderTransfer[] @relation("TransferredBy")
+  rejections        OrderRejection[] @relation("RejectedBy")
+  auditLogs         AuditLog[]
+  notifications     Notification[]
+  managedDivisions  DivisionManager[] @relation("ManagerUser")
+}
+
+model Division {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users        User[]           @relation("UserDivision")
+  orders       Order[]         @relation("CurrentDivision")
+  ordersFrom   Order[]         @relation("PreviousDivision")
+  managers     DivisionManager[]
+  transfersIn  OrderTransfer[]  @relation("ToDivision")
+  transfersOut OrderTransfer[]  @relation("FromDivision")
+  rejections   OrderRejection[]
+  slaBreaches  SLABreach[]
+}
+
+model DivisionManager {
+  id         Int      @id @default(autoincrement())
+  divisionId Int      @map("division_id")
+  userId     Int      @map("user_id")
+  createdAt  DateTime @default(now())
+
+  division Division @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+  user     User     @relation("ManagerUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([divisionId, userId])
+  @@map("division_managers")
+}
+
+model Order {
+  id                 Int         @id @default(autoincrement())
+  orderNumber        String      @unique @map("order_number")
+  status             OrderStatus @default(PLACED)
+  description        String?     @db.Text
+  transferCount      Int         @default(0) @map("transfer_count")
+  rejectionCount     Int         @default(0) @map("rejection_count")
+  slaDeadline        DateTime?   @map("sla_deadline")
+  completedAt        DateTime?   @map("completed_at")
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  createdById        Int         @map("created_by_id")
+  currentDivisionId  Int         @map("current_division_id")
+  previousDivisionId Int?       @map("previous_division_id")
+  acceptedById       Int?        @map("accepted_by_id")
+  rejectedById       Int?        @map("rejected_by_id")
+  receivedById       Int?        @map("received_by_id")
+  completedById      Int?        @map("completed_by_id")
+
+  createdBy       User      @relation("OrderCreatedBy", fields: [createdById], references: [id])
+  currentDivision Division  @relation("CurrentDivision", fields: [currentDivisionId], references: [id])
+  previousDivision Division? @relation("PreviousDivision", fields: [previousDivisionId], references: [id])
+  acceptedBy      User?     @relation("OrderAcceptedBy", fields: [acceptedById], references: [id])
+  rejectedBy      User?     @relation("OrderRejectedBy", fields: [rejectedById], references: [id])
+  receivedBy      User?     @relation("OrderReceivedBy", fields: [receivedById], references: [id])
+  completedBy     User?     @relation("OrderCompletedBy", fields: [completedById], references: [id])
+
+  transfers    OrderTransfer[]
+  rejections   OrderRejection[]
+  auditLogs    AuditLog[]
+  slaBreaches  SLABreach[]
+
+  @@index([status])
+  @@index([currentDivisionId])
+  @@index([createdById])
+  @@index([slaDeadline])
+}
+
+model OrderTransfer {
+  id             Int      @id @default(autoincrement())
+  orderId        Int      @map("order_id")
+  fromDivisionId Int      @map("from_division_id")
+  toDivisionId   Int      @map("to_division_id")
+  reason         String   @db.Text
+  transferredById Int     @map("transferred_by_id")
+  createdAt      DateTime @default(now())
+
+  order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  fromDivision Division @relation("FromDivision", fields: [fromDivisionId], references: [id])
+  toDivision   Division  @relation("ToDivision", fields: [toDivisionId], references: [id])
+  transferredBy User     @relation("TransferredBy", fields: [transferredById], references: [id])
+
+  @@index([orderId])
+  @@map("order_transfers")
+}
+
+model OrderRejection {
+  id          Int      @id @default(autoincrement())
+  orderId     Int      @map("order_id")
+  divisionId  Int      @map("division_id")
+  reason      String   @db.Text
+  rejectedById Int     @map("rejected_by_id")
+  createdAt   DateTime @default(now())
+
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  division   Division @relation(fields: [divisionId], references: [id])
+  rejectedBy User     @relation("RejectedBy", fields: [rejectedById], references: [id])
+
+  @@index([orderId])
+  @@map("order_rejections")
+}
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  orderId   Int      @map("order_id")
+  action    String
+  payload   Json?
+  userId    Int?     @map("user_id")
+  createdAt DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user  User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model SLABreach {
+  id         Int       @id @default(autoincrement())
+  orderId    Int       @map("order_id")
+  divisionId Int       @map("division_id")
+  breachedAt DateTime @default(now()) @map("breached_at")
+  resolvedAt DateTime? @map("resolved_at")
+
+  order    Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  division Division @relation(fields: [divisionId], references: [id])
+
+  @@index([orderId])
+  @@index([breachedAt])
+  @@map("sla_breaches")
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  type      String
+  title     String
+  body      String   @db.Text
+  read      Boolean  @default(false)
+  metadata  Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([read])
+  @@map("notifications")
+}
