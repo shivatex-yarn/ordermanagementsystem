@@ -1,0 +1,39 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  // url property is REMOVED - it now comes from prisma.config.ts
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  createdOrders Order[] @relation("CreatedBy")
+}
+
+model Division {
+  id        Int      @id @default(autoincrement())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  orders Order[] @relation("CurrentDivision")
+}
+
+model Order {
+  id                Int      @id @default(autoincrement())
+  orderNumber       String   @unique
+  createdById       Int
+  currentDivisionId Int
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  createdBy       User     @relation("CreatedBy", fields: [createdById], references: [id])
+  currentDivision Division @relation("CurrentDivision", fields: [currentDivisionId], references: [id])
+}
