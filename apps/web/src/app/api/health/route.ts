@@ -7,7 +7,7 @@ export async function GET() {
   try {
     await prisma.$queryRaw`SELECT 1`;
     checks.database = "ok";
-  } catch (e) {
+  } catch {
     checks.database = "error";
   }
   const redis = getRedis();

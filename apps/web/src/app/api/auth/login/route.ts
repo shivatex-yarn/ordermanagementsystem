@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
-import { signToken, setSessionCookie } from "@/lib/auth";
+import { signToken } from "@/lib/auth";
 import { loginSchema } from "@/lib/validation";
 import { getRateLimitIdentifier, rateLimit } from "@/lib/rate-limit";
+
+const COOKIE_NAME = "oms_token";
+const COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
 
 export async function POST(req: Request) {
   const { ok, remaining } = rateLimit(getRateLimitIdentifier(req));
@@ -38,8 +41,7 @@ export async function POST(req: Request) {
     role: user.role,
     divisionId: user.divisionId ?? undefined,
   });
-  await setSessionCookie(token);
-  return NextResponse.json(
+  const response = NextResponse.json(
     {
       user: {
         id: user.id,
@@ -51,4 +53,12 @@ export async function POST(req: Request) {
     },
     { headers: { "X-RateLimit-Remaining": String(remaining) } }
   );
+  response.cookies.set(COOKIE_NAME, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    maxAge: COOKIE_MAX_AGE,
+    path: "/",
+  });
+  return response;
 }

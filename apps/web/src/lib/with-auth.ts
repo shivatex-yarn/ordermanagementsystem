@@ -34,9 +34,7 @@ export async function withRole(
   if (result.response) return result;
   const allowed = new Set(allowedRoles);
   if (!allowed.has(result.payload.role)) {
-    return {
-      response: NextResponse.json({ error: "Forbidden" }, { status: 403 },
-    };
+    return { response: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
   }
   return result;
 }
