@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { withAuth } from "@/lib/with-auth";
-import { cacheGet, cacheSet, cacheDel, cacheKeyOrder } from "@/lib/redis";
+import { cacheGet, cacheSet, cacheKeyOrder } from "@/lib/redis";
 
 const fullInclude = {
   createdBy: { select: { id: true, name: true, email: true } },

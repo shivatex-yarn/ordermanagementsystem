@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { withAuth } from "@/lib/with-auth";
-import { createOrderSchema, paginationSchema } from "@/lib/validation";
+import { createOrderSchema } from "@/lib/validation";
 import { createOrder } from "@/lib/order-engine";
 import { getRateLimitIdentifier, rateLimit } from "@/lib/rate-limit";
 import { cacheGet, cacheSet, cacheKeyOrdersList } from "@/lib/redis";
