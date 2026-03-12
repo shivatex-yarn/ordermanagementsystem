@@ -26,7 +26,7 @@ export default function AdminSettingsPage() {
             <div>
               <Label className="font-medium text-slate-900">SLA reminder (48h)</Label>
               <p className="text-sm text-slate-500 mt-0.5">
-                Notify managers when an order is approaching SLA deadline.
+                Notify managers when an enquiry is approaching SLA deadline.
               </p>
             </div>
             <span className="text-sm text-slate-500">Active (system default)</span>
@@ -35,19 +35,19 @@ export default function AdminSettingsPage() {
             <div>
               <Label className="font-medium text-slate-900">Audit logging</Label>
               <p className="text-sm text-slate-500 mt-0.5">
-                Record all order actions for compliance.
+                Record all enquiry actions for compliance.
               </p>
             </div>
             <span className="text-sm text-slate-500">Active (system default)</span>
           </div>
           <div className="flex items-center justify-between rounded-lg border border-slate-100 p-4">
             <div>
-              <Label className="font-medium text-slate-900">Email notifications</Label>
+              <Label className="font-medium text-slate-900">Email notifications (Resend)</Label>
               <p className="text-sm text-slate-500 mt-0.5">
-                Send email on order events (requires SMTP configuration).
+                Send email on enquiry events via Resend. Set RESEND_API_KEY and RESEND_FROM in .env.
               </p>
             </div>
-            <Button variant="outline" size="sm">Configure</Button>
+            <span className="text-sm text-slate-500">Via Resend</span>
           </div>
           <div className="flex items-center justify-between rounded-lg border border-slate-100 p-4">
             <div>

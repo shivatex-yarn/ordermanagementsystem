@@ -36,25 +36,25 @@ export default function OrdersPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">Orders</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Enquiries</h1>
         {canCreate && (
           <Button asChild>
             <Link href="/orders/new">
               <Plus className="h-4 w-4 mr-2" />
-              New order
+              New enquiry
             </Link>
           </Button>
         )}
       </div>
       <Card>
         <CardHeader>
-          <CardTitle>All orders</CardTitle>
+          <CardTitle>All enquiries</CardTitle>
         </CardHeader>
         <CardContent>
           {isLoading ? (
             <div className="py-8 text-center text-slate-500">Loading...</div>
           ) : !data?.orders?.length ? (
-            <div className="py-8 text-center text-slate-500">No orders yet.</div>
+            <div className="py-8 text-center text-slate-500">No enquiries yet.</div>
           ) : (
             <div className="space-y-4">
               {data.orders.map((order: { id: number; orderNumber: string; status: string; currentDivision: { name: string }; createdAt: string }) => (

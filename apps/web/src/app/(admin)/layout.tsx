@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, KeyRound, Settings, LogOut } from "lucide-react";
+import { LayoutDashboard, KeyRound, Settings, LogOut, Users } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 
 const adminNav = [
   { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/admin/divisions", label: "Admin", icon: KeyRound },
+  { href: "/admin/divisions", label: "Divisions", icon: KeyRound },
+  { href: "/admin/multi-division", label: "Multi-division access", icon: Users },
   { href: "/admin/settings", label: "Settings", icon: Settings },
 ];
 
@@ -50,7 +51,7 @@ export default function AdminLayout({
       <aside className="w-64 border-r border-slate-100 bg-slate-50/80 flex flex-col">
         <div className="p-6 border-b border-slate-100">
           <Link href="/admin/dashboard" className="font-semibold text-lg text-slate-900">
-            Admin Panel
+            Enquiry Management — Admin
           </Link>
         </div>
         <nav className="flex-1 p-3 space-y-0.5">

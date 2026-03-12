@@ -43,6 +43,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [transferReason, setTransferReason] = useState("");
   const [toDivisionId, setToDivisionId] = useState("");
   const [rejectReason, setRejectReason] = useState("");
+  const [editOpen, setEditOpen] = useState(false);
+  const [editCompanyName, setEditCompanyName] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [commentBody, setCommentBody] = useState("");
+  const [commentError, setCommentError] = useState("");
 
   const { data: order, isLoading } = useQuery({
     queryKey: ["order", orderId],
@@ -117,14 +122,51 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     },
   });
 
+  const updateMutation = useMutation({
+    mutationFn: (payload: { companyName?: string; description?: string; customFields?: Record<string, string> }) =>
+      fetch(`/api/orders/${orderId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: (res) => {
+      if (res.ok) {
+        setEditOpen(false);
+        queryClient.invalidateQueries({ queryKey: ["order", orderId] });
+        queryClient.invalidateQueries({ queryKey: ["orders"] });
+      }
+    },
+  });
+
+  const commentMutation = useMutation({
+    mutationFn: (body: string) =>
+      fetch(`/api/orders/${orderId}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ body }),
+      }),
+    onSuccess: (res) => {
+      if (res.ok) {
+        setCommentBody("");
+        setCommentError("");
+        queryClient.invalidateQueries({ queryKey: ["order", orderId] });
+      }
+    },
+    onError: (err: Error) => setCommentError(err.message),
+  });
+
   const isManager = user && ["MANAGER", "SUPER_ADMIN"].includes(user.role);
   const canAct = order && isManager && ["PLACED", "TRANSFERRED", "IN_PROGRESS"].includes(order.status);
+  const canEdit = order && order.status === "PLACED" && user && (Number(user.id) === order.createdById || user.role === "SUPER_ADMIN");
+  const canComment = order && user && (isManager || Number(user.id) === order.createdById);
 
   if (isLoading || !order) {
     return (
       <div className="space-y-6">
-        <Button variant="ghost" asChild><Link href="/orders">← Orders</Link></Button>
-        <div className="text-slate-500">Loading order...</div>
+        <Button variant="ghost" asChild><Link href="/orders">← Enquiries</Link></Button>
+        <div className="text-slate-500">Loading enquiry...</div>
       </div>
     );
   }
@@ -133,25 +175,82 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" asChild><Link href="/orders">← Orders</Link></Button>
+          <Button variant="ghost" size="sm" asChild><Link href="/orders">← Enquiries</Link></Button>
           <h1 className="text-2xl font-bold">{order.orderNumber}</h1>
           <Badge variant={statusVariant[order.status]}>{order.status.replace("_", " ")}</Badge>
         </div>
       </div>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Details</CardTitle>
+          {canEdit && (
+            <Button variant="outline" size="sm" onClick={() => { setEditCompanyName(order.companyName ?? ""); setEditDescription(order.description ?? ""); setEditOpen(true); }}>
+              Edit enquiry
+            </Button>
+          )}
         </CardHeader>
         <CardContent className="space-y-4">
+          {order.companyName && <p><span className="text-slate-500">Company name:</span> {order.companyName}</p>}
           <p><span className="text-slate-500">Created by:</span> {order.createdBy?.name} ({order.createdBy?.email})</p>
           <p><span className="text-slate-500">Current division:</span> {order.currentDivision?.name}</p>
-          {order.description && <p><span className="text-slate-500">Description:</span> {order.description}</p>}
+          {order.description && <p><span className="text-slate-500">Product description:</span> {order.description}</p>}
+          {order.customFields && typeof order.customFields === "object" && Object.keys(order.customFields).length > 0 && (
+            <div>
+              <span className="text-slate-500">Custom fields:</span>
+              <ul className="mt-1 list-inside list-disc text-sm">
+                {Object.entries(order.customFields as Record<string, unknown>).map(([k, v]) => (
+                  <li key={k}><span className="font-medium">{k}:</span> {String(v)}</li>
+                ))}
+              </ul>
+            </div>
+          )}
           <p><span className="text-slate-500">Created:</span> {new Date(order.createdAt).toLocaleString()}</p>
           {order.slaDeadline && <p><span className="text-slate-500">SLA deadline:</span> {new Date(order.slaDeadline).toLocaleString()}</p>}
           <p><span className="text-slate-500">Transfers:</span> {order.transferCount} · <span className="text-slate-500">Rejections:</span> {order.rejectionCount}</p>
         </CardContent>
       </Card>
+
+      {order.editHistory?.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle>Edit history</CardTitle></CardHeader>
+          <CardContent>
+            <ul className="space-y-2 text-sm">
+              {order.editHistory.map((h: { id: number; fieldName: string; oldValue: string | null; newValue: string | null; user: { name: string }; createdAt: string }) => (
+                <li key={h.id} className="rounded border border-slate-100 p-2">
+                  <span className="font-medium">{h.fieldName}</span>: &quot;{h.oldValue ?? "—"}&quot; → &quot;{h.newValue ?? "—"}&quot;
+                  <span className="text-slate-500 ml-2">by {h.user.name} at {new Date(h.createdAt).toLocaleString()}</span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {canComment && (
+        <Card>
+          <CardHeader><CardTitle>Comments</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
+            {order.comments?.length > 0 ? (
+              <ul className="space-y-2">
+                {order.comments.map((c: { id: number; body: string; user: { name: string }; createdAt: string }) => (
+                  <li key={c.id} className="rounded border border-slate-100 p-3 text-sm">
+                    <p>{c.body}</p>
+                    <p className="text-slate-500 mt-1">— {c.user.name} · {new Date(c.createdAt).toLocaleString()}</p>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-slate-500 text-sm">No comments yet.</p>
+            )}
+            <form onSubmit={(e) => { e.preventDefault(); if (commentBody.trim()) commentMutation.mutate(commentBody.trim()); }} className="flex gap-2">
+              <Input value={commentBody} onChange={(e) => setCommentBody(e.target.value)} placeholder="Add a comment..." className="flex-1" />
+              <Button type="submit" disabled={!commentBody.trim() || commentMutation.isPending}>Add</Button>
+            </form>
+            {commentError && <p className="text-sm text-red-600">{commentError}</p>}
+          </CardContent>
+        </Card>
+      )}
 
       {order.transfers?.length > 0 && (
         <Card>
@@ -210,7 +309,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
       <Dialog open={transferOpen} onOpenChange={setTransferOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Transfer order</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Transfer enquiry</DialogTitle></DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>To division</Label>
@@ -244,7 +343,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
       <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Reject order</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Reject enquiry</DialogTitle></DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Reason (min 10 characters, mandatory)</Label>
@@ -259,6 +358,35 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               disabled={rejectReason.length < 10 || rejectMutation.isPending}
             >
               Reject
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Edit enquiry</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Company name</Label>
+              <Input value={editCompanyName} onChange={(e) => setEditCompanyName(e.target.value)} placeholder="Company name" />
+            </div>
+            <div className="space-y-2">
+              <Label>Product description</Label>
+              <Input value={editDescription} onChange={(e) => setEditDescription(e.target.value)} placeholder="Product description" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
+            <Button
+              onClick={() => updateMutation.mutate({
+                companyName: editCompanyName.trim() || undefined,
+                description: editDescription.trim() || undefined,
+                customFields: order?.customFields as Record<string, string> | undefined,
+              })}
+              disabled={!editCompanyName.trim() || !editDescription.trim() || updateMutation.isPending}
+            >
+              Save
             </Button>
           </DialogFooter>
         </DialogContent>
