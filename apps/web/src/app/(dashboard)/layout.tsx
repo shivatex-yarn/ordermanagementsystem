@@ -56,9 +56,9 @@ export default function DashboardLayout({
   }
 
   const filteredNav = nav.filter((item) => {
-    if ("superAdminOnly" in item && item.superAdminOnly && user.role !== "SUPER_ADMIN") return false;
-    if (item.href === "/audit" && !["SUPER_ADMIN", "MANAGER"].includes(user.role)) return false;
-    if (item.href === "/sla" && !["SUPER_ADMIN", "MANAGER"].includes(user.role)) return false;
+    if ("superAdminOnly" in item && item.superAdminOnly && user.role !== "SUPER_ADMIN" && user.role !== "MANAGING_DIRECTOR") return false;
+    if (item.href === "/audit" && !["SUPER_ADMIN", "MANAGING_DIRECTOR", "MANAGER"].includes(user.role)) return false;
+    if (item.href === "/sla" && !["SUPER_ADMIN", "MANAGING_DIRECTOR", "MANAGER"].includes(user.role)) return false;
     return true;
   });
 

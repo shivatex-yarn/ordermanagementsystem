@@ -31,6 +31,9 @@ export async function POST(req: Request) {
   if (!user) {
     return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
   }
+  if (!user.active) {
+    return NextResponse.json({ error: "Account is inactive. Contact admin." }, { status: 403 });
+  }
   const valid = await bcrypt.compare(parsed.data.password, user.passwordHash);
   if (!valid) {
     return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });

@@ -18,7 +18,8 @@ const roleHierarchy: Record<Role, number> = {
   USER: 0,
   SUPERVISOR: 1,
   MANAGER: 2,
-  SUPER_ADMIN: 3,
+  MANAGING_DIRECTOR: 3,
+  SUPER_ADMIN: 4,
 };
 
 export function hasRole(userRole: Role, required: Role): boolean {

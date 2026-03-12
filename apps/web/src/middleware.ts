@@ -23,12 +23,12 @@ export async function middleware(request: NextRequest) {
       url.searchParams.set("from", pathname);
       return NextResponse.redirect(url);
     }
-    // Only SUPER_ADMIN can access /admin pages (user side can access dashboard, orders, etc.)
+    // SUPER_ADMIN and MANAGING_DIRECTOR (MD, view-only) can access /admin
     if (pathname.startsWith("/admin")) {
       try {
         const { payload } = await jwtVerify(token, JWT_SECRET);
         const role = (payload as { role?: string }).role;
-        if (role !== "SUPER_ADMIN") {
+        if (role !== "SUPER_ADMIN" && role !== "MANAGING_DIRECTOR") {
           return NextResponse.redirect(new URL("/dashboard", request.url));
         }
       } catch {

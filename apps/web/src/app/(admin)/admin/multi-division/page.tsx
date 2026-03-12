@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/hooks/use-auth";
 
 type Request = {
   id: number;
@@ -24,6 +25,8 @@ async function fetchRequests(status?: string): Promise<{ requests: Request[] }> 
 }
 
 export default function AdminMultiDivisionPage() {
+  const { user } = useAuth();
+  const isViewOnly = user?.role === "MANAGING_DIRECTOR";
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<string>("PENDING");
 
@@ -132,7 +135,7 @@ export default function AdminMultiDivisionPage() {
                     Submitted {new Date(r.createdAt).toLocaleString()}
                     {r.approvedBy && ` · Processed by ${r.approvedBy.name}`}
                   </p>
-                  {r.status === "PENDING" && (
+                  {r.status === "PENDING" && !isViewOnly && (
                     <div className="flex gap-2 pt-2">
                       <Button
                         size="sm"

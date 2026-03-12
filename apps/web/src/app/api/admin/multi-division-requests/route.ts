@@ -4,7 +4,7 @@ import { withRole } from "@/lib/with-auth";
 
 /** Super Admin only: list multi-division access requests */
 export async function GET(req: Request) {
-  const auth = await withRole(["SUPER_ADMIN"]);
+  const auth = await withRole(["SUPER_ADMIN", "MANAGING_DIRECTOR"]);
   if (auth.response) return auth.response;
   const { searchParams } = new URL(req.url);
   const status = searchParams.get("status") || undefined;

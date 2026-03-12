@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import { withRole } from "@/lib/with-auth";
 
 export async function GET(req: Request) {
-  const auth = await withRole(["SUPER_ADMIN", "MANAGER"]);
+  const auth = await withRole(["SUPER_ADMIN", "MANAGING_DIRECTOR", "MANAGER"]);
   if (auth.response) return auth.response;
   const { searchParams } = new URL(req.url);
   const orderId = searchParams.get("orderId");

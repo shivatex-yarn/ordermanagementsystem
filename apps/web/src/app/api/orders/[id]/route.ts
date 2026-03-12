@@ -57,11 +57,12 @@ export async function GET(
       const inDivisionHistory =
         order.previousDivisionId === auth.payload.divisionId ||
         order.currentDivisionId === auth.payload.divisionId;
-      if (!inDivisionHistory && auth.payload.role !== "SUPER_ADMIN") {
+      if (!inDivisionHistory && auth.payload.role !== "SUPER_ADMIN" && auth.payload.role !== "MANAGING_DIRECTOR") {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
     }
   }
+  // MANAGING_DIRECTOR and SUPER_ADMIN can view any enquiry
 
   await cacheSet(cacheKeyOrder(id), order, 120);
   return NextResponse.json(order);

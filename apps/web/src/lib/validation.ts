@@ -9,8 +9,32 @@ export const registerSchema = z.object({
   name: z.string().min(1).max(255),
   email: z.string().email(),
   password: z.string().min(8, "Password must be at least 8 characters"),
-  role: z.enum(["USER", "SUPERVISOR", "MANAGER", "SUPER_ADMIN"]).optional(),
+  role: z.enum(["USER", "SUPERVISOR", "MANAGER", "MANAGING_DIRECTOR", "SUPER_ADMIN"]).optional(),
   divisionId: z.number().int().positive().optional(),
+});
+
+export const adminCreateUserSchema = z.object({
+  name: z.string().min(1).max(255),
+  email: z.string().email(),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+  role: z.enum(["USER", "SUPERVISOR", "MANAGER", "MANAGING_DIRECTOR", "SUPER_ADMIN"]),
+  divisionId: z.number().int().positive().optional(),
+  divisionIds: z.array(z.number().int().positive()).optional(),
+});
+
+export const adminUpdateUserSchema = z.object({
+  name: z.string().min(1).max(255).optional(),
+  email: z.string().email().optional(),
+  password: z.string().min(8).optional(),
+  role: z.enum(["USER", "SUPERVISOR", "MANAGER", "MANAGING_DIRECTOR", "SUPER_ADMIN"]).optional(),
+  divisionId: z.number().int().positive().nullable().optional(),
+  divisionIds: z.array(z.number().int().positive()).optional(),
+  active: z.boolean().optional(),
+});
+
+export const divisionUpdateSchema = z.object({
+  name: z.string().min(1).max(255).trim().optional(),
+  active: z.boolean().optional(),
 });
 
 export const createOrderSchema = z.object({
