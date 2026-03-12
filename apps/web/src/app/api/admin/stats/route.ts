@@ -4,7 +4,7 @@ import { withRole } from "@/lib/with-auth";
 
 /** Super Admin only: metrics for admin dashboard */
 export async function GET() {
-  const auth = await withRole(["SUPER_ADMIN"]);
+  const auth = await withRole(["SUPER_ADMIN", "MANAGING_DIRECTOR"]);
   if (auth.response) return auth.response;
 
   const [

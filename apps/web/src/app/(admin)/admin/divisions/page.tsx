@@ -20,17 +20,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { UserPlus, X } from "lucide-react";
+import { UserPlus, X, Pencil, Trash2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/hooks/use-auth";
 
 type Division = {
   id: number;
   name: string;
-  managers: { user: { id: number; name: string; email: string } }[];
+  active?: boolean;
+  managers: { user: { id: number; name: string; email: string; active?: boolean } }[];
 };
-type UserItem = { id: number; name: string; email: string; role: string };
+type UserItem = { id: number; name: string; email: string; role: string; active?: boolean };
 
 async function fetchDivisions(): Promise<{ divisions: Division[] }> {
-  const res = await fetch("/api/divisions", { credentials: "include" });
+  const res = await fetch("/api/divisions?includeInactive=true", { credentials: "include" });
   if (!res.ok) throw new Error("Failed to fetch divisions");
   return res.json();
 }
@@ -42,11 +45,16 @@ async function fetchUsers(): Promise<{ users: UserItem[] }> {
 }
 
 export default function AdminDivisionsPage() {
+  const { user } = useAuth();
+  const isViewOnly = user?.role === "MANAGING_DIRECTOR";
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [assignDivisionId, setAssignDivisionId] = useState<number | null>(null);
   const [assignUserId, setAssignUserId] = useState<string>("");
+  const [editDivision, setEditDivision] = useState<Division | null>(null);
+  const [editDivisionName, setEditDivisionName] = useState("");
+  const [editDivisionActive, setEditDivisionActive] = useState(true);
 
   const { data: divisionsData, isLoading } = useQuery({
     queryKey: ["divisions"],
@@ -113,6 +121,37 @@ export default function AdminDivisionsPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["divisions"] }),
   });
 
+  const updateDivisionMutation = useMutation({
+    mutationFn: async ({ id, name, active }: { id: number; name: string; active: boolean }) => {
+      const res = await fetch(`/api/divisions/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ name, active }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to update");
+      return data;
+    },
+    onSuccess: () => {
+      setEditDivision(null);
+      queryClient.invalidateQueries({ queryKey: ["divisions"] });
+    },
+    onError: (err: Error) => setError(err.message),
+  });
+
+  const deleteDivisionMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await fetch(`/api/divisions/${id}`, { method: "DELETE", credentials: "include" });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to delete");
+      }
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["divisions"] }),
+    onError: (err: Error) => setError(err.message),
+  });
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = name.trim();
@@ -140,6 +179,7 @@ export default function AdminDivisionsPage() {
         </p>
       </div>
 
+      {!isViewOnly && (
       <Card>
         <CardHeader>
           <CardTitle>Add division</CardTitle>
@@ -167,6 +207,7 @@ export default function AdminDivisionsPage() {
           )}
         </CardContent>
       </Card>
+      )}
 
       <Card>
         <CardHeader>
@@ -187,19 +228,52 @@ export default function AdminDivisionsPage() {
                   key={d.id}
                   className="rounded-lg border border-slate-100 p-4 space-y-3"
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium text-slate-900">{d.name}</span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setAssignDivisionId(d.id);
-                        setAssignUserId("");
-                      }}
-                    >
-                      <UserPlus className="h-4 w-4 mr-1" />
-                      Assign Division Head
-                    </Button>
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-slate-900">{d.name}</span>
+                      <Badge variant={d.active !== false ? "success" : "secondary"}>
+                        {d.active !== false ? "Active" : "Inactive"}
+                      </Badge>
+                    </div>
+                    {!isViewOnly && (
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setEditDivision(d);
+                          setEditDivisionName(d.name);
+                          setEditDivisionActive(d.active !== false);
+                        }}
+                      >
+                        <Pencil className="h-4 w-4 mr-1" />
+                        Edit
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          if (confirm("Set this division as inactive? It will be hidden from lists."))
+                            deleteDivisionMutation.mutate(d.id);
+                        }}
+                        className="text-red-600 hover:text-red-700"
+                      >
+                        <Trash2 className="h-4 w-4 mr-1" />
+                        Delete
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setAssignDivisionId(d.id);
+                          setAssignUserId("");
+                        }}
+                      >
+                        <UserPlus className="h-4 w-4 mr-1" />
+                        Assign Division Head
+                      </Button>
+                    </div>
+                    )}
                   </div>
                   {d.managers?.length ? (
                     <ul className="flex flex-wrap gap-2">
@@ -210,6 +284,7 @@ export default function AdminDivisionsPage() {
                         >
                           <span>{m.user.name}</span>
                           <span className="text-slate-500">({m.user.email})</span>
+                          {!isViewOnly && (
                           <button
                             type="button"
                             onClick={() =>
@@ -219,6 +294,7 @@ export default function AdminDivisionsPage() {
                           >
                             <X className="h-4 w-4" />
                           </button>
+                          )}
                         </li>
                       ))}
                     </ul>
@@ -232,6 +308,7 @@ export default function AdminDivisionsPage() {
         </CardContent>
       </Card>
 
+      {!isViewOnly && (
       <Dialog open={assignDivisionId !== null} onOpenChange={(open) => !open && setAssignDivisionId(null)}>
         <DialogContent>
           <DialogHeader>
@@ -246,6 +323,7 @@ export default function AdminDivisionsPage() {
                 </SelectTrigger>
                 <SelectContent>
                   {users
+                    .filter((u) => u.active !== false)
                     .filter((u) => {
                       if (!assignDivisionId) return true;
                       const div = divisions.find((x) => x.id === assignDivisionId);
@@ -273,6 +351,52 @@ export default function AdminDivisionsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      )}
+
+      {!isViewOnly && (
+      <Dialog open={!!editDivision} onOpenChange={(o) => !o && setEditDivision(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit division</DialogTitle>
+          </DialogHeader>
+          {editDivision && (
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Name</Label>
+                <Input
+                  value={editDivisionName}
+                  onChange={(e) => setEditDivisionName(e.target.value)}
+                />
+              </div>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={editDivisionActive}
+                  onChange={(e) => setEditDivisionActive(e.target.checked)}
+                />
+                <span>Active (show in lists)</span>
+              </label>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditDivision(null)}>Cancel</Button>
+            <Button
+              onClick={() =>
+                editDivision &&
+                updateDivisionMutation.mutate({
+                  id: editDivision.id,
+                  name: editDivisionName.trim(),
+                  active: editDivisionActive,
+                })
+              }
+              disabled={!editDivisionName.trim() || updateDivisionMutation.isPending}
+            >
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      )}
     </div>
   );
 }

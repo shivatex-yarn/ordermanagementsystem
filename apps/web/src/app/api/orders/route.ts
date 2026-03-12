@@ -39,6 +39,7 @@ export async function GET(req: Request) {
   if (auth.payload.role === "MANAGER" || auth.payload.role === "SUPERVISOR") {
     if (auth.payload.divisionId) where.currentDivisionId = auth.payload.divisionId;
   }
+  // SUPER_ADMIN and MANAGING_DIRECTOR see all (no extra filter)
 
   const [orders, total] = await Promise.all([
     prisma.order.findMany({

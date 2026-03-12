@@ -12,6 +12,7 @@ datasource db {
 
 enum Role {
   SUPER_ADMIN
+  MANAGING_DIRECTOR
   MANAGER
   SUPERVISOR
   USER
@@ -31,6 +32,7 @@ model User {
   email        String    @unique
   passwordHash String    @map("password_hash")
   role         Role      @default(USER)
+  active       Boolean   @default(true)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
@@ -58,6 +60,7 @@ model User {
 model Division {
   id        Int      @id @default(autoincrement())
   name      String   @unique
+  active    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

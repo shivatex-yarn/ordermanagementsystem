@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, KeyRound, Settings, LogOut, Users } from "lucide-react";
+import { LayoutDashboard, KeyRound, Settings, LogOut, Users, UserPlus } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 
 const adminNav = [
   { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/admin/users", label: "Users", icon: UserPlus },
   { href: "/admin/divisions", label: "Divisions", icon: KeyRound },
   { href: "/admin/multi-division", label: "Multi-division access", icon: Users },
   { href: "/admin/settings", label: "Settings", icon: Settings },
@@ -35,10 +36,11 @@ export default function AdminLayout({
     return null;
   }
 
-  if (user.role !== "SUPER_ADMIN") {
+  if (user.role !== "SUPER_ADMIN" && user.role !== "MANAGING_DIRECTOR") {
     router.replace("/dashboard");
     return null;
   }
+  const isViewOnly = user.role === "MANAGING_DIRECTOR";
 
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
@@ -53,6 +55,9 @@ export default function AdminLayout({
           <Link href="/admin/dashboard" className="font-semibold text-lg text-slate-900">
             Enquiry Management — Admin
           </Link>
+          {isViewOnly && (
+            <p className="text-xs text-slate-500 mt-1">View only (MD)</p>
+          )}
         </div>
         <nav className="flex-1 p-3 space-y-0.5">
           {adminNav.map((item) => {
