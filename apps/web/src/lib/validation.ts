@@ -14,8 +14,20 @@ export const registerSchema = z.object({
 });
 
 export const createOrderSchema = z.object({
-  description: z.string().min(1).max(10000).optional(),
+  companyName: z.string().min(1, "Company name is required").max(500),
+  description: z.string().min(1, "Product description is required").max(10000),
   divisionId: z.number().int().positive(),
+  customFields: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
+});
+
+export const updateOrderSchema = z.object({
+  companyName: z.string().min(1).max(500).optional(),
+  description: z.string().min(1).max(10000).optional(),
+  customFields: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
+});
+
+export const createOrderCommentSchema = z.object({
+  body: z.string().min(1).max(10000),
 });
 
 export const acceptOrderSchema = z.object({
@@ -49,3 +61,5 @@ export const paginationSchema = z.object({
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
+export type UpdateOrderInput = z.infer<typeof updateOrderSchema>;
+export type CreateOrderCommentInput = z.infer<typeof createOrderCommentSchema>;

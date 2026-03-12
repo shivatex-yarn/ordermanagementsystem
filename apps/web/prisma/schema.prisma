@@ -49,6 +49,10 @@ model User {
   auditLogs         AuditLog[]
   notifications     Notification[]
   managedDivisions  DivisionManager[] @relation("ManagerUser")
+  orderComments     OrderComment[]
+  orderEditHistory  OrderEditHistory[]
+  multiDivisionRequestsCreated MultiDivisionAccessRequest[] @relation("MultiDivisionRequestUser")
+  multiDivisionRequestsApproved MultiDivisionAccessRequest[] @relation("MultiDivisionRequestApprover")
 }
 
 model Division {
@@ -65,6 +69,7 @@ model Division {
   transfersOut OrderTransfer[]  @relation("FromDivision")
   rejections   OrderRejection[]
   slaBreaches  SLABreach[]
+  multiDivisionRequests MultiDivisionAccessRequestDivision[]
 }
 
 model DivisionManager {
@@ -84,7 +89,9 @@ model Order {
   id                 Int         @id @default(autoincrement())
   orderNumber        String      @unique @map("order_number")
   status             OrderStatus @default(PLACED)
+  companyName        String?     @map("company_name")
   description        String?     @db.Text
+  customFields       Json?       @map("custom_fields")
   transferCount      Int         @default(0) @map("transfer_count")
   rejectionCount     Int         @default(0) @map("rejection_count")
   slaDeadline        DateTime?   @map("sla_deadline")
@@ -108,10 +115,12 @@ model Order {
   receivedBy      User?     @relation("OrderReceivedBy", fields: [receivedById], references: [id])
   completedBy     User?     @relation("OrderCompletedBy", fields: [completedById], references: [id])
 
-  transfers    OrderTransfer[]
-  rejections   OrderRejection[]
-  auditLogs    AuditLog[]
-  slaBreaches  SLABreach[]
+  transfers      OrderTransfer[]
+  rejections     OrderRejection[]
+  auditLogs      AuditLog[]
+  slaBreaches    SLABreach[]
+  comments       OrderComment[]
+  editHistory    OrderEditHistory[]
 
   @@index([status])
   @@index([currentDivisionId])
@@ -199,4 +208,71 @@ model Notification {
   @@index([userId])
   @@index([read])
   @@map("notifications")
+}
+
+model OrderComment {
+  id        Int      @id @default(autoincrement())
+  orderId   Int      @map("order_id")
+  userId    Int      @map("user_id")
+  body      String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@map("order_comments")
+}
+
+model OrderEditHistory {
+  id        Int      @id @default(autoincrement())
+  orderId   Int      @map("order_id")
+  fieldName String   @map("field_name")
+  oldValue  String?  @map("old_value") @db.Text
+  newValue  String?  @map("new_value") @db.Text
+  userId    Int      @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([createdAt])
+  @@map("order_edit_history")
+}
+
+enum MultiDivisionRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model MultiDivisionAccessRequest {
+  id           Int                         @id @default(autoincrement())
+  userId       Int                         @map("user_id")
+  reason       String                      @db.Text
+  status       MultiDivisionRequestStatus  @default(PENDING)
+  approvedById Int?                        @map("approved_by_id")
+  approvedAt   DateTime?                   @map("approved_at")
+  createdAt    DateTime                    @default(now()) @map("created_at")
+
+  user        User    @relation("MultiDivisionRequestUser", fields: [userId], references: [id], onDelete: Cascade)
+  approvedBy  User?   @relation("MultiDivisionRequestApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  divisions   MultiDivisionAccessRequestDivision[]
+
+  @@index([userId])
+  @@index([status])
+  @@map("multi_division_access_requests")
+}
+
+model MultiDivisionAccessRequestDivision {
+  id         Int   @id @default(autoincrement())
+  requestId  Int   @map("request_id")
+  divisionId Int   @map("division_id")
+
+  request  MultiDivisionAccessRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  division Division                  @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+
+  @@unique([requestId, divisionId])
+  @@map("multi_division_access_request_divisions")
 }

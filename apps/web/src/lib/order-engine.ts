@@ -13,14 +13,20 @@ function addHours(date: Date, h: number): Date {
   return d;
 }
 
-export async function createOrder(createdById: number, divisionId: number, description?: string) {
+export async function createOrder(
+  createdById: number,
+  divisionId: number,
+  data: { companyName: string; description: string; customFields?: Record<string, unknown> }
+) {
   const orderNumber = `ORD-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
   const slaDeadline = addHours(new Date(), SLA_HOURS);
   const order = await prisma.order.create({
     data: {
       orderNumber,
       status: "PLACED",
-      description,
+      companyName: data.companyName,
+      description: data.description,
+      customFields: data.customFields ?? undefined,
       createdById,
       currentDivisionId: divisionId,
       slaDeadline,
@@ -41,6 +47,85 @@ export async function createOrder(createdById: number, divisionId: number, descr
   });
   await cacheDel(cacheKeyOrdersList("*"));
   return order;
+}
+
+export async function updateOrderWithEditHistory(
+  orderId: number,
+  userId: number,
+  data: { companyName?: string; description?: string; customFields?: Record<string, unknown> },
+  isSuperAdmin = false
+) {
+  const order = await prisma.order.findUnique({ where: { id: orderId } });
+  if (!order) return null;
+  if (order.status !== "PLACED") return null;
+  if (!isSuperAdmin && order.createdById !== userId) return null;
+
+  const historyEntries: { fieldName: string; oldValue: string | null; newValue: string | null }[] = [];
+  if (data.companyName !== undefined && data.companyName !== order.companyName) {
+    historyEntries.push({
+      fieldName: "companyName",
+      oldValue: order.companyName,
+      newValue: data.companyName,
+    });
+  }
+  if (data.description !== undefined && data.description !== order.description) {
+    historyEntries.push({
+      fieldName: "description",
+      oldValue: order.description,
+      newValue: data.description,
+    });
+  }
+  if (data.customFields !== undefined && JSON.stringify(data.customFields) !== JSON.stringify(order.customFields)) {
+    historyEntries.push({
+      fieldName: "customFields",
+      oldValue: order.customFields ? JSON.stringify(order.customFields) : null,
+      newValue: data.customFields ? JSON.stringify(data.customFields) : null,
+    });
+  }
+  if (historyEntries.length === 0) {
+    return prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        createdBy: { select: { id: true, name: true, email: true } },
+        currentDivision: { select: { id: true, name: true } },
+        comments: { include: { user: { select: { id: true, name: true, email: true } } } },
+        editHistory: { include: { user: { select: { id: true, name: true, email: true } } } },
+      },
+    });
+  }
+
+  await prisma.$transaction([
+    prisma.order.update({
+      where: { id: orderId },
+      data: {
+        ...(data.companyName !== undefined && { companyName: data.companyName }),
+        ...(data.description !== undefined && { description: data.description }),
+        ...(data.customFields !== undefined && { customFields: data.customFields as object }),
+      },
+    }),
+    ...historyEntries.map((e) =>
+      prisma.orderEditHistory.create({
+        data: {
+          orderId,
+          fieldName: e.fieldName,
+          oldValue: e.oldValue,
+          newValue: e.newValue,
+          userId,
+        },
+      })
+    ),
+  ]);
+  await cacheDel(cacheKeyOrder(orderId));
+  await cacheDel(cacheKeyOrdersList("*"));
+  return prisma.order.findUnique({
+    where: { id: orderId },
+    include: {
+      createdBy: { select: { id: true, name: true, email: true } },
+      currentDivision: { select: { id: true, name: true } },
+      comments: { include: { user: { select: { id: true, name: true, email: true } } } },
+      editHistory: { include: { user: { select: { id: true, name: true, email: true } } } },
+    },
+  });
 }
 
 export async function acceptOrder(orderId: number, acceptedById: number) {
