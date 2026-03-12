@@ -44,19 +44,19 @@ export default function LoginPage() {
           <div className="flex items-center gap-2">
             <div className="h-8 w-8 rounded-lg bg-slate-900" />
             <span className="text-xl font-semibold tracking-tight text-slate-900">
-              Order Management
+              Enquiry Management
             </span>
           </div>
         </div>
         <div>
           <h2 className="text-3xl xl:text-4xl font-semibold text-slate-900 tracking-tight max-w-md">
-            Enterprise order workflow with SLA, audit, and full control.
+            Enterprise enquiry workflow with SLA, audit, and full control.
           </h2>
           <p className="mt-4 text-slate-500 max-w-sm text-base">
-            Sign in to manage orders, divisions, and compliance—all in one place.
+            Sign in to manage enquiries, divisions, and compliance—all in one place.
           </p>
         </div>
-        <p className="text-sm text-slate-400">© Order Management System</p>
+        <p className="text-sm text-slate-400">© Enquiry Management System</p>
       </div>
 
       {/* Right: Form */}
@@ -66,10 +66,10 @@ export default function LoginPage() {
             <div className="flex items-center gap-2">
               <div className="h-8 w-8 rounded-lg bg-slate-900" />
               <span className="text-xl font-semibold tracking-tight text-slate-900">
-                Order Management
+                Enquiry Management
               </span>
-            </div>
           </div>
+        </div>
 
           <h1 className="text-2xl sm:text-3xl font-semibold text-slate-900 tracking-tight">
             Welcome back

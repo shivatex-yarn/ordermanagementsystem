@@ -17,9 +17,9 @@ export async function GET() {
   return NextResponse.json({ divisions });
 }
 
-/** Super Admin only: create division */
+/** Super Admin or Manager (Division Head): create division */
 export async function POST(req: Request) {
-  const auth = await withRole(["SUPER_ADMIN"]);
+  const auth = await withRole(["SUPER_ADMIN", "MANAGER"]);
   if (auth.response) return auth.response;
   const body = await req.json();
   const parsed = createDivisionSchema.safeParse(body);

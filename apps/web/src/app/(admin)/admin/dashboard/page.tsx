@@ -75,7 +75,7 @@ export default function AdminDashboardPage() {
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Admin Dashboard</h1>
         <p className="text-slate-500 mt-1">
-          Process flow, metrics, and activity — Super Admin only.
+          Enquiry flow, metrics, and activity — Super Admin only.
         </p>
       </div>
 
@@ -83,7 +83,7 @@ export default function AdminDashboardPage() {
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-slate-500">Total Orders</CardTitle>
+            <CardTitle className="text-sm font-medium text-slate-500">Total Enquiries</CardTitle>
           </CardHeader>
           <CardContent>
             <span className="text-2xl font-bold text-slate-900">{stats.totalOrders ?? 0}</span>
@@ -118,9 +118,9 @@ export default function AdminDashboardPage() {
       {/* Workflow: where the process stops */}
       <Card>
         <CardHeader>
-          <CardTitle>Process flow — Orders by stage</CardTitle>
+          <CardTitle>Process flow — Enquiries by stage</CardTitle>
           <p className="text-sm text-slate-500">
-            At which stage orders currently are. Rejected and Completed are terminal stages.
+            At which stage enquiries currently are. Rejected and Completed are terminal stages.
           </p>
         </CardHeader>
         <CardContent>
@@ -184,7 +184,7 @@ export default function AdminDashboardPage() {
         <CardHeader>
           <CardTitle>Trigger events & activity logs</CardTitle>
           <p className="text-sm text-slate-500">
-            Who performed each action, when, and on which order. Includes created, accepted, transferred, rejected, completed.
+            Who performed each action, when, and on which enquiry. Includes created, accepted, transferred, rejected, completed.
           </p>
         </CardHeader>
         <CardContent>
@@ -200,7 +200,7 @@ export default function AdminDashboardPage() {
                     <tr className="border-b border-slate-100 bg-slate-50/80">
                       <th className="text-left p-3 font-medium text-slate-700">Time</th>
                       <th className="text-left p-3 font-medium text-slate-700">Action</th>
-                      <th className="text-left p-3 font-medium text-slate-700">Order</th>
+                      <th className="text-left p-3 font-medium text-slate-700">Enquiry</th>
                       <th className="text-left p-3 font-medium text-slate-700">Who</th>
                       <th className="text-left p-3 font-medium text-slate-700">Details</th>
                     </tr>

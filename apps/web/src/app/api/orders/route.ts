@@ -72,7 +72,7 @@ export async function POST(req: Request) {
   }
   const canCreate = ["USER", "SUPERVISOR", "SUPER_ADMIN"].includes(auth.payload.role);
   if (!canCreate) {
-    return NextResponse.json({ error: "Only users and supervisors can create orders" }, { status: 403 });
+    return NextResponse.json({ error: "Only users and supervisors can create enquiries" }, { status: 403 });
   }
   const order = await createOrder(Number(auth.payload.sub), parsed.data.divisionId, {
     companyName: parsed.data.companyName,

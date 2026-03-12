@@ -18,12 +18,12 @@ import { cn } from "@/lib/utils";
 
 const nav = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/orders", label: "Orders", icon: Package },
+  { href: "/orders", label: "Enquiries", icon: Package },
   { href: "/divisions", label: "Divisions", icon: Building2 },
   { href: "/audit", label: "Audit Log", icon: FileText },
   { href: "/sla", label: "SLA & Breaches", icon: AlertTriangle },
   { href: "/notifications", label: "Notifications", icon: Bell },
-  { href: "/admin", label: "Admin", icon: KeyRound, superAdminOnly: true },
+  { href: "/admin", label: "Admin Panel", icon: KeyRound, superAdminOnly: true },
 ];
 
 export default function DashboardLayout({
@@ -67,7 +67,7 @@ export default function DashboardLayout({
       <aside className="w-64 border-r border-slate-100 bg-slate-50/80 flex flex-col">
         <div className="p-6 border-b border-slate-100">
           <Link href="/dashboard" className="font-semibold text-lg text-slate-900">
-            Order Management
+            Enquiry Management
           </Link>
         </div>
         <nav className="flex-1 p-3 space-y-0.5">
