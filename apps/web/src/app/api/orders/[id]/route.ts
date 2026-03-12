@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { withAuth } from "@/lib/with-auth";
+import { updateOrderSchema } from "@/lib/validation";
+import { updateOrderWithEditHistory } from "@/lib/order-engine";
 import { cacheGet, cacheSet, cacheKeyOrder } from "@/lib/redis";
 
 const fullInclude = {
@@ -24,6 +26,8 @@ const fullInclude = {
       rejectedBy: { select: { id: true, name: true, email: true } },
     },
   },
+  comments: { include: { user: { select: { id: true, name: true, email: true } } } },
+  editHistory: { include: { user: { select: { id: true, name: true, email: true } } } },
 };
 
 export async function GET(
@@ -60,5 +64,48 @@ export async function GET(
   }
 
   await cacheSet(cacheKeyOrder(id), order, 120);
+  return NextResponse.json(order);
+}
+
+export async function PATCH(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const auth = await withAuth();
+  if (auth.response) return auth.response;
+  const id = Number((await params).id);
+  if (!Number.isInteger(id)) {
+    return NextResponse.json({ error: "Invalid order id" }, { status: 400 });
+  }
+  const body = await req.json();
+  const parsed = updateOrderSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: "Invalid input", details: parsed.error.flatten() },
+      { status: 400 }
+    );
+  }
+  const canEdit = auth.payload.role === "SUPER_ADMIN" || auth.payload.role === "USER";
+  if (!canEdit) {
+    return NextResponse.json({ error: "Only the creator or Super Admin can edit an enquiry" }, { status: 403 });
+  }
+  const userId = Number(auth.payload.sub);
+  const isSuperAdmin = auth.payload.role === "SUPER_ADMIN";
+  const order = await updateOrderWithEditHistory(
+    id,
+    userId,
+    {
+      companyName: parsed.data.companyName,
+      description: parsed.data.description,
+      customFields: parsed.data.customFields,
+    },
+    isSuperAdmin
+  );
+  if (!order) {
+    return NextResponse.json(
+      { error: "Order not found or cannot be edited (only when status is Placed, by creator)" },
+      { status: 400 }
+    );
+  }
   return NextResponse.json(order);
 }

@@ -74,10 +74,10 @@ export async function POST(req: Request) {
   if (!canCreate) {
     return NextResponse.json({ error: "Only users and supervisors can create orders" }, { status: 403 });
   }
-  const order = await createOrder(
-    Number(auth.payload.sub),
-    parsed.data.divisionId,
-    parsed.data.description
-  );
+  const order = await createOrder(Number(auth.payload.sub), parsed.data.divisionId, {
+    companyName: parsed.data.companyName,
+    description: parsed.data.description,
+    customFields: parsed.data.customFields,
+  });
   return NextResponse.json(order, { status: 201 });
 }
