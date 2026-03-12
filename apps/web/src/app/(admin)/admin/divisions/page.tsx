@@ -55,6 +55,8 @@ export default function AdminDivisionsPage() {
   const [editDivision, setEditDivision] = useState<Division | null>(null);
   const [editDivisionName, setEditDivisionName] = useState("");
   const [editDivisionActive, setEditDivisionActive] = useState(true);
+  const [divisionToDelete, setDivisionToDelete] = useState<Division | null>(null);
+  const [deleteError, setDeleteError] = useState("");
 
   const { data: divisionsData, isLoading } = useQuery({
     queryKey: ["divisions"],
@@ -143,13 +145,17 @@ export default function AdminDivisionsPage() {
   const deleteDivisionMutation = useMutation({
     mutationFn: async (id: number) => {
       const res = await fetch(`/api/divisions/${id}`, { method: "DELETE", credentials: "include" });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to delete");
-      }
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to delete");
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["divisions"] }),
-    onError: (err: Error) => setError(err.message),
+    onSuccess: () => {
+      setDivisionToDelete(null);
+      setDeleteError("");
+      queryClient.invalidateQueries({ queryKey: ["divisions"] });
+    },
+    onError: (err: Error) => {
+      setDeleteError(err.message);
+    },
   });
 
   function handleSubmit(e: React.FormEvent) {
@@ -215,6 +221,9 @@ export default function AdminDivisionsPage() {
           <p className="text-sm text-slate-500">
             Assign users as Division Heads to a division. Only Super Admin can assign or remove.
           </p>
+          <p className="text-sm text-slate-500">
+            Status: <strong>Active</strong> divisions appear in lists and dropdowns; use <strong>Edit</strong> to set a division to Active or Inactive.
+          </p>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -252,10 +261,7 @@ export default function AdminDivisionsPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => {
-                          if (confirm("Set this division as inactive? It will be hidden from lists."))
-                            deleteDivisionMutation.mutate(d.id);
-                        }}
+                        onClick={() => setDivisionToDelete(d)}
                         className="text-red-600 hover:text-red-700"
                       >
                         <Trash2 className="h-4 w-4 mr-1" />
@@ -309,6 +315,46 @@ export default function AdminDivisionsPage() {
       </Card>
 
       {!isViewOnly && (
+      <>
+      <Dialog
+        open={!!divisionToDelete}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDivisionToDelete(null);
+            setDeleteError("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete division permanently?</DialogTitle>
+          </DialogHeader>
+          {divisionToDelete && (
+            <>
+              <p className="text-slate-600">
+                <strong>{divisionToDelete.name}</strong> will be removed completely from the database. This cannot be undone.
+              </p>
+              <p className="text-sm text-slate-500">
+                If this division has enquiries or is in use, delete will be blocked. Use <strong>Edit</strong> to set status to Inactive instead.
+              </p>
+            </>
+          )}
+          {deleteError && <p className="text-sm text-red-600">{deleteError}</p>}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setDivisionToDelete(null); setDeleteError(""); }}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => divisionToDelete && deleteDivisionMutation.mutate(divisionToDelete.id)}
+              disabled={deleteDivisionMutation.isPending}
+            >
+              {deleteDivisionMutation.isPending ? "Deleting…" : "Delete permanently"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={assignDivisionId !== null} onOpenChange={(open) => !open && setAssignDivisionId(null)}>
         <DialogContent>
           <DialogHeader>
@@ -351,6 +397,7 @@ export default function AdminDivisionsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      </>
       )}
 
       {!isViewOnly && (

@@ -47,7 +47,7 @@ export async function PATCH(
   return NextResponse.json(updated);
 }
 
-/** Super Admin only: soft delete division (set active = false) */
+/** Super Admin only: permanently delete division from database. Fails if division is in use (enquiries, transfers, etc.). */
 export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -62,9 +62,26 @@ export async function DELETE(
   if (!division) {
     return NextResponse.json({ error: "Division not found" }, { status: 404 });
   }
-  await prisma.division.update({
-    where: { id },
-    data: { active: false },
-  });
+
+  const [ordersCount, transfersCount, rejectionsCount, breachesCount] = await Promise.all([
+    prisma.order.count({ where: { OR: [{ currentDivisionId: id }, { previousDivisionId: id }] } }),
+    prisma.orderTransfer.count({ where: { OR: [{ fromDivisionId: id }, { toDivisionId: id }] } }),
+    prisma.orderRejection.count({ where: { divisionId: id } }),
+    prisma.sLABreach.count({ where: { divisionId: id } }),
+  ]);
+  if (ordersCount > 0 || transfersCount > 0 || rejectionsCount > 0 || breachesCount > 0) {
+    return NextResponse.json(
+      {
+        error:
+          "Cannot delete division: it is in use by enquiries, transfers, or other records. Set status to Inactive in Edit instead.",
+      },
+      { status: 409 }
+    );
+  }
+
+  await prisma.$transaction([
+    prisma.user.updateMany({ where: { divisionId: id }, data: { divisionId: null } }),
+    prisma.division.delete({ where: { id } }),
+  ]);
   return NextResponse.json({ ok: true });
 }
