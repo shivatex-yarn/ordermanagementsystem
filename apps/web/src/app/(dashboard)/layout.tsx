@@ -10,6 +10,7 @@ import {
   Bell,
   AlertTriangle,
   KeyRound,
+  LineChart,
 } from "lucide-react";
 import { LogoutButton } from "@/components/logout-button";
 import { useAuth } from "@/hooks/use-auth";
@@ -22,6 +23,7 @@ const nav = [
   { href: "/divisions", label: "Divisions", icon: Building2 },
   { href: "/audit", label: "Audit Log", icon: FileText },
   { href: "/sla", label: "SLA & Breaches", icon: AlertTriangle },
+  { href: "/md", label: "Executive overview", icon: LineChart, mdOverviewOnly: true },
   { href: "/notifications", label: "Notifications", icon: Bell },
   { href: "/admin", label: "Admin Panel", icon: KeyRound, superAdminOnly: true },
 ];
@@ -57,6 +59,7 @@ export default function DashboardLayout({
 
   const filteredNav = nav.filter((item) => {
     if ("superAdminOnly" in item && item.superAdminOnly && user.role !== "SUPER_ADMIN" && user.role !== "MANAGING_DIRECTOR") return false;
+    if ("mdOverviewOnly" in item && item.mdOverviewOnly && user.role !== "SUPER_ADMIN" && user.role !== "MANAGING_DIRECTOR") return false;
     if (item.href === "/audit" && !["SUPER_ADMIN", "MANAGING_DIRECTOR", "MANAGER"].includes(user.role)) return false;
     if (item.href === "/sla" && !["SUPER_ADMIN", "MANAGING_DIRECTOR", "MANAGER"].includes(user.role)) return false;
     return true;
