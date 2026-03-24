@@ -21,7 +21,9 @@ async function fetchDivisions() {
   const res = await fetch("/api/divisions", { credentials: "include" });
   if (!res.ok) throw new Error("Failed to fetch divisions");
   const data = await res.json();
-  return data.divisions as { id: number; name: string }[];
+  if (Array.isArray(data)) return data as { id: number; name: string }[];
+  if (Array.isArray(data?.divisions)) return data.divisions as { id: number; name: string }[];
+  return [];
 }
 
 type CustomField = { title: string; value: string };
@@ -36,7 +38,7 @@ export default function NewOrderPage() {
   const [loading, setLoading] = useState(false);
 
   const { data: divisions = [] } = useQuery({
-    queryKey: ["divisions"],
+    queryKey: ["order-form-divisions"],
     queryFn: fetchDivisions,
   });
 
