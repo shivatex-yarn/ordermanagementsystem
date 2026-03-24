@@ -10,11 +10,22 @@ export async function POST(
   const auth = await withRole(["MANAGER", "SUPER_ADMIN"]);
   if (auth.response) return auth.response;
   const id = Number((await params).id);
-  const parsed = acceptOrderSchema.safeParse({ orderId: id });
+  const body = await req.json();
+  const parsed = acceptOrderSchema.safeParse({
+    orderId: id,
+    reason: body?.reason,
+  });
   if (!parsed.success) {
-    return NextResponse.json({ error: "Invalid order id" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Invalid input", details: parsed.error.flatten() },
+      { status: 400 }
+    );
   }
-  const order = await acceptOrder(parsed.data.orderId, Number(auth.payload.sub));
+  const order = await acceptOrder(
+    parsed.data.orderId,
+    Number(auth.payload.sub),
+    parsed.data.reason
+  );
   if (!order) {
     return NextResponse.json(
       { error: "Order not found or cannot be accepted in current state" },

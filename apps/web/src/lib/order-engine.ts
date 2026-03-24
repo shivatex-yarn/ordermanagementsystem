@@ -128,23 +128,33 @@ export async function updateOrderWithEditHistory(
   });
 }
 
-export async function acceptOrder(orderId: number, acceptedById: number) {
+export async function acceptOrder(orderId: number, acceptedById: number, reason: string) {
   const order = await prisma.order.findUnique({ where: { id: orderId } });
   if (!order) return null;
   if (order.status !== "PLACED" && order.status !== "TRANSFERRED") return null;
-  const updated = await prisma.order.update({
-    where: { id: orderId },
-    data: {
-      status: "IN_PROGRESS",
-      acceptedById,
-      slaDeadline: null,
-    },
-    include: {
-      createdBy: { select: { id: true, name: true, email: true } },
-      currentDivision: { select: { id: true, name: true } },
-      acceptedBy: { select: { id: true, name: true, email: true } },
-    },
-  });
+  const trimmedReason = reason.trim();
+  const [updated] = await prisma.$transaction([
+    prisma.order.update({
+      where: { id: orderId },
+      data: {
+        status: "IN_PROGRESS",
+        acceptedById,
+        slaDeadline: null,
+      },
+      include: {
+        createdBy: { select: { id: true, name: true, email: true } },
+        currentDivision: { select: { id: true, name: true } },
+        acceptedBy: { select: { id: true, name: true, email: true } },
+      },
+    }),
+    prisma.orderComment.create({
+      data: {
+        orderId,
+        userId: acceptedById,
+        body: `Accepted reason: ${trimmedReason}`,
+      },
+    }),
+  ]);
   await publish({
     type: "OrderAccepted",
     orderId: updated.id,
