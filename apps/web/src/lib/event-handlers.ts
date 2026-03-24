@@ -40,6 +40,13 @@ async function notificationHandler(event: OrderEvent): Promise<void> {
     select: { id: true },
   });
   superAdmins.forEach((u) => userIds.add(u.id));
+  if (event.type === "SLABreachDetected") {
+    const mds = await prisma.user.findMany({
+      where: { role: "MANAGING_DIRECTOR", active: true },
+      select: { id: true },
+    });
+    mds.forEach((u) => userIds.add(u.id));
+  }
   const users = await prisma.user.findMany({
     where: { id: { in: [...userIds] } },
     select: { id: true, name: true, email: true },

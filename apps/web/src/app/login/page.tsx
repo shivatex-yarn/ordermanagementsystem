@@ -8,8 +8,13 @@ import { Label } from "@/components/ui/label";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  // Dev-only mock credentials so you can test UI without relying on Neon DB connectivity.
+  const MOCK_EMAIL = "superadmin@shivatex.in";
+  const MOCK_PASSWORD = "shivatex@12345";
+  const shouldUseMock = process.env.NODE_ENV === "development";
+
+  const [email, setEmail] = useState(shouldUseMock ? MOCK_EMAIL : "");
+  const [password, setPassword] = useState(shouldUseMock ? MOCK_PASSWORD : "");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
