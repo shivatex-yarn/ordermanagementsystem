@@ -56,6 +56,7 @@ export const createOrderCommentSchema = z.object({
 
 export const acceptOrderSchema = z.object({
   orderId: z.number().int().positive(),
+  reason: z.string().min(10, "Acceptance reason must be at least 10 characters"),
 });
 
 export const transferOrderSchema = z.object({

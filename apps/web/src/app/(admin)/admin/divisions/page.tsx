@@ -32,16 +32,35 @@ type Division = {
 };
 type UserItem = { id: number; name: string; email: string; role: string; active?: boolean };
 
+async function safeReadJson(res: Response): Promise<Record<string, unknown>> {
+  const contentType = res.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) return {};
+  try {
+    return (await res.json()) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
+function extractErrorMessage(
+  data: Record<string, unknown>,
+  fallback: string
+): string {
+  return typeof data.error === "string" && data.error.trim() ? data.error : fallback;
+}
+
 async function fetchDivisions(): Promise<{ divisions: Division[] }> {
   const res = await fetch("/api/divisions?includeInactive=true", { credentials: "include" });
-  if (!res.ok) throw new Error("Failed to fetch divisions");
-  return res.json();
+  const data = await safeReadJson(res);
+  if (!res.ok) throw new Error(extractErrorMessage(data, "Failed to fetch divisions"));
+  return data as { divisions: Division[] };
 }
 
 async function fetchUsers(): Promise<{ users: UserItem[] }> {
   const res = await fetch("/api/admin/users", { credentials: "include" });
-  if (!res.ok) throw new Error("Failed to fetch users");
-  return res.json();
+  const data = await safeReadJson(res);
+  if (!res.ok) throw new Error(extractErrorMessage(data, "Failed to fetch users"));
+  return data as { users: UserItem[] };
 }
 
 export default function AdminDivisionsPage() {
@@ -77,8 +96,8 @@ export default function AdminDivisionsPage() {
         credentials: "include",
         body: JSON.stringify({ name: divisionName }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to create");
+      const data = await safeReadJson(res);
+      if (!res.ok) throw new Error(extractErrorMessage(data, "Failed to create"));
       return data;
     },
     onSuccess: () => {
@@ -97,8 +116,8 @@ export default function AdminDivisionsPage() {
         credentials: "include",
         body: JSON.stringify({ userId }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to assign");
+      const data = await safeReadJson(res);
+      if (!res.ok) throw new Error(extractErrorMessage(data, "Failed to assign"));
       return data;
     },
     onSuccess: () => {
@@ -116,8 +135,8 @@ export default function AdminDivisionsPage() {
         credentials: "include",
       });
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to remove");
+        const data = await safeReadJson(res);
+        throw new Error(extractErrorMessage(data, "Failed to remove"));
       }
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["divisions"] }),
@@ -131,8 +150,8 @@ export default function AdminDivisionsPage() {
         credentials: "include",
         body: JSON.stringify({ name, active }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to update");
+      const data = await safeReadJson(res);
+      if (!res.ok) throw new Error(extractErrorMessage(data, "Failed to update"));
       return data;
     },
     onSuccess: () => {
@@ -145,8 +164,8 @@ export default function AdminDivisionsPage() {
   const deleteDivisionMutation = useMutation({
     mutationFn: async (id: number) => {
       const res = await fetch(`/api/divisions/${id}`, { method: "DELETE", credentials: "include" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to delete");
+      const data = await safeReadJson(res);
+      if (!res.ok) throw new Error(extractErrorMessage(data, "Failed to delete"));
     },
     onSuccess: () => {
       setDivisionToDelete(null);

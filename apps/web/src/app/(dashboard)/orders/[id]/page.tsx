@@ -38,8 +38,10 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const orderId = Number(id);
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const [acceptOpen, setAcceptOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
+  const [acceptReason, setAcceptReason] = useState("");
   const [transferReason, setTransferReason] = useState("");
   const [toDivisionId, setToDivisionId] = useState("");
   const [rejectReason, setRejectReason] = useState("");
@@ -48,6 +50,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [editDescription, setEditDescription] = useState("");
   const [commentBody, setCommentBody] = useState("");
   const [commentError, setCommentError] = useState("");
+  const [actionError, setActionError] = useState("");
 
   const { data: order, isLoading } = useQuery({
     queryKey: ["order", orderId],
@@ -66,10 +69,24 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const divisions = divisionsData?.divisions ?? [];
 
   const acceptMutation = useMutation({
-    mutationFn: () => fetch(`/api/orders/${orderId}/accept`, { method: "POST", credentials: "include" }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["order", orderId] });
-      queryClient.invalidateQueries({ queryKey: ["orders"] });
+    mutationFn: () =>
+      fetch(`/api/orders/${orderId}/accept`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ reason: acceptReason }),
+      }),
+    onSuccess: async (res) => {
+      if (res.ok) {
+        setAcceptOpen(false);
+        setAcceptReason("");
+        setActionError("");
+        queryClient.invalidateQueries({ queryKey: ["order", orderId] });
+        queryClient.invalidateQueries({ queryKey: ["orders"] });
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      setActionError((data as { error?: string }).error || "Failed to accept enquiry");
     },
   });
   const transferMutation = useMutation({
@@ -287,7 +304,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           <CardHeader><CardTitle>Actions</CardTitle></CardHeader>
           <CardContent className="flex flex-wrap gap-2">
             {(order.status === "PLACED" || order.status === "TRANSFERRED") && (
-              <Button onClick={() => acceptMutation.mutate()} disabled={acceptMutation.isPending}>
+              <Button onClick={() => setAcceptOpen(true)} disabled={acceptMutation.isPending}>
                 Accept
               </Button>
             )}
@@ -303,6 +320,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             )}
             <Button variant="outline" onClick={() => setTransferOpen(true)}>Transfer</Button>
             <Button variant="destructive" onClick={() => setRejectOpen(true)}>Reject</Button>
+            {actionError && <p className="w-full text-sm text-red-600">{actionError}</p>}
           </CardContent>
         </Card>
       )}
@@ -326,7 +344,13 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             </div>
             <div className="space-y-2">
               <Label>Reason (min 10 characters)</Label>
-              <Input value={transferReason} onChange={(e) => setTransferReason(e.target.value)} placeholder="Transfer reason" />
+              <textarea
+                value={transferReason}
+                onChange={(e) => setTransferReason(e.target.value)}
+                placeholder="Transfer reason"
+                rows={4}
+                className="flex min-h-[96px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] outline-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+              />
             </div>
           </div>
           <DialogFooter>
@@ -341,13 +365,52 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         </DialogContent>
       </Dialog>
 
+      <Dialog open={acceptOpen} onOpenChange={(open) => {
+        setAcceptOpen(open);
+        if (!open) {
+          setAcceptReason("");
+          setActionError("");
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Accept enquiry</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Reason (min 10 characters, mandatory)</Label>
+              <textarea
+                value={acceptReason}
+                onChange={(e) => setAcceptReason(e.target.value)}
+                placeholder="Reason for accepting this enquiry"
+                rows={4}
+                className="flex min-h-[96px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] outline-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAcceptOpen(false)}>Cancel</Button>
+            <Button
+              onClick={() => acceptMutation.mutate()}
+              disabled={acceptReason.length < 10 || acceptMutation.isPending}
+            >
+              Accept
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>Reject enquiry</DialogTitle></DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Reason (min 10 characters, mandatory)</Label>
-              <Input value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} placeholder="Detailed rejection reason" />
+              <textarea
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                placeholder="Detailed rejection reason"
+                rows={4}
+                className="flex min-h-[96px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] outline-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+              />
             </div>
           </div>
           <DialogFooter>
