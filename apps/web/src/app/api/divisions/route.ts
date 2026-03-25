@@ -25,31 +25,22 @@ export async function GET(req: Request) {
   }
 }
 
-/** Super Admin or Manager (Division Head): create division */
+/** Super Admin only: create division (managed under Admin Panel) */
 export async function POST(req: Request) {
-  try {
-    const auth = await withRole(["SUPER_ADMIN", "MANAGER"]);
-    if (auth.response) return auth.response;
-    const body = await req.json();
-    const parsed = createDivisionSchema.safeParse(body);
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: "Invalid input", details: parsed.error.flatten() },
-        { status: 400 }
-      );
-    }
-    const existing = await prisma.division.findUnique({
-      where: { name: parsed.data.name },
-    });
-    if (existing) {
-      return NextResponse.json({ error: "Division with this name already exists" }, { status: 409 });
-    }
-    const division = await prisma.division.create({
-      data: { name: parsed.data.name },
-    });
-    return NextResponse.json(division, { status: 201 });
-  } catch (error) {
-    console.error("POST /api/divisions failed", error);
-    return NextResponse.json({ error: "Failed to create division" }, { status: 500 });
+  const auth = await withRole(["SUPER_ADMIN"]);
+  if (auth.response) return auth.response;
+  const body = await req.json();
+  const parsed = createDivisionSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: "Invalid input", details: parsed.error.flatten() },
+      { status: 400 }
+    );
+  }
+  const existing = await prisma.division.findUnique({
+    where: { name: parsed.data.name },
+  });
+  if (existing) {
+    return NextResponse.json({ error: "Division with this name already exists" }, { status: 409 });
   }
 }
