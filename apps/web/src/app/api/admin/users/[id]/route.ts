@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { withRole } from "@/lib/with-auth";
 import { adminUpdateUserSchema } from "@/lib/validation";
@@ -63,7 +64,7 @@ export async function PATCH(
   await prisma.$transaction(async (tx) => {
     await tx.user.update({
       where: { id },
-      data: updateData,
+      data: updateData as Prisma.UserUncheckedUpdateInput,
     });
     if (isManager && divisionIds !== undefined) {
       await tx.divisionManager.deleteMany({ where: { userId: id } });

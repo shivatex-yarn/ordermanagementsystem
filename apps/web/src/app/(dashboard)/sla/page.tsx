@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
@@ -34,9 +35,18 @@ export default function SLAPage() {
               <div className="py-4 text-slate-500">No breaches recorded.</div>
             ) : (
               <ul className="space-y-2">
-                {breaches.map((b: { id: number; order: { orderNumber: string }; division: { name: string }; breachedAt: string }) => (
-                  <li key={b.id} className="flex items-center justify-between text-sm">
-                    <span>{b.order?.orderNumber} — {b.division?.name}</span>
+                {breaches.map((b: { id: number; order: { id?: number; orderNumber: string }; division: { name: string }; breachedAt: string }) => (
+                  <li key={b.id} className="flex items-center justify-between gap-2 text-sm">
+                    <span>
+                      {b.order?.id != null ? (
+                        <Link href={`/orders/${b.order.id}`} className="font-medium text-indigo-700 hover:underline">
+                          {b.order.orderNumber}
+                        </Link>
+                      ) : (
+                        b.order?.orderNumber
+                      )}{" "}
+                      — {b.division?.name}
+                    </span>
                     <Badge variant="destructive">{new Date(b.breachedAt).toLocaleString()}</Badge>
                   </li>
                 ))}
@@ -57,7 +67,10 @@ export default function SLAPage() {
               <ul className="space-y-2">
                 {ordersAtRisk.map((o: { id: number; orderNumber: string; slaDeadline: string }) => (
                   <li key={o.id} className="text-sm">
-                    {o.orderNumber} — SLA was {new Date(o.slaDeadline).toLocaleString()}
+                    <Link href={`/orders/${o.id}`} className="font-medium text-indigo-700 hover:underline">
+                      {o.orderNumber}
+                    </Link>{" "}
+                    — SLA was {new Date(o.slaDeadline).toLocaleString()}
                   </li>
                 ))}
               </ul>

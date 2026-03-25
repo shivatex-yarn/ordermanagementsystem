@@ -59,8 +59,9 @@ export function cacheKeyOrdersList(filters: string): string {
   return `oms:orders:list:${filters}`;
 }
 
+/** Bump version when order JSON shape changes (avoids stale Redis missing new columns). */
 export function cacheKeyOrder(id: number): string {
-  return `oms:order:${id}`;
+  return `oms:order:v2:${id}`;
 }
 
 export function cacheKeyUser(id: number): string {

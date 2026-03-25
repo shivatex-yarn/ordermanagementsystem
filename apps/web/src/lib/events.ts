@@ -10,7 +10,11 @@ export type OrderEventType =
   | "OrderRejected"
   | "OrderCompleted"
   | "OrderReceived"
-  | "SLABreachDetected";
+  | "SLABreachDetected"
+  | "SampleDetailsUpdated"
+  | "SampleApproved"
+  | "SampleShipped"
+  | "SalesFeedbackRecorded";
 
 export interface BaseOrderEvent {
   orderId: number;
@@ -64,6 +68,29 @@ export interface SLABreachEvent extends BaseOrderEvent {
   orderId: number;
 }
 
+export interface SampleDetailsUpdatedEvent extends BaseOrderEvent {
+  type: "SampleDetailsUpdated";
+  divisionId: number;
+}
+
+export interface SampleApprovedEvent extends BaseOrderEvent {
+  type: "SampleApproved";
+  divisionId: number;
+  approvedById: number;
+}
+
+export interface SampleShippedEvent extends BaseOrderEvent {
+  type: "SampleShipped";
+  divisionId: number;
+  courierName: string;
+  trackingId: string;
+}
+
+export interface SalesFeedbackRecordedEvent extends BaseOrderEvent {
+  type: "SalesFeedbackRecorded";
+  submittedById: number;
+}
+
 export type OrderEvent =
   | OrderCreatedEvent
   | OrderAcceptedEvent
@@ -71,7 +98,11 @@ export type OrderEvent =
   | OrderRejectedEvent
   | OrderCompletedEvent
   | OrderReceivedEvent
-  | SLABreachEvent;
+  | SLABreachEvent
+  | SampleDetailsUpdatedEvent
+  | SampleApprovedEvent
+  | SampleShippedEvent
+  | SalesFeedbackRecordedEvent;
 
 type EventHandler = (event: OrderEvent) => void | Promise<void>;
 

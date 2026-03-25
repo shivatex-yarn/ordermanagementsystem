@@ -50,6 +50,33 @@ export async function middleware(request: NextRequest) {
         return NextResponse.redirect(url);
       }
     }
+    if (pathname === "/sla" || pathname.startsWith("/sla/")) {
+      try {
+        const { payload } = await jwtVerify(token, JWT_SECRET);
+        const role = (payload as { role?: string }).role;
+        if (role !== "SUPER_ADMIN" && role !== "MANAGING_DIRECTOR") {
+          return NextResponse.redirect(new URL("/dashboard", request.url));
+        }
+      } catch {
+        const url = new URL("/login", request.url);
+        url.searchParams.set("from", pathname);
+        return NextResponse.redirect(url);
+      }
+    }
+    try {
+      const { payload } = await jwtVerify(token, JWT_SECRET);
+      const role = (payload as { role?: string }).role;
+      if (role === "MANAGING_DIRECTOR") {
+        if (pathname === "/dashboard") {
+          return NextResponse.redirect(new URL("/md", request.url));
+        }
+        if (pathname === "/orders") {
+          return NextResponse.redirect(new URL("/md", request.url));
+        }
+      }
+    } catch {
+      /* fallthrough */
+    }
     if (pathname === "/divisions" || pathname.startsWith("/divisions/")) {
       try {
         const { payload } = await jwtVerify(token, JWT_SECRET);
