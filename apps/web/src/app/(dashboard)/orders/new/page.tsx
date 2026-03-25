@@ -34,6 +34,8 @@ export default function NewOrderPage() {
   const [companyName, setCompanyName] = useState("");
   const [description, setDescription] = useState("");
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
+  const [sampleRequested, setSampleRequested] = useState(false);
+  const [sampleRequestNotes, setSampleRequestNotes] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -86,6 +88,10 @@ export default function NewOrderPage() {
           companyName: companyName.trim(),
           description: description.trim(),
           customFields: Object.keys(customFieldsObj).length ? customFieldsObj : undefined,
+          sampleRequested,
+          ...(sampleRequested && sampleRequestNotes.trim()
+            ? { sampleRequestNotes: sampleRequestNotes.trim() }
+            : {}),
         }),
       });
       const data = await res.json();
@@ -101,24 +107,25 @@ export default function NewOrderPage() {
   }
 
   return (
-    <div className="max-w-xl space-y-6">
+    <div className="max-w-2xl space-y-6">
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" asChild>
           <Link href="/orders">←</Link>
         </Button>
         <h1 className="text-2xl font-bold tracking-tight">New enquiry</h1>
       </div>
-      <Card>
-        <CardHeader>
-          <CardTitle>Create enquiry</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={onSubmit} className="space-y-4">
-            {error && (
-              <div className="rounded-lg bg-red-50 border border-red-100 text-red-700 text-sm p-3">
-                {error}
-              </div>
-            )}
+      <form onSubmit={onSubmit} className="space-y-6">
+        {error && (
+          <div className="rounded-lg bg-red-50 border border-red-100 text-red-700 text-sm p-3">
+            {error}
+          </div>
+        )}
+        <Card>
+          <CardHeader>
+            <CardTitle>Customer &amp; product</CardTitle>
+            <p className="text-sm text-slate-500 font-normal">Core order details shown on the enquiry record.</p>
+          </CardHeader>
+          <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="companyName">Company name (required)</Label>
               <Input
@@ -139,8 +146,19 @@ export default function NewOrderPage() {
                 required
               />
             </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Routing, sample &amp; extra fields</CardTitle>
+            <p className="text-sm text-slate-500 font-normal">
+              Choose division, optional sample request, and any extra key/value fields.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label>Division</Label>
+              <Label>Division (required)</Label>
               <Select value={divisionId?.toString() ?? ""} onValueChange={(v) => setDivisionId(Number(v))}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select division" />
@@ -152,6 +170,41 @@ export default function NewOrderPage() {
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <p className="text-sm font-medium text-slate-800">Sample request</p>
+              <div className="flex items-start gap-3">
+                <input
+                  id="sampleRequested"
+                  type="checkbox"
+                  checked={sampleRequested}
+                  onChange={(e) => setSampleRequested(e.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-slate-300"
+                />
+                <div className="space-y-1">
+                  <Label htmlFor="sampleRequested" className="font-medium cursor-pointer">
+                    Customer is requesting a sample
+                  </Label>
+                  <p className="text-xs text-slate-500">
+                    Division Head can add specifications, approve, and enter courier + tracking when the sample ships.
+                  </p>
+                </div>
+              </div>
+              {sampleRequested && (
+                <div className="space-y-2 pl-7">
+                  <Label htmlFor="sampleNotes">Sample request notes (optional)</Label>
+                  <textarea
+                    id="sampleNotes"
+                    value={sampleRequestNotes}
+                    onChange={(e) => setSampleRequestNotes(e.target.value)}
+                    placeholder="e.g. Need 2m swatch, navy blue, deadline Friday"
+                    rows={3}
+                    className="flex min-h-[72px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2"
+                  />
+                </div>
+              )}
+            </div>
+
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label>Custom fields (optional)</Label>
@@ -162,7 +215,7 @@ export default function NewOrderPage() {
               {customFields.map((f, i) => (
                 <div key={i} className="flex gap-2 items-start">
                   <Input
-                    placeholder="Field title (e.g. Fabric GSM)"
+                    placeholder="Field title"
                     value={f.title}
                     onChange={(e) => updateCustomField(i, "title", e.target.value)}
                     className="flex-1"
@@ -179,13 +232,14 @@ export default function NewOrderPage() {
                 </div>
               ))}
             </div>
-            <div className="flex gap-2">
+
+            <div className="flex gap-2 pt-2">
               <Button type="submit" disabled={loading}>{loading ? "Creating..." : "Create enquiry"}</Button>
               <Button type="button" variant="outline" asChild><Link href="/orders">Cancel</Link></Button>
             </div>
-          </form>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </form>
     </div>
   );
 }

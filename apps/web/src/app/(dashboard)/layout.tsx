@@ -54,9 +54,16 @@ export default function DashboardLayout({
   }
 
   const filteredNav = nav.filter((item) => {
-    if ("superAdminOnly" in item && item.superAdminOnly && user.role !== "SUPER_ADMIN" && user.role !== "MANAGING_DIRECTOR") return false;
-    if ("mdOverviewOnly" in item && item.mdOverviewOnly && user.role !== "SUPER_ADMIN" && user.role !== "MANAGING_DIRECTOR") return false;
-    if (item.href === "/sla" && !["SUPER_ADMIN", "MANAGING_DIRECTOR", "MANAGER"].includes(user.role)) return false;
+    if (user.role === "MANAGING_DIRECTOR") {
+      return item.href === "/md" || item.href === "/notifications";
+    }
+    if ("superAdminOnly" in item && item.superAdminOnly && user.role !== "SUPER_ADMIN" && user.role !== "MANAGING_DIRECTOR") {
+      return false;
+    }
+    if ("mdOverviewOnly" in item && item.mdOverviewOnly && user.role !== "SUPER_ADMIN" && user.role !== "MANAGING_DIRECTOR") {
+      return false;
+    }
+    if (item.href === "/sla" && !["SUPER_ADMIN", "MANAGING_DIRECTOR"].includes(user.role)) return false;
     return true;
   });
 
@@ -64,7 +71,10 @@ export default function DashboardLayout({
     <div className="min-h-screen flex bg-white">
       <aside className="w-64 border-r border-slate-100 bg-slate-50/80 flex flex-col">
         <div className="p-6 border-b border-slate-100">
-          <Link href="/dashboard" className="font-semibold text-lg text-slate-900">
+          <Link
+            href={user.role === "MANAGING_DIRECTOR" ? "/md" : "/dashboard"}
+            className="font-semibold text-lg text-slate-900"
+          >
             Enquiry Management
           </Link>
         </div>

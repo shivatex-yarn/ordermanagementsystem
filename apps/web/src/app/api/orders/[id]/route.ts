@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { withAuth } from "@/lib/with-auth";
 import { updateOrderSchema } from "@/lib/validation";
@@ -13,6 +14,7 @@ const fullInclude = {
   rejectedBy: { select: { id: true, name: true, email: true } },
   receivedBy: { select: { id: true, name: true, email: true } },
   completedBy: { select: { id: true, name: true, email: true } },
+  sampleApprovedBy: { select: { id: true, name: true, email: true } },
   transfers: {
     include: {
       fromDivision: { select: { id: true, name: true } },
@@ -43,10 +45,43 @@ export async function GET(
   const cached = await cacheGet<unknown>(cacheKeyOrder(id));
   if (cached) return NextResponse.json(cached);
 
-  const order = await prisma.order.findUnique({
-    where: { id },
-    include: fullInclude,
-  });
+  let order;
+  try {
+    order = await prisma.order.findUnique({
+      where: { id },
+      include: fullInclude,
+    });
+  } catch (err) {
+    console.error("[GET /api/orders/[id]]", err);
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2022") {
+      return NextResponse.json(
+        {
+          error:
+            "Database is missing required columns (sample workflow / schema update). From apps/web run: npx prisma migrate deploy",
+          code: "SCHEMA_DRIFT",
+        },
+        { status: 503 }
+      );
+    }
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/column/i.test(msg) && /does not exist/i.test(msg)) {
+      return NextResponse.json(
+        {
+          error:
+            "Database schema is out of date. Run migrations: cd apps/web && npx prisma migrate deploy",
+          code: "SCHEMA_DRIFT",
+        },
+        { status: 503 }
+      );
+    }
+    return NextResponse.json(
+      {
+        error: "Database error while loading enquiry.",
+        detail: process.env.NODE_ENV === "development" ? msg : undefined,
+      },
+      { status: 500 }
+    );
+  }
   if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
 
   if (auth.payload.role === "USER" && order.createdById !== Number(auth.payload.sub)) {

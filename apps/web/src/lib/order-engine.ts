@@ -16,17 +16,27 @@ function addHours(date: Date, h: number): Date {
 export async function createOrder(
   createdById: number,
   divisionId: number,
-  data: { companyName: string; description: string; customFields?: Record<string, unknown> }
+  data: {
+    companyName: string;
+    description: string;
+    customFields?: Record<string, unknown>;
+    sampleRequested?: boolean;
+    sampleRequestNotes?: string | null;
+  }
 ) {
   const orderNumber = `ORD-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
   const slaDeadline = addHours(new Date(), SLA_HOURS);
+  const sampleRequested = Boolean(data.sampleRequested);
   const order = await prisma.order.create({
     data: {
       orderNumber,
       status: "PLACED",
       companyName: data.companyName,
       description: data.description,
-      customFields: data.customFields ?? undefined,
+      customFields: (data.customFields ?? undefined) as object | undefined,
+      sampleRequested,
+      sampleRequestNotes:
+        sampleRequested && data.sampleRequestNotes?.trim() ? data.sampleRequestNotes.trim() : null,
       createdById,
       currentDivisionId: divisionId,
       slaDeadline,
@@ -319,6 +329,135 @@ export async function completeOrder(orderId: number, completedById: number) {
     timestamp: completedAt.toISOString(),
     userId: completedById,
     durationMs,
+  });
+  await cacheDel(cacheKeyOrder(orderId));
+  await cacheDel(cacheKeyOrdersList("*"));
+  return updated;
+}
+
+export async function updateOrderSampleDetails(
+  orderId: number,
+  userId: number,
+  input: { sampleDetails?: string; sampleQuantity?: string }
+) {
+  const order = await prisma.order.findUnique({ where: { id: orderId } });
+  if (!order?.sampleRequested) return null;
+  if (order.status === "REJECTED" || order.status === "COMPLETED") return null;
+  const sampleDetails =
+    input.sampleDetails !== undefined ? input.sampleDetails.trim() || null : undefined;
+  const sampleQuantity =
+    input.sampleQuantity !== undefined ? input.sampleQuantity.trim() || null : undefined;
+  if (sampleDetails === undefined && sampleQuantity === undefined) return null;
+  const updated = await prisma.order.update({
+    where: { id: orderId },
+    data: {
+      ...(sampleDetails !== undefined && { sampleDetails }),
+      ...(sampleQuantity !== undefined && { sampleQuantity }),
+    },
+    include: {
+      createdBy: { select: { id: true, name: true, email: true } },
+      currentDivision: { select: { id: true, name: true } },
+    },
+  });
+  await publish({
+    type: "SampleDetailsUpdated",
+    orderId: updated.id,
+    orderNumber: updated.orderNumber,
+    divisionId: updated.currentDivisionId,
+    timestamp: new Date().toISOString(),
+    userId,
+  });
+  await cacheDel(cacheKeyOrder(orderId));
+  await cacheDel(cacheKeyOrdersList("*"));
+  return updated;
+}
+
+export async function approveOrderSample(orderId: number, userId: number) {
+  const order = await prisma.order.findUnique({ where: { id: orderId } });
+  if (!order?.sampleRequested || order.sampleApprovedAt) return null;
+  if (order.status === "REJECTED" || order.status === "COMPLETED") return null;
+  const updated = await prisma.order.update({
+    where: { id: orderId },
+    data: {
+      sampleApprovedAt: new Date(),
+      sampleApprovedById: userId,
+    },
+    include: {
+      createdBy: { select: { id: true, name: true, email: true } },
+      currentDivision: { select: { id: true, name: true } },
+      sampleApprovedBy: { select: { id: true, name: true, email: true } },
+    },
+  });
+  await publish({
+    type: "SampleApproved",
+    orderId: updated.id,
+    orderNumber: updated.orderNumber,
+    divisionId: updated.currentDivisionId,
+    approvedById: userId,
+    timestamp: new Date().toISOString(),
+    userId,
+  });
+  await cacheDel(cacheKeyOrder(orderId));
+  await cacheDel(cacheKeyOrdersList("*"));
+  return updated;
+}
+
+export async function recordSampleShipment(
+  orderId: number,
+  userId: number,
+  input: { courierName: string; trackingId: string }
+) {
+  const order = await prisma.order.findUnique({ where: { id: orderId } });
+  if (!order?.sampleRequested || !order.sampleApprovedAt || order.sampleShippedAt) return null;
+  if (order.status === "REJECTED" || order.status === "COMPLETED") return null;
+  const updated = await prisma.order.update({
+    where: { id: orderId },
+    data: {
+      sampleShippedAt: new Date(),
+      courierName: input.courierName.trim(),
+      trackingId: input.trackingId.trim(),
+    },
+    include: {
+      createdBy: { select: { id: true, name: true, email: true } },
+      currentDivision: { select: { id: true, name: true } },
+    },
+  });
+  await publish({
+    type: "SampleShipped",
+    orderId: updated.id,
+    orderNumber: updated.orderNumber,
+    divisionId: updated.currentDivisionId,
+    courierName: updated.courierName!,
+    trackingId: updated.trackingId!,
+    timestamp: new Date().toISOString(),
+    userId,
+  });
+  await cacheDel(cacheKeyOrder(orderId));
+  await cacheDel(cacheKeyOrdersList("*"));
+  return updated;
+}
+
+export async function recordSalesFeedback(orderId: number, userId: number, salesFeedback: string) {
+  const order = await prisma.order.findUnique({ where: { id: orderId } });
+  if (!order) return null;
+  if (order.status === "REJECTED") return null;
+  const trimmed = salesFeedback.trim();
+  if (!trimmed) return null;
+  const updated = await prisma.order.update({
+    where: { id: orderId },
+    data: { salesFeedback: trimmed, salesFeedbackAt: new Date() },
+    include: {
+      createdBy: { select: { id: true, name: true, email: true } },
+      currentDivision: { select: { id: true, name: true } },
+    },
+  });
+  await publish({
+    type: "SalesFeedbackRecorded",
+    orderId: updated.id,
+    orderNumber: updated.orderNumber,
+    submittedById: userId,
+    timestamp: new Date().toISOString(),
+    userId,
   });
   await cacheDel(cacheKeyOrder(orderId));
   await cacheDel(cacheKeyOrdersList("*"));

@@ -27,10 +27,29 @@ const statusVariant: Record<string, "default" | "secondary" | "destructive" | "s
   COMPLETED: "success",
 };
 
-async function fetchOrder(id: number) {
+async function fetchOrder(id: number): Promise<any> {
   const res = await fetch(`/api/orders/${id}`, { credentials: "include" });
-  if (!res.ok) throw new Error("Failed to fetch order");
-  return res.json();
+  const raw: unknown = await res.json().catch(() => null);
+  if (!res.ok) {
+    const errMsg =
+      raw && typeof raw === "object" && "error" in raw && typeof (raw as { error: unknown }).error === "string"
+        ? (raw as { error: string }).error
+        : "";
+    const msg = errMsg.length
+      ? errMsg
+      : res.status === 403
+        ? "You do not have access to this enquiry."
+        : res.status === 404
+          ? "Enquiry not found."
+          : res.status === 401
+            ? "Session expired — please sign in again."
+            : `Could not load enquiry (${res.status}).`;
+    throw new Error(msg);
+  }
+  if (!raw || typeof raw !== "object") {
+    throw new Error("Invalid response from server.");
+  }
+  return raw;
 }
 
 export default function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -51,11 +70,24 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [commentBody, setCommentBody] = useState("");
   const [commentError, setCommentError] = useState("");
   const [actionError, setActionError] = useState("");
+  const [sampleDetails, setSampleDetails] = useState("");
+  const [sampleQuantity, setSampleQuantity] = useState("");
+  const [courierName, setCourierName] = useState("");
+  const [trackingId, setTrackingId] = useState("");
+  const [salesFeedback, setSalesFeedback] = useState("");
+  const [sampleError, setSampleError] = useState("");
 
-  const { data: order, isLoading } = useQuery({
+  const {
+    data: order,
+    isLoading,
+    isError,
+    error: orderError,
+    refetch: refetchOrder,
+  } = useQuery({
     queryKey: ["order", orderId],
     queryFn: () => fetchOrder(orderId),
     enabled: Number.isInteger(orderId),
+    retry: 1,
   });
 
   const { data: divisionsData } = useQuery({
@@ -176,14 +208,71 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
   const isManager = user && ["MANAGER", "SUPER_ADMIN"].includes(user.role);
   const canAct = order && isManager && ["PLACED", "TRANSFERRED", "IN_PROGRESS"].includes(order.status);
+  const mightManageSample =
+    user &&
+    order &&
+    ["MANAGER", "SUPER_ADMIN", "MANAGING_DIRECTOR"].includes(user.role) &&
+    !["REJECTED", "COMPLETED"].includes(order.status);
+  const mightSubmitFeedback =
+    user &&
+    order &&
+    !["REJECTED"].includes(order.status) &&
+    (order.createdById === user.id ||
+      ["SUPERVISOR", "MANAGER", "SUPER_ADMIN", "MANAGING_DIRECTOR"].includes(user.role));
+
+  const sampleMutation = useMutation({
+    mutationFn: async (body: Record<string, unknown>) => {
+      const res = await fetch(`/api/orders/${orderId}/sample`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as { error?: string }).error || "Sample action failed");
+      return data;
+    },
+    onSuccess: () => {
+      setSampleError("");
+      setSampleDetails("");
+      setSampleQuantity("");
+      setCourierName("");
+      setTrackingId("");
+      setSalesFeedback("");
+      queryClient.invalidateQueries({ queryKey: ["order", orderId] });
+    },
+    onError: (err: Error) => setSampleError(err.message),
+  });
   const canEdit = order && order.status === "PLACED" && user && (Number(user.id) === order.createdById || user.role === "SUPER_ADMIN");
   const canComment = order && user && (isManager || Number(user.id) === order.createdById);
 
-  if (isLoading || !order) {
+  if (isLoading) {
     return (
       <div className="space-y-6">
         <Button variant="ghost" asChild><Link href="/orders">← Enquiries</Link></Button>
         <div className="text-slate-500">Loading enquiry...</div>
+      </div>
+    );
+  }
+
+  if (isError || !order) {
+    return (
+      <div className="space-y-6">
+        <Button variant="ghost" asChild><Link href="/orders">← Enquiries</Link></Button>
+        <Card>
+          <CardHeader>
+            <CardTitle>Could not load enquiry</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm text-slate-600">
+            <p>{orderError instanceof Error ? orderError.message : "This enquiry may not exist or you may not have access."}</p>
+            <p className="text-slate-500">
+              If you recently upgraded the app, ask your admin to run database migrations and clear the order cache.
+            </p>
+            <Button type="button" variant="outline" size="sm" onClick={() => refetchOrder()}>
+              Try again
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -200,7 +289,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Details</CardTitle>
+          <CardTitle>Order details</CardTitle>
           {canEdit && (
             <Button variant="outline" size="sm" onClick={() => { setEditCompanyName(order.companyName ?? ""); setEditDescription(order.description ?? ""); setEditOpen(true); }}>
               Edit enquiry
@@ -208,10 +297,26 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           )}
         </CardHeader>
         <CardContent className="space-y-4">
-          {order.companyName && <p><span className="text-slate-500">Company name:</span> {order.companyName}</p>}
+          <p>
+            <span className="text-slate-500">Company name:</span>{" "}
+            {order.companyName?.trim() ? order.companyName : "—"}
+          </p>
+          <p>
+            <span className="text-slate-500">Product description:</span>{" "}
+            {order.description?.trim() ? order.description : "—"}
+          </p>
           <p><span className="text-slate-500">Created by:</span> {order.createdBy?.name} ({order.createdBy?.email})</p>
-          <p><span className="text-slate-500">Current division:</span> {order.currentDivision?.name}</p>
-          {order.description && <p><span className="text-slate-500">Product description:</span> {order.description}</p>}
+          <p><span className="text-slate-500">Current division:</span> {order.currentDivision?.name ?? "—"}</p>
+          <p>
+            <span className="text-slate-500">Sample requested:</span>{" "}
+            {order.sampleRequested ? "Yes" : "No"}
+            {order.sampleRequested && !order.sampleRequestNotes?.trim() ? " (no notes)" : null}
+          </p>
+          {order.sampleRequested && order.sampleRequestNotes?.trim() ? (
+            <p>
+              <span className="text-slate-500">Sample request notes:</span> {order.sampleRequestNotes}
+            </p>
+          ) : null}
           {order.customFields && typeof order.customFields === "object" && Object.keys(order.customFields).length > 0 && (
             <div>
               <span className="text-slate-500">Custom fields:</span>
@@ -227,6 +332,174 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           <p><span className="text-slate-500">Transfers:</span> {order.transferCount} · <span className="text-slate-500">Rejections:</span> {order.rejectionCount}</p>
         </CardContent>
       </Card>
+
+      {order.sampleRequested && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Sample workflow</CardTitle>
+            <p className="text-sm text-slate-500 font-normal">
+              Division Head sets details and approves; shipment requires courier and tracking ID. Sales can add
+              feedback anytime before rejection.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4 text-sm">
+            {(order.sampleDetails || order.sampleQuantity) && (
+              <div className="rounded-lg border border-slate-100 bg-slate-50/80 p-3 space-y-1">
+                {order.sampleDetails && (
+                  <p>
+                    <span className="text-slate-500">Sample details:</span> {order.sampleDetails}
+                  </p>
+                )}
+                {order.sampleQuantity && (
+                  <p>
+                    <span className="text-slate-500">Quantity:</span> {order.sampleQuantity}
+                  </p>
+                )}
+              </div>
+            )}
+            {order.sampleApprovedAt && (
+              <p className="text-slate-700">
+                <span className="text-slate-500">Approved</span>{" "}
+                {new Date(order.sampleApprovedAt).toLocaleString()}
+                {order.sampleApprovedBy?.name && ` · ${order.sampleApprovedBy.name}`}
+              </p>
+            )}
+            {order.sampleShippedAt && (
+              <div className="rounded-lg border border-emerald-100 bg-emerald-50/50 p-3 space-y-1">
+                <p>
+                  <span className="text-slate-500">Shipped</span> {new Date(order.sampleShippedAt).toLocaleString()}
+                </p>
+                {order.courierName && (
+                  <p>
+                    <span className="text-slate-500">Courier:</span> {order.courierName}
+                  </p>
+                )}
+                {order.trackingId && (
+                  <p>
+                    <span className="text-slate-500">Tracking ID:</span> {order.trackingId}
+                  </p>
+                )}
+              </div>
+            )}
+            {order.salesFeedback && (
+              <p>
+                <span className="text-slate-500">Sales feedback:</span> {order.salesFeedback}{" "}
+                <span className="text-slate-400">
+                  ({order.salesFeedbackAt ? new Date(order.salesFeedbackAt).toLocaleString() : ""})
+                </span>
+              </p>
+            )}
+
+            {sampleError && (
+              <div className="rounded-lg border border-red-100 bg-red-50 text-red-700 text-sm p-3">{sampleError}</div>
+            )}
+
+            {mightManageSample && (
+              <div className="space-y-4 border-t border-slate-100 pt-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Division actions</p>
+                {!order.sampleApprovedAt && (
+                  <div className="space-y-2">
+                    <Label>Update sample details / quantity</Label>
+                    <textarea
+                      value={sampleDetails}
+                      onChange={(e) => setSampleDetails(e.target.value)}
+                      placeholder="Sample specifications, color, finish…"
+                      rows={2}
+                      className="flex min-h-[56px] w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                    />
+                    <Input
+                      value={sampleQuantity}
+                      onChange={(e) => setSampleQuantity(e.target.value)}
+                      placeholder="e.g. 2 meters, 3 swatches"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={
+                        sampleMutation.isPending ||
+                        (!sampleDetails.trim() && !sampleQuantity.trim())
+                      }
+                      onClick={() =>
+                        sampleMutation.mutate({
+                          action: "setDetails",
+                          sampleDetails: sampleDetails.trim() || undefined,
+                          sampleQuantity: sampleQuantity.trim() || undefined,
+                        })
+                      }
+                    >
+                      Save sample details
+                    </Button>
+                  </div>
+                )}
+                {!order.sampleApprovedAt && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={sampleMutation.isPending}
+                    onClick={() => sampleMutation.mutate({ action: "approve" })}
+                  >
+                    Approve sample
+                  </Button>
+                )}
+                {order.sampleApprovedAt && !order.sampleShippedAt && (
+                  <div className="space-y-2">
+                    <Label>Record shipment (courier + tracking)</Label>
+                    <Input
+                      value={courierName}
+                      onChange={(e) => setCourierName(e.target.value)}
+                      placeholder="Courier name"
+                    />
+                    <Input
+                      value={trackingId}
+                      onChange={(e) => setTrackingId(e.target.value)}
+                      placeholder="Tracking ID"
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={sampleMutation.isPending || !courierName.trim() || !trackingId.trim()}
+                      onClick={() =>
+                        sampleMutation.mutate({
+                          action: "ship",
+                          courierName: courierName.trim(),
+                          trackingId: trackingId.trim(),
+                        })
+                      }
+                    >
+                      Mark sample shipped
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {mightSubmitFeedback && (
+              <div className="space-y-2 border-t border-slate-100 pt-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Sales feedback</p>
+                <textarea
+                  value={salesFeedback}
+                  onChange={(e) => setSalesFeedback(e.target.value)}
+                  placeholder="Customer reaction, follow-up needed…"
+                  rows={3}
+                  className="flex min-h-[72px] w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={sampleMutation.isPending || !salesFeedback.trim()}
+                  onClick={() =>
+                    sampleMutation.mutate({ action: "salesFeedback", salesFeedback: salesFeedback.trim() })
+                  }
+                >
+                  Submit feedback
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {order.editHistory?.length > 0 && (
         <Card>

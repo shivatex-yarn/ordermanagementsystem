@@ -79,6 +79,8 @@ export async function POST(req: Request) {
     companyName: parsed.data.companyName,
     description: parsed.data.description,
     customFields: parsed.data.customFields,
+    sampleRequested: parsed.data.sampleRequested,
+    sampleRequestNotes: parsed.data.sampleRequestNotes,
   });
   return NextResponse.json(order, { status: 201 });
 }

@@ -12,6 +12,9 @@
     "db:push": "prisma db push",
     "db:push:reset": "prisma db push --force-reset --accept-data-loss",
     "db:migrate": "prisma migrate dev",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:mark-sample-migration-applied": "prisma migrate resolve --applied 20260325120000_order_sample_n8n",
+    "db:fix-empty-db-migrate-history": "prisma db push && prisma migrate resolve --applied 20260325120000_order_sample_n8n",
     "db:studio": "prisma studio",
     "db:seed": "npx prisma db seed",
     "db:setup": "prisma db push --force-reset --accept-data-loss && npx prisma db seed"

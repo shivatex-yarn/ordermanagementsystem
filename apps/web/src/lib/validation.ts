@@ -42,7 +42,34 @@ export const createOrderSchema = z.object({
   description: z.string().min(1, "Product description is required").max(10000),
   divisionId: z.number().int().positive(),
   customFields: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
+  sampleRequested: z.boolean().optional(),
+  sampleRequestNotes: z.string().max(10000).optional(),
 });
+
+const setSampleDetailsBody = z
+  .object({
+    action: z.literal("setDetails"),
+    sampleDetails: z.string().max(20000).optional(),
+    sampleQuantity: z.string().max(500).optional(),
+  })
+  .refine((d) => (d.sampleDetails?.trim()?.length ?? 0) > 0 || (d.sampleQuantity?.trim()?.length ?? 0) > 0, {
+    message: "Provide sample details and/or quantity",
+  });
+
+/** Division head / Super Admin / n8n integration — sample workflow */
+export const orderSampleActionSchema = z.union([
+  setSampleDetailsBody,
+  z.object({ action: z.literal("approve") }),
+  z.object({
+    action: z.literal("ship"),
+    courierName: z.string().min(1).max(255),
+    trackingId: z.string().min(1).max(500),
+  }),
+  z.object({
+    action: z.literal("salesFeedback"),
+    salesFeedback: z.string().min(1).max(20000),
+  }),
+]);
 
 export const updateOrderSchema = z.object({
   companyName: z.string().min(1).max(500).optional(),

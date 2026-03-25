@@ -2,14 +2,11 @@ import { prisma } from "@/lib/db";
 import { subscribe } from "@/lib/events";
 import type { OrderEvent } from "@/lib/events";
 import { sendEnquiryNotificationEmail } from "@/lib/email";
+import { postEventToN8n } from "@/lib/n8n-webhook";
 
 async function auditHandler(event: OrderEvent): Promise<void> {
   const action = event.type;
-  const payload = {
-    orderId: event.orderId,
-    orderNumber: event.orderNumber,
-    ...event,
-  };
+  const payload = { ...event };
   await prisma.auditLog.create({
     data: {
       orderId: event.orderId,
@@ -81,9 +78,23 @@ function eventTypeToSummary(type: string, event: OrderEvent): string {
       return `Enquiry ${event.orderNumber} has been completed.`;
     case "SLABreachDetected":
       return `Enquiry ${event.orderNumber} has breached the 48-hour SLA.`;
+    case "SampleDetailsUpdated":
+      return `Sample details were updated for enquiry ${event.orderNumber}.`;
+    case "SampleApproved":
+      return `Sample was approved for enquiry ${event.orderNumber}.`;
+    case "SampleShipped": {
+      const e = event as Extract<OrderEvent, { type: "SampleShipped" }>;
+      return `Sample was shipped for enquiry ${e.orderNumber} (${e.courierName}, tracking ${e.trackingId}).`;
+    }
+    case "SalesFeedbackRecorded":
+      return `Sales feedback was submitted for enquiry ${event.orderNumber}.`;
     default:
       return `Enquiry ${event.orderNumber}: ${type}.`;
   }
+}
+
+async function n8nWebhookHandler(event: OrderEvent): Promise<void> {
+  await postEventToN8n(event);
 }
 
 let registered = false;
@@ -92,4 +103,5 @@ export function registerEventHandlers(): void {
   registered = true;
   subscribe(auditHandler);
   subscribe(notificationHandler);
+  subscribe(n8nWebhookHandler);
 }
