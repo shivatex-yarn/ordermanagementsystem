@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -59,16 +60,6 @@ type TransferRow = {
   transferredBy: { id: number; name: string; email: string };
 };
 
-type AuditRow = {
-  id: number;
-  createdAt: string;
-  action: string;
-  orderId: number;
-  orderNumber: string;
-  user: { name: string; email: string } | null;
-  payloadPreview: string;
-};
-
 type Overview = {
   statusCounts: Record<string, number>;
   openBreaches: number;
@@ -88,12 +79,56 @@ type Overview = {
   }>;
   pipeline: PipelineRow[];
   transfers: TransferRow[];
-  auditFeed: AuditRow[];
+};
+
+const MD_PIPELINE_PAGE_SIZE = 5;
+const MD_TRANSFERS_PAGE_SIZE = 5;
+
+const AUDIT_PAGE_SIZE = 15;
+
+const AUDIT_ACTION_TABS = [
+  { value: "", label: "All" },
+  { value: "OrderCreated", label: "Created" },
+  { value: "OrderAccepted", label: "Accepted" },
+  { value: "OrderTransferred", label: "Transferred" },
+  { value: "OrderReceived", label: "Received" },
+  { value: "OrderCompleted", label: "Completed" },
+  { value: "OrderRejected", label: "Rejected" },
+  { value: "SLABreachDetected", label: "SLA breach" },
+  { value: "SampleDetailsUpdated", label: "Sample update" },
+  { value: "SampleApproved", label: "Sample approved" },
+  { value: "SampleShipped", label: "Sample shipped" },
+  { value: "SalesFeedbackRecorded", label: "Sales feedback" },
+] as const;
+
+type MdAuditFeedResponse = {
+  logs: Array<{
+    id: number;
+    createdAt: string;
+    action: string;
+    orderId: number;
+    orderNumber: string;
+    user: { name: string; email: string } | null;
+    payloadPreview: string;
+  }>;
+  total: number;
+  page: number;
+  limit: number;
 };
 
 async function fetchOverview(): Promise<Overview> {
   const res = await fetch("/api/md/overview", { credentials: "include" });
   if (!res.ok) throw new Error("Failed to load overview");
+  return res.json();
+}
+
+async function fetchMdAuditFeed(page: number, action: string): Promise<MdAuditFeedResponse> {
+  const q = new URLSearchParams();
+  q.set("page", String(page));
+  q.set("limit", String(AUDIT_PAGE_SIZE));
+  if (action) q.set("action", action);
+  const res = await fetch(`/api/audit?${q}`, { credentials: "include" });
+  if (!res.ok) throw new Error("Failed to load activity log");
   return res.json();
 }
 
@@ -116,10 +151,52 @@ const sections = [
 export default function MdOverviewPage() {
   const { user } = useAuth();
   const isSuperAdmin = user?.role === "SUPER_ADMIN";
+  const [auditPage, setAuditPage] = useState(1);
+  const [auditAction, setAuditAction] = useState("");
+  const [pipelinePage, setPipelinePage] = useState(1);
+  const [transfersPage, setTransfersPage] = useState(1);
   const { data, isLoading, error } = useQuery({
     queryKey: ["md-overview"],
     queryFn: fetchOverview,
   });
+  const {
+    data: auditFeed,
+    isLoading: auditLoading,
+    error: auditError,
+  } = useQuery({
+    queryKey: ["md-audit-feed", auditPage, auditAction],
+    queryFn: () => fetchMdAuditFeed(auditPage, auditAction),
+    enabled: !isLoading && !error && !!data,
+  });
+
+  const pipelineTotalPages = data
+    ? Math.max(1, Math.ceil(data.pipeline.length / MD_PIPELINE_PAGE_SIZE))
+    : 1;
+  const transfersTotalPages = data
+    ? Math.max(1, Math.ceil(data.transfers.length / MD_TRANSFERS_PAGE_SIZE))
+    : 1;
+
+  const pipelineSlice = useMemo(() => {
+    if (!data) return [];
+    const start = (pipelinePage - 1) * MD_PIPELINE_PAGE_SIZE;
+    return data.pipeline.slice(start, start + MD_PIPELINE_PAGE_SIZE);
+  }, [data, pipelinePage]);
+
+  const transfersSlice = useMemo(() => {
+    if (!data) return [];
+    const start = (transfersPage - 1) * MD_TRANSFERS_PAGE_SIZE;
+    return data.transfers.slice(start, start + MD_TRANSFERS_PAGE_SIZE);
+  }, [data, transfersPage]);
+
+  useEffect(() => {
+    if (!data) return;
+    setPipelinePage((p) => Math.min(p, pipelineTotalPages));
+  }, [data, pipelineTotalPages]);
+
+  useEffect(() => {
+    if (!data) return;
+    setTransfersPage((p) => Math.min(p, transfersTotalPages));
+  }, [data, transfersTotalPages]);
 
   if (isLoading) {
     return (
@@ -209,24 +286,25 @@ export default function MdOverviewPage() {
           <h2 className="text-xl font-semibold text-slate-900">Enquiry pipeline</h2>
         </div>
         <p className="text-sm text-slate-500">
-          Latest 100 active enquiries (excluding rejected). Division Heads responsible, response state, SLA risk,
-          and recent transfer snippets.
+          Up to 100 active enquiries (excluding rejected), shown {MD_PIPELINE_PAGE_SIZE} per page. Division Heads
+          responsible, response state, SLA risk, and recent transfer snippets.
         </p>
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-          <table className="w-full min-w-[1100px] text-left text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
-              <tr>
-                <th className="px-4 py-3">Enquiry</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Division</th>
-                <th className="px-4 py-3">Responsible heads</th>
-                <th className="px-4 py-3">Response / ownership</th>
-                <th className="px-4 py-3">SLA</th>
-                <th className="px-4 py-3">Transfers</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {data.pipeline.map((row) => (
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1100px] text-left text-sm">
+              <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-4 py-3">Enquiry</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Division</th>
+                  <th className="px-4 py-3">Responsible heads</th>
+                  <th className="px-4 py-3">Response / ownership</th>
+                  <th className="px-4 py-3">SLA</th>
+                  <th className="px-4 py-3">Transfers</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {pipelineSlice.map((row) => (
                 <tr key={row.id} className="align-top hover:bg-slate-50/80">
                   <td className="px-4 py-3">
                     <Link href={`/orders/${row.id}`} className="font-semibold text-indigo-700 hover:underline">
@@ -299,9 +377,38 @@ export default function MdOverviewPage() {
                     )}
                   </td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-slate-500">
+              Page {pipelinePage} of {pipelineTotalPages} · {data.pipeline.length}{" "}
+              {data.pipeline.length === 1 ? "enquiry" : "enquiries"}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8"
+                disabled={pipelinePage <= 1}
+                onClick={() => setPipelinePage((p) => Math.max(1, p - 1))}
+              >
+                Previous
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8"
+                disabled={pipelinePage >= pipelineTotalPages}
+                onClick={() => setPipelinePage((p) => Math.min(pipelineTotalPages, p + 1))}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -377,20 +484,23 @@ export default function MdOverviewPage() {
           <ArrowRightLeft className="h-5 w-5 text-slate-600" />
           <h2 className="text-xl font-semibold text-slate-900">Transfer ledger</h2>
         </div>
-        <p className="text-sm text-slate-500">Every cross-division move with full reason and who initiated it.</p>
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-          <table className="w-full min-w-[900px] text-left text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
-              <tr>
-                <th className="px-4 py-3">When</th>
-                <th className="px-4 py-3">Enquiry</th>
-                <th className="px-4 py-3">Route</th>
-                <th className="px-4 py-3">By</th>
-                <th className="px-4 py-3">Reason</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {data.transfers.map((t) => (
+        <p className="text-sm text-slate-500">
+          Every cross-division move with full reason and who initiated it ({MD_TRANSFERS_PAGE_SIZE} per page).
+        </p>
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[900px] text-left text-sm">
+              <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-4 py-3">When</th>
+                  <th className="px-4 py-3">Enquiry</th>
+                  <th className="px-4 py-3">Route</th>
+                  <th className="px-4 py-3">By</th>
+                  <th className="px-4 py-3">Reason</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {transfersSlice.map((t) => (
                 <tr key={t.id} className="align-top hover:bg-slate-50/80">
                   <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-500">
                     {new Date(t.createdAt).toLocaleString()}
@@ -412,48 +522,159 @@ export default function MdOverviewPage() {
                   </td>
                   <td className="max-w-md px-4 py-3 text-xs text-slate-600 whitespace-pre-wrap">{t.reason}</td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-slate-500">
+              Page {transfersPage} of {transfersTotalPages} · {data.transfers.length} transfer
+              {data.transfers.length === 1 ? "" : "s"}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8"
+                disabled={transfersPage <= 1}
+                onClick={() => setTransfersPage((p) => Math.max(1, p - 1))}
+              >
+                Previous
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8"
+                disabled={transfersPage >= transfersTotalPages}
+                onClick={() => setTransfersPage((p) => Math.min(transfersTotalPages, p + 1))}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
         </div>
       </section>
 
       <section id="audit" className="scroll-mt-24 space-y-4">
-        <div className="flex items-center gap-2">
-          <Radio className="h-5 w-5 text-slate-600" />
-          <h2 className="text-xl font-semibold text-slate-900">Live activity log</h2>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <Radio className="h-5 w-5 shrink-0 text-slate-600" />
+              <h2 className="text-xl font-semibold text-slate-900">Live activity log</h2>
+            </div>
+            <p className="mt-1 text-sm text-slate-500">
+              Paginated audit trail across all enquiries. Filter by event type; click an order number for read-only
+              details.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center justify-start gap-1.5 lg:max-w-[min(100%,42rem)] lg:justify-end">
+            {AUDIT_ACTION_TABS.map((tab) => (
+              <Button
+                key={tab.value || "all"}
+                type="button"
+                variant={auditAction === tab.value ? "default" : "outline"}
+                size="sm"
+                className={cn(
+                  "h-8 rounded-full px-3 text-xs",
+                  auditAction === tab.value ? "shadow-sm" : "border-slate-200 bg-white text-slate-700"
+                )}
+                onClick={() => {
+                  setAuditAction(tab.value);
+                  setAuditPage(1);
+                }}
+              >
+                {tab.label}
+              </Button>
+            ))}
+          </div>
         </div>
-        <p className="text-sm text-slate-500">Latest 100 system events across all enquiries (audit trail).</p>
         <Card className="border-slate-200 shadow-sm">
           <CardContent className="p-0">
-            <ul className="divide-y divide-slate-100">
-              {data.auditFeed.map((a) => (
-                <li key={a.id} className="flex flex-col gap-1 px-4 py-3 hover:bg-slate-50/60 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-mono text-xs text-slate-400">{new Date(a.createdAt).toLocaleString()}</span>
-                      <Badge variant="secondary" className="text-[10px]">
-                        {a.action}
-                      </Badge>
-                      <Link href={`/orders/${a.orderId}`} className="text-sm font-semibold text-indigo-700 hover:underline">
-                        {a.orderNumber}
-                      </Link>
+            {auditLoading && (
+              <div className="px-4 py-10 text-center text-sm text-slate-500">Loading activity…</div>
+            )}
+            {auditError && (
+              <div className="px-4 py-6 text-center text-sm text-red-600">Could not load activity log.</div>
+            )}
+            {!auditLoading && !auditError && auditFeed && auditFeed.logs.length === 0 && (
+              <div className="px-4 py-10 text-center text-sm text-slate-500">No events match this filter.</div>
+            )}
+            {!auditLoading && !auditError && auditFeed && auditFeed.logs.length > 0 && (
+              <ul className="divide-y divide-slate-100">
+                {auditFeed.logs.map((a) => (
+                  <li
+                    key={a.id}
+                    className="flex flex-col gap-1 px-4 py-3 hover:bg-slate-50/60 sm:flex-row sm:items-start sm:justify-between"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono text-xs text-slate-400">
+                          {new Date(a.createdAt).toLocaleString()}
+                        </span>
+                        <Badge variant="secondary" className="text-[10px]">
+                          {a.action}
+                        </Badge>
+                        <Link
+                          href={`/orders/${a.orderId}?from=audit`}
+                          className="text-sm font-semibold text-indigo-700 hover:underline"
+                        >
+                          {a.orderNumber}
+                        </Link>
+                      </div>
+                      {a.user && (
+                        <p className="mt-1 text-xs text-slate-500">
+                          {a.user.name} · {a.user.email}
+                        </p>
+                      )}
+                      {!a.user && <p className="mt-1 text-xs text-slate-400">System / integration</p>}
+                      {a.payloadPreview && (
+                        <pre className="mt-2 max-h-24 overflow-auto rounded-md bg-slate-900/5 p-2 text-[11px] text-slate-600">
+                          {a.payloadPreview}
+                        </pre>
+                      )}
                     </div>
-                    {a.user && (
-                      <p className="mt-1 text-xs text-slate-500">
-                        {a.user.name} · {a.user.email}
-                      </p>
-                    )}
-                    {!a.user && <p className="mt-1 text-xs text-slate-400">System / integration</p>}
-                    {a.payloadPreview && (
-                      <pre className="mt-2 max-h-24 overflow-auto rounded-md bg-slate-900/5 p-2 text-[11px] text-slate-600">
-                        {a.payloadPreview}
-                      </pre>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {!auditLoading && !auditError && auditFeed && auditFeed.total > 0 && (
+              <div className="flex flex-col gap-3 border-t border-slate-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs text-slate-500">
+                  Page {auditFeed.page} of {Math.max(1, Math.ceil(auditFeed.total / auditFeed.limit))} ·{" "}
+                  {auditFeed.total} event{auditFeed.total === 1 ? "" : "s"}
+                  {auditAction ? (
+                    <>
+                      {" "}
+                      · filter: <span className="font-medium text-slate-700">{auditAction || "All"}</span>
+                    </>
+                  ) : null}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8"
+                    disabled={auditPage <= 1}
+                    onClick={() => setAuditPage((p) => Math.max(1, p - 1))}
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8"
+                    disabled={auditPage >= Math.ceil(auditFeed.total / auditFeed.limit)}
+                    onClick={() => setAuditPage((p) => p + 1)}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </section>

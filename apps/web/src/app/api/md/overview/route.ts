@@ -2,16 +2,6 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { withRole } from "@/lib/with-auth";
 
-function payloadSnippet(p: unknown): string {
-  if (p == null) return "";
-  try {
-    const s = JSON.stringify(p);
-    return s.length > 280 ? `${s.slice(0, 280)}…` : s;
-  } catch {
-    return "";
-  }
-}
-
 function responseLabel(order: {
   status: string;
   acceptedBy: { name: string } | null;
@@ -52,7 +42,6 @@ export async function GET() {
     recentBreaches,
     pipelineOrders,
     recentTransfers,
-    auditFeed,
   ] = await Promise.all([
     prisma.order.groupBy({
       by: ["status"],
@@ -130,14 +119,6 @@ export async function GET() {
         fromDivision: { select: { id: true, name: true } },
         toDivision: { select: { id: true, name: true } },
         transferredBy: { select: { id: true, name: true, email: true } },
-      },
-    }),
-    prisma.auditLog.findMany({
-      take: 100,
-      orderBy: { createdAt: "desc" },
-      include: {
-        user: { select: { id: true, name: true, email: true } },
-        order: { select: { id: true, orderNumber: true } },
       },
     }),
   ]);
@@ -223,15 +204,6 @@ export async function GET() {
       fromDivision: t.fromDivision,
       toDivision: t.toDivision,
       transferredBy: t.transferredBy,
-    })),
-    auditFeed: auditFeed.map((a) => ({
-      id: a.id,
-      createdAt: a.createdAt.toISOString(),
-      action: a.action,
-      orderId: a.orderId,
-      orderNumber: a.order.orderNumber,
-      user: a.user ? { name: a.user.name, email: a.user.email } : null,
-      payloadPreview: payloadSnippet(a.payload),
     })),
   });
 }

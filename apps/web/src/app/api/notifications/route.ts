@@ -6,6 +6,14 @@ export async function GET(req: Request) {
   const auth = await withAuth();
   if (auth.response) return auth.response;
   const { searchParams } = new URL(req.url);
+
+  if (searchParams.get("countOnly") === "true") {
+    const unreadCount = await prisma.notification.count({
+      where: { userId: Number(auth.payload.sub), read: false },
+    });
+    return NextResponse.json({ unreadCount });
+  }
+
   const unreadOnly = searchParams.get("unreadOnly") === "true";
   const limit = Math.min(50, Math.max(1, Number(searchParams.get("limit")) || 20));
   const notifications = await prisma.notification.findMany({
