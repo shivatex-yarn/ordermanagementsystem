@@ -93,12 +93,20 @@ export async function GET(
   if (auth.payload.role === "USER" && order.createdById !== Number(auth.payload.sub)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
-  if (["MANAGER", "SUPERVISOR"].includes(auth.payload.role) && auth.payload.divisionId) {
-    if (order.currentDivisionId !== auth.payload.divisionId && order.createdById !== Number(auth.payload.sub)) {
-      const inDivisionHistory =
-        order.previousDivisionId === auth.payload.divisionId ||
-        order.currentDivisionId === auth.payload.divisionId;
-      if (!inDivisionHistory && auth.payload.role !== "SUPER_ADMIN" && auth.payload.role !== "MANAGING_DIRECTOR") {
+  if (["MANAGER", "SUPERVISOR"].includes(auth.payload.role)) {
+    const userId = Number(auth.payload.sub);
+    if (order.createdById !== userId) {
+      const managed = await prisma.divisionManager.findMany({
+        where: { userId },
+        select: { divisionId: true },
+      });
+      const accessibleDivisionIds = Array.from(
+        new Set([auth.payload.divisionId ?? null, ...managed.map((m) => m.divisionId)].filter((v): v is number => typeof v === "number"))
+      );
+      const canView =
+        accessibleDivisionIds.includes(order.currentDivisionId) ||
+        (order.previousDivisionId != null && accessibleDivisionIds.includes(order.previousDivisionId));
+      if (!canView && auth.payload.role !== "SUPER_ADMIN" && auth.payload.role !== "MANAGING_DIRECTOR") {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
     }

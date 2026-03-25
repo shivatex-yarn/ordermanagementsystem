@@ -99,8 +99,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [actionError, setActionError] = useState("");
   const [sampleDetails, setSampleDetails] = useState("");
   const [sampleQuantity, setSampleQuantity] = useState("");
+  const [sampleWeight, setSampleWeight] = useState("");
+  const [sentByCourier, setSentByCourier] = useState(true);
   const [courierName, setCourierName] = useState("");
   const [trackingId, setTrackingId] = useState("");
+  const [sampleProofFile, setSampleProofFile] = useState<File | null>(null);
   const [salesFeedback, setSalesFeedback] = useState("");
   const [sampleError, setSampleError] = useState("");
 
@@ -255,7 +258,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     order &&
     !["REJECTED"].includes(order.status) &&
     (order.createdById === user.id ||
-      ["SUPERVISOR", "MANAGER", "SUPER_ADMIN", "MANAGING_DIRECTOR"].includes(user.role));
+      ["SUPER_ADMIN", "MANAGING_DIRECTOR"].includes(user.role));
 
   const sampleMutation = useMutation({
     mutationFn: async (body: Record<string, unknown>) => {
@@ -273,8 +276,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       setSampleError("");
       setSampleDetails("");
       setSampleQuantity("");
+      setSampleWeight("");
+      setSentByCourier(true);
       setCourierName("");
       setTrackingId("");
+      setSampleProofFile(null);
       setSalesFeedback("");
       queryClient.invalidateQueries({ queryKey: ["order", orderId] });
     },
@@ -583,6 +589,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                     <span className="text-slate-500">Quantity:</span> {order.sampleQuantity}
                   </p>
                 )}
+                {order.sampleWeight && (
+                  <p>
+                    <span className="text-slate-500">Weight:</span> {order.sampleWeight}
+                  </p>
+                )}
               </div>
             )}
             {order.sampleApprovedAt && (
@@ -597,6 +608,10 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 <p>
                   <span className="text-slate-500">Shipped</span> {new Date(order.sampleShippedAt).toLocaleString()}
                 </p>
+                <p>
+                  <span className="text-slate-500">Sent by courier:</span>{" "}
+                  {order.sampleShippedByCourier === false ? "No" : "Yes"}
+                </p>
                 {order.courierName && (
                   <p>
                     <span className="text-slate-500">Courier:</span> {order.courierName}
@@ -605,6 +620,14 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 {order.trackingId && (
                   <p>
                     <span className="text-slate-500">Tracking ID:</span> {order.trackingId}
+                  </p>
+                )}
+                {order.sampleProofUrl && (
+                  <p>
+                    <span className="text-slate-500">Proof:</span>{" "}
+                    <a className="text-blue-700 underline" href={order.sampleProofUrl} target="_blank" rel="noreferrer">
+                      View
+                    </a>
                   </p>
                 )}
               </div>
@@ -640,19 +663,25 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                       onChange={(e) => setSampleQuantity(e.target.value)}
                       placeholder="e.g. 2 meters, 3 swatches"
                     />
+                    <Input
+                      value={sampleWeight}
+                      onChange={(e) => setSampleWeight(e.target.value)}
+                      placeholder="Weight (e.g. 250 gsm, 1.5 kg)"
+                    />
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
                       disabled={
                         sampleMutation.isPending ||
-                        (!sampleDetails.trim() && !sampleQuantity.trim())
+                        (!sampleDetails.trim() && !sampleQuantity.trim() && !sampleWeight.trim())
                       }
                       onClick={() =>
                         sampleMutation.mutate({
                           action: "setDetails",
                           sampleDetails: sampleDetails.trim() || undefined,
                           sampleQuantity: sampleQuantity.trim() || undefined,
+                          sampleWeight: sampleWeight.trim() || undefined,
                         })
                       }
                     >
@@ -672,28 +701,83 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 )}
                 {order.sampleApprovedAt && !order.sampleShippedAt && (
                   <div className="space-y-2">
-                    <Label>Record shipment (courier + tracking)</Label>
-                    <Input
-                      value={courierName}
-                      onChange={(e) => setCourierName(e.target.value)}
-                      placeholder="Courier name"
-                    />
-                    <Input
-                      value={trackingId}
-                      onChange={(e) => setTrackingId(e.target.value)}
-                      placeholder="Tracking ID"
-                    />
+                    <Label>Record shipment</Label>
+                    <label className="flex items-center gap-2 text-sm text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={sentByCourier}
+                        onChange={(e) => setSentByCourier(e.target.checked)}
+                      />
+                      Sent by courier (requires courier + tracking)
+                    </label>
+                    {sentByCourier && (
+                      <>
+                        <Input
+                          value={courierName}
+                          onChange={(e) => setCourierName(e.target.value)}
+                          placeholder="Courier name"
+                        />
+                        <Input
+                          value={trackingId}
+                          onChange={(e) => setTrackingId(e.target.value)}
+                          placeholder="Tracking ID"
+                        />
+                      </>
+                    )}
+                    <div className="space-y-1">
+                      <Label>Proof (optional: png/jpg/webp/pdf, max 5MB)</Label>
+                      <input
+                        type="file"
+                        accept=".png,.jpg,.jpeg,.webp,.pdf"
+                        onChange={(e) => setSampleProofFile(e.target.files?.[0] ?? null)}
+                      />
+                    </div>
                     <Button
                       type="button"
                       size="sm"
-                      disabled={sampleMutation.isPending || !courierName.trim() || !trackingId.trim()}
-                      onClick={() =>
-                        sampleMutation.mutate({
-                          action: "ship",
-                          courierName: courierName.trim(),
-                          trackingId: trackingId.trim(),
-                        })
+                      disabled={
+                        sampleMutation.isPending ||
+                        (sentByCourier && (!courierName.trim() || !trackingId.trim()))
                       }
+                      onClick={async () => {
+                        try {
+                          setSampleError("");
+                          let proofUrl: string | undefined;
+                          if (sampleProofFile) {
+                            const fd = new FormData();
+                            fd.append("file", sampleProofFile);
+                            const res = await fetch(`/api/orders/${orderId}/sample-proof`, {
+                              method: "POST",
+                              credentials: "include",
+                              body: fd,
+                            });
+                            const contentType = res.headers.get("content-type") ?? "";
+                            const data = contentType.includes("application/json")
+                              ? await res.json().catch(() => ({}))
+                              : {};
+                            if (!res.ok) {
+                              throw new Error(
+                                  (data as { error?: string; detail?: string }).detail ||
+                                  (data as { error?: string; detail?: string }).error ||
+                                  `Failed to upload proof (${res.status})`
+                              );
+                            }
+                            proofUrl =
+                              typeof (data as { url?: unknown }).url === "string"
+                                ? (data as { url: string }).url
+                                : undefined;
+                          }
+                          sampleMutation.mutate({
+                            action: "ship",
+                            sentByCourier,
+                            courierName: sentByCourier ? courierName.trim() : undefined,
+                            trackingId: sentByCourier ? trackingId.trim() : undefined,
+                            sampleProofUrl: proofUrl,
+                          });
+                        } catch (e) {
+                          setSampleError(e instanceof Error ? e.message : String(e));
+                        }
+                      }}
                     >
                       Mark sample shipped
                     </Button>

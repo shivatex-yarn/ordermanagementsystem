@@ -338,7 +338,7 @@ export async function completeOrder(orderId: number, completedById: number) {
 export async function updateOrderSampleDetails(
   orderId: number,
   userId: number,
-  input: { sampleDetails?: string; sampleQuantity?: string }
+  input: { sampleDetails?: string; sampleQuantity?: string; sampleWeight?: string }
 ) {
   const order = await prisma.order.findUnique({ where: { id: orderId } });
   if (!order?.sampleRequested) return null;
@@ -347,12 +347,15 @@ export async function updateOrderSampleDetails(
     input.sampleDetails !== undefined ? input.sampleDetails.trim() || null : undefined;
   const sampleQuantity =
     input.sampleQuantity !== undefined ? input.sampleQuantity.trim() || null : undefined;
-  if (sampleDetails === undefined && sampleQuantity === undefined) return null;
+  const sampleWeight =
+    input.sampleWeight !== undefined ? input.sampleWeight.trim() || null : undefined;
+  if (sampleDetails === undefined && sampleQuantity === undefined && sampleWeight === undefined) return null;
   const updated = await prisma.order.update({
     where: { id: orderId },
     data: {
       ...(sampleDetails !== undefined && { sampleDetails }),
       ...(sampleQuantity !== undefined && { sampleQuantity }),
+      ...(sampleWeight !== undefined && { sampleWeight }),
     },
     include: {
       createdBy: { select: { id: true, name: true, email: true } },
@@ -405,17 +408,24 @@ export async function approveOrderSample(orderId: number, userId: number) {
 export async function recordSampleShipment(
   orderId: number,
   userId: number,
-  input: { courierName: string; trackingId: string }
+  input: { sentByCourier?: boolean; courierName?: string; trackingId?: string; sampleProofUrl?: string }
 ) {
   const order = await prisma.order.findUnique({ where: { id: orderId } });
   if (!order?.sampleRequested || !order.sampleApprovedAt || order.sampleShippedAt) return null;
   if (order.status === "REJECTED" || order.status === "COMPLETED") return null;
+  const sentByCourier = input.sentByCourier !== false;
+  const courierName = input.courierName?.trim() || null;
+  const trackingId = input.trackingId?.trim() || null;
+  if (sentByCourier && (!courierName || !trackingId)) return null;
+  const sampleProofUrl = input.sampleProofUrl?.trim() || null;
   const updated = await prisma.order.update({
     where: { id: orderId },
     data: {
       sampleShippedAt: new Date(),
-      courierName: input.courierName.trim(),
-      trackingId: input.trackingId.trim(),
+      sampleShippedByCourier: sentByCourier,
+      courierName: sentByCourier ? courierName : null,
+      trackingId: sentByCourier ? trackingId : null,
+      sampleProofUrl,
     },
     include: {
       createdBy: { select: { id: true, name: true, email: true } },
@@ -427,8 +437,8 @@ export async function recordSampleShipment(
     orderId: updated.id,
     orderNumber: updated.orderNumber,
     divisionId: updated.currentDivisionId,
-    courierName: updated.courierName!,
-    trackingId: updated.trackingId!,
+    courierName: updated.courierName ?? undefined,
+    trackingId: updated.trackingId ?? undefined,
     timestamp: new Date().toISOString(),
     userId,
   });
