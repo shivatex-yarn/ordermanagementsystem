@@ -25,7 +25,10 @@ export default function NotificationsPage() {
         credentials: "include",
         body: JSON.stringify({ ids }),
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notifications"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["notifications-unread-count"] });
+    },
   });
 
   const notifications = data?.notifications ?? [];

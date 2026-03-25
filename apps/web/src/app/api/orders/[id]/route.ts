@@ -18,7 +18,13 @@ const fullInclude = {
   transfers: {
     include: {
       fromDivision: { select: { id: true, name: true } },
-      toDivision: { select: { id: true, name: true } },
+      toDivision: {
+        include: {
+          managers: {
+            include: { user: { select: { id: true, name: true, email: true } } },
+          },
+        },
+      },
       transferredBy: { select: { id: true, name: true, email: true } },
     },
   },

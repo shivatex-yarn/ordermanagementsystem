@@ -2,6 +2,7 @@
 
 import { use } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,7 +28,7 @@ const statusVariant: Record<string, "default" | "secondary" | "destructive" | "s
   COMPLETED: "success",
 };
 
-async function fetchOrder(id: number): Promise<any> {
+async function fetchOrder(id: number): Promise<any> { // eslint-disable-line @typescript-eslint/no-explicit-any -- wide API payload
   const res = await fetch(`/api/orders/${id}`, { credentials: "include" });
   const raw: unknown = await res.json().catch(() => null);
   if (!res.ok) {
@@ -52,9 +53,35 @@ async function fetchOrder(id: number): Promise<any> {
   return raw;
 }
 
+type AuditLogRow = {
+  id: number;
+  action: string;
+  createdAt: string;
+  payload: unknown;
+  user: { name: string; email: string } | null;
+};
+
+function auditPayloadSummary(action: string, payload: unknown): string {
+  if (!payload || typeof payload !== "object") return "";
+  const p = payload as Record<string, unknown>;
+  switch (action) {
+    case "OrderTransferred":
+      return p.reason ? `Reason: ${String(p.reason)}` : "";
+    case "OrderRejected":
+      return p.reason ? `Reason: ${String(p.reason)}` : "";
+    case "OrderCompleted":
+      return p.durationMs != null ? `Elapsed: ${Math.round(Number(p.durationMs) / 1000)}s` : "";
+    default:
+      return "";
+  }
+}
+
 export default function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const orderId = Number(id);
+  const searchParams = useSearchParams();
+  const isAuditView = searchParams.get("from") === "audit";
+  const showInteractiveUi = !isAuditView;
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [acceptOpen, setAcceptOpen] = useState(false);
@@ -88,6 +115,16 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     queryFn: () => fetchOrder(orderId),
     enabled: Number.isInteger(orderId),
     retry: 1,
+  });
+
+  const { data: auditData, isLoading: auditLoading } = useQuery({
+    queryKey: ["order-audit", orderId],
+    queryFn: async () => {
+      const res = await fetch(`/api/audit?orderId=${orderId}&limit=200`, { credentials: "include" });
+      if (!res.ok) throw new Error("Could not load activity log");
+      return res.json() as Promise<{ logs: AuditLogRow[] }>;
+    },
+    enabled: isAuditView && Number.isInteger(orderId),
   });
 
   const { data: divisionsData } = useQuery({
@@ -243,13 +280,21 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     },
     onError: (err: Error) => setSampleError(err.message),
   });
-  const canEdit = order && order.status === "PLACED" && user && (Number(user.id) === order.createdById || user.role === "SUPER_ADMIN");
+  const canEdit =
+    showInteractiveUi &&
+    order &&
+    order.status === "PLACED" &&
+    user &&
+    (Number(user.id) === order.createdById || user.role === "SUPER_ADMIN");
   const canComment = order && user && (isManager || Number(user.id) === order.createdById);
+
+  const backHref = isAuditView ? "/md#audit" : "/orders";
+  const backLabel = isAuditView ? "← Activity log" : "← Enquiries";
 
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <Button variant="ghost" asChild><Link href="/orders">← Enquiries</Link></Button>
+        <Button variant="ghost" asChild><Link href={backHref}>{backLabel}</Link></Button>
         <div className="text-slate-500">Loading enquiry...</div>
       </div>
     );
@@ -258,7 +303,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   if (isError || !order) {
     return (
       <div className="space-y-6">
-        <Button variant="ghost" asChild><Link href="/orders">← Enquiries</Link></Button>
+        <Button variant="ghost" asChild><Link href={backHref}>{backLabel}</Link></Button>
         <Card>
           <CardHeader>
             <CardTitle>Could not load enquiry</CardTitle>
@@ -277,11 +322,13 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     );
   }
 
+  const auditLogsChrono = auditData?.logs ? [...auditData.logs].reverse() : [];
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" asChild><Link href="/orders">← Enquiries</Link></Button>
+          <Button variant="ghost" size="sm" asChild><Link href={backHref}>{backLabel}</Link></Button>
           <h1 className="text-2xl font-bold">{order.orderNumber}</h1>
           <Badge variant={statusVariant[order.status]}>{order.status.replace("_", " ")}</Badge>
         </div>
@@ -329,9 +376,190 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           )}
           <p><span className="text-slate-500">Created:</span> {new Date(order.createdAt).toLocaleString()}</p>
           {order.slaDeadline && <p><span className="text-slate-500">SLA deadline:</span> {new Date(order.slaDeadline).toLocaleString()}</p>}
-          <p><span className="text-slate-500">Transfers:</span> {order.transferCount} · <span className="text-slate-500">Rejections:</span> {order.rejectionCount}</p>
+          {!isAuditView ? (
+            <p>
+              <span className="text-slate-500">Transfers:</span> {order.transferCount} ·{" "}
+              <span className="text-slate-500">Rejections:</span> {order.rejectionCount}
+            </p>
+          ) : (
+            <div className="border-t border-slate-100 pt-4 space-y-4 text-sm">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">Project status</p>
+                <ul className="space-y-2 list-none pl-0">
+                  <li>
+                    <span className="text-slate-500">Accepted by division:</span>{" "}
+                    {order.acceptedBy ? (
+                      <>
+                        Yes — {order.acceptedBy.name} ({order.acceptedBy.email})
+                      </>
+                    ) : (
+                      <span className="text-slate-800">Not yet accepted (or pending receive after transfer)</span>
+                    )}
+                  </li>
+                  <li>
+                    <span className="text-slate-500">Completed:</span>{" "}
+                    {order.completedAt && order.completedBy ? (
+                      <>
+                        Yes — {order.completedBy.name} ({order.completedBy.email}) on{" "}
+                        {new Date(order.completedAt).toLocaleString()}
+                      </>
+                    ) : (
+                      <span className="text-slate-800">No</span>
+                    )}
+                  </li>
+                  <li>
+                    <span className="text-slate-500">Final rejection:</span>{" "}
+                    {order.status === "REJECTED" && order.rejectedBy ? (
+                      <>
+                        {order.rejectedBy.name} ({order.rejectedBy.email})
+                        {order.rejections?.length
+                          ? ` · ${new Date(order.rejections[order.rejections.length - 1].createdAt).toLocaleString()}`
+                          : ""}
+                      </>
+                    ) : (
+                      <span className="text-slate-800">—</span>
+                    )}
+                  </li>
+                  <li>
+                    <span className="text-slate-500">Workflow position:</span>{" "}
+                    <span className="font-medium text-slate-900">{order.status.replace("_", " ")}</span>
+                    {" · "}
+                    <span className="text-slate-500">Current division:</span> {order.currentDivision?.name ?? "—"}
+                  </li>
+                </ul>
+              </div>
+              {order.transfers?.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">
+                    Transfer history ({order.transfers.length})
+                  </p>
+                  <ul className="space-y-3 list-none pl-0">
+                    {order.transfers.map(
+                      (t: {
+                        id: number;
+                        fromDivision: { name: string };
+                        toDivision: {
+                          name: string;
+                          managers?: { user: { name: string; email: string } }[];
+                        };
+                        reason: string;
+                        transferredBy: { name: string; email: string };
+                        createdAt: string;
+                      }) => {
+                        const heads =
+                          t.toDivision?.managers?.map((m) => `${m.user.name} (${m.user.email})`).join(", ") ||
+                          "No division heads assigned";
+                        return (
+                          <li key={t.id} className="rounded-lg border border-slate-100 bg-slate-50/60 p-3">
+                            <p className="font-medium text-slate-900">
+                              {t.fromDivision.name} → {t.toDivision.name}
+                            </p>
+                            <p className="mt-1 text-slate-600">
+                              <span className="text-slate-500">Transferred by:</span> {t.transferredBy.name} (
+                              {t.transferredBy.email})
+                            </p>
+                            <p className="text-slate-600">
+                              <span className="text-slate-500">Division responsible (heads):</span> {heads}
+                            </p>
+                            <p className="mt-1 text-slate-500 text-xs">{new Date(t.createdAt).toLocaleString()}</p>
+                            {t.reason?.trim() ? (
+                              <p className="mt-2 text-slate-700 border-t border-slate-100 pt-2">{t.reason}</p>
+                            ) : null}
+                          </li>
+                        );
+                      }
+                    )}
+                  </ul>
+                </div>
+              )}
+              {order.rejections?.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">
+                    Rejection events ({order.rejections.length})
+                  </p>
+                  <ul className="space-y-2 list-none pl-0">
+                    {order.rejections.map(
+                      (r: {
+                        id: number;
+                        division: { name: string };
+                        reason: string;
+                        rejectedBy: { name: string; email: string };
+                        createdAt: string;
+                      }) => (
+                        <li key={r.id} className="rounded-lg border border-red-100 bg-red-50/40 p-3">
+                          <p className="text-slate-900">
+                            <span className="text-slate-500">Rejected by:</span> {r.rejectedBy.name} (
+                            {r.rejectedBy.email})
+                          </p>
+                          <p className="text-slate-600">
+                            <span className="text-slate-500">Division:</span> {r.division.name}
+                          </p>
+                          <p className="text-slate-500 text-xs mt-1">{new Date(r.createdAt).toLocaleString()}</p>
+                          <p className="mt-2 text-slate-800">{r.reason}</p>
+                        </li>
+                      )
+                    )}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      {isAuditView && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Activity timeline</CardTitle>
+            <p className="text-sm text-slate-500 font-normal">
+              Chronological audit log for this enquiry (newest events appear at the bottom).
+            </p>
+          </CardHeader>
+          <CardContent>
+            {auditLoading ? (
+              <p className="text-sm text-slate-500">Loading timeline…</p>
+            ) : auditLogsChrono.length === 0 ? (
+              <p className="text-sm text-slate-500">No audit entries recorded.</p>
+            ) : (
+              <ul className="space-y-3">
+                {auditLogsChrono.map((log) => {
+                  const extra = auditPayloadSummary(log.action, log.payload);
+                  return (
+                    <li
+                      key={log.id}
+                      className="rounded-lg border border-slate-100 bg-slate-50/50 p-3 text-sm"
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono text-xs text-slate-400">
+                          {new Date(log.createdAt).toLocaleString()}
+                        </span>
+                        <Badge variant="secondary" className="text-[10px]">
+                          {log.action}
+                        </Badge>
+                      </div>
+                      {log.user ? (
+                        <p className="mt-1 text-xs text-slate-600">
+                          {log.user.name} · {log.user.email}
+                        </p>
+                      ) : (
+                        <p className="mt-1 text-xs text-slate-400">System / integration</p>
+                      )}
+                      {extra ? <p className="mt-2 text-slate-700">{extra}</p> : null}
+                      {log.payload != null ? (
+                        <pre className="mt-2 max-h-32 overflow-auto rounded bg-slate-900/5 p-2 text-[11px] text-slate-600">
+                          {typeof log.payload === "string"
+                            ? log.payload
+                            : JSON.stringify(log.payload)}
+                        </pre>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {order.sampleRequested && (
         <Card>
@@ -394,7 +622,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               <div className="rounded-lg border border-red-100 bg-red-50 text-red-700 text-sm p-3">{sampleError}</div>
             )}
 
-            {mightManageSample && (
+            {showInteractiveUi && mightManageSample && (
               <div className="space-y-4 border-t border-slate-100 pt-4">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Division actions</p>
                 {!order.sampleApprovedAt && (
@@ -474,7 +702,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               </div>
             )}
 
-            {mightSubmitFeedback && (
+            {showInteractiveUi && mightSubmitFeedback && (
               <div className="space-y-2 border-t border-slate-100 pt-4">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Sales feedback</p>
                 <textarea
@@ -517,7 +745,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         </Card>
       )}
 
-      {canComment && (
+      {((canComment && showInteractiveUi) || (isAuditView && (order.comments?.length ?? 0) > 0)) && (
         <Card>
           <CardHeader><CardTitle>Comments</CardTitle></CardHeader>
           <CardContent className="space-y-4">
@@ -531,18 +759,21 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 ))}
               </ul>
             ) : (
-              <p className="text-slate-500 text-sm">No comments yet.</p>
+              canComment &&
+              showInteractiveUi && <p className="text-slate-500 text-sm">No comments yet.</p>
             )}
-            <form onSubmit={(e) => { e.preventDefault(); if (commentBody.trim()) commentMutation.mutate(commentBody.trim()); }} className="flex gap-2">
-              <Input value={commentBody} onChange={(e) => setCommentBody(e.target.value)} placeholder="Add a comment..." className="flex-1" />
-              <Button type="submit" disabled={!commentBody.trim() || commentMutation.isPending}>Add</Button>
-            </form>
+            {canComment && showInteractiveUi && (
+              <form onSubmit={(e) => { e.preventDefault(); if (commentBody.trim()) commentMutation.mutate(commentBody.trim()); }} className="flex gap-2">
+                <Input value={commentBody} onChange={(e) => setCommentBody(e.target.value)} placeholder="Add a comment..." className="flex-1" />
+                <Button type="submit" disabled={!commentBody.trim() || commentMutation.isPending}>Add</Button>
+              </form>
+            )}
             {commentError && <p className="text-sm text-red-600">{commentError}</p>}
           </CardContent>
         </Card>
       )}
 
-      {order.transfers?.length > 0 && (
+      {!isAuditView && order.transfers?.length > 0 && (
         <Card>
           <CardHeader><CardTitle>Transfers</CardTitle></CardHeader>
           <CardContent>
@@ -557,7 +788,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         </Card>
       )}
 
-      {order.rejections?.length > 0 && (
+      {!isAuditView && order.rejections?.length > 0 && (
         <Card>
           <CardHeader><CardTitle>Rejections</CardTitle></CardHeader>
           <CardContent>
@@ -572,7 +803,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         </Card>
       )}
 
-      {canAct && (
+      {canAct && showInteractiveUi && (
         <Card>
           <CardHeader><CardTitle>Actions</CardTitle></CardHeader>
           <CardContent className="flex flex-wrap gap-2">
