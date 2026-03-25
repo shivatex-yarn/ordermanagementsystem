@@ -189,9 +189,7 @@ export default function AdminDivisionsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Add division</CardTitle>
-          <p className="text-sm text-slate-500">
-            Super Admin and Division Heads (Managers) can add new divisions.
-          </p>
+          <p className="text-sm text-slate-500">Only Super Admin can add new divisions.</p>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="flex gap-4 items-end max-w-md">

@@ -1,6 +1,4 @@
 "use client";
-
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   BarChart,
@@ -31,23 +29,10 @@ async function fetchAdminStats() {
   return res.json();
 }
 
-async function fetchActivity(page = 1) {
-  const res = await fetch(`/api/admin/activity?page=${page}&limit=15`, {
-    credentials: "include",
-  });
-  if (!res.ok) throw new Error("Failed to fetch activity");
-  return res.json();
-}
-
 export default function AdminDashboardPage() {
   const { data: stats, isLoading: statsLoading } = useQuery({
     queryKey: ["admin-stats"],
     queryFn: fetchAdminStats,
-  });
-  const [activityPage, setActivityPage] = useState(1);
-  const { data: activity, isLoading: activityLoading } = useQuery({
-    queryKey: ["admin-activity", activityPage],
-    queryFn: () => fetchActivity(activityPage),
   });
 
   if (statsLoading || !stats) {
@@ -179,86 +164,6 @@ export default function AdminDashboardPage() {
         </Card>
       )}
 
-      {/* Trigger events & activity logs — who modified/deleted, detailed actions */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Trigger events & activity logs</CardTitle>
-          <p className="text-sm text-slate-500">
-            Who performed each action, when, and on which enquiry. Includes created, accepted, transferred, rejected, completed.
-          </p>
-        </CardHeader>
-        <CardContent>
-          {activityLoading ? (
-            <div className="py-8 text-center text-slate-500">Loading activity...</div>
-          ) : !activity?.logs?.length ? (
-            <div className="py-8 text-center text-slate-500">No activity yet.</div>
-          ) : (
-            <>
-              <div className="rounded-xl border border-slate-100 overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-100 bg-slate-50/80">
-                      <th className="text-left p-3 font-medium text-slate-700">Time</th>
-                      <th className="text-left p-3 font-medium text-slate-700">Action</th>
-                      <th className="text-left p-3 font-medium text-slate-700">Enquiry</th>
-                      <th className="text-left p-3 font-medium text-slate-700">Who</th>
-                      <th className="text-left p-3 font-medium text-slate-700">Details</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {activity.logs.map((log: {
-                      id: number;
-                      action: string;
-                      createdAt: string;
-                      payload: unknown;
-                      user: { name: string; email: string; role: string } | null;
-                      order: { orderNumber: string; status: string } | null;
-                    }) => (
-                      <tr key={log.id} className="border-b border-slate-50">
-                        <td className="p-3 text-slate-600">
-                          {new Date(log.createdAt).toLocaleString()}
-                        </td>
-                        <td className="p-3 font-medium text-slate-900">{log.action}</td>
-                        <td className="p-3">
-                          {log.order ? `${log.order.orderNumber} (${log.order.status})` : "—"}
-                        </td>
-                        <td className="p-3 text-slate-600">
-                          {log.user ? `${log.user.name} (${log.user.email}) — ${log.user.role}` : "System"}
-                        </td>
-                        <td className="p-3 text-slate-500 max-w-xs truncate">
-                          {log.payload && typeof log.payload === "object"
-                            ? JSON.stringify(log.payload).slice(0, 80) + "..."
-                            : "—"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              {activity.total > activity.limit && (
-                <div className="flex justify-end gap-2 mt-4">
-                  <button
-                    type="button"
-                    onClick={() => setActivityPage((p) => Math.max(1, p - 1))}
-                    disabled={activityPage <= 1}
-                    className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 disabled:opacity-50"
-                  >
-                    Previous
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActivityPage((p) => p + 1)}
-                    disabled={activityPage * activity.limit >= activity.total}
-                    className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 disabled:opacity-50"
-                  >
-                    Next
-                  </button>
-                </div>
-              )}
-            </>
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
 }
