@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { withAuth, withRole } from "@/lib/with-auth";
+import { getRoutableDivisionIdsForUser } from "@/lib/division-access";
 import { z } from "zod";
 
 const createDivisionSchema = z.object({ name: z.string().min(1).max(255).trim() });
@@ -11,8 +13,23 @@ export async function GET(req: Request) {
     if (auth.response) return auth.response;
     const { searchParams } = new URL(req.url);
     const includeInactive = searchParams.get("includeInactive") === "true" && (auth.payload.role === "SUPER_ADMIN" || auth.payload.role === "MANAGING_DIRECTOR");
+    const routingScope = searchParams.get("scope") === "routing";
+
+    const where: Prisma.DivisionWhereInput = includeInactive ? {} : { active: true };
+
+    if (routingScope) {
+      if (auth.payload.role !== "SUPER_ADMIN" && auth.payload.role !== "MANAGING_DIRECTOR") {
+        const userId = Number(auth.payload.sub);
+        const allowed = await getRoutableDivisionIdsForUser(userId);
+        if (allowed.length === 0) {
+          return NextResponse.json({ divisions: [] });
+        }
+        where.id = { in: allowed };
+      }
+    }
+
     const divisions = await prisma.division.findMany({
-      where: includeInactive ? undefined : { active: true },
+      where,
       orderBy: { name: "asc" },
       include: {
         managers: { include: { user: { select: { id: true, name: true, email: true, active: true } } } },

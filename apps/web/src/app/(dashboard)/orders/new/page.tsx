@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,8 +17,8 @@ import {
 } from "@/components/ui/select";
 import { Plus, X } from "lucide-react";
 
-async function fetchDivisions() {
-  const res = await fetch("/api/divisions", { credentials: "include" });
+async function fetchDivisionsForRouting() {
+  const res = await fetch("/api/divisions?scope=routing", { credentials: "include" });
   if (!res.ok) throw new Error("Failed to fetch divisions");
   const data = await res.json();
   if (Array.isArray(data)) return data as { id: number; name: string }[];
@@ -30,6 +30,7 @@ type CustomField = { title: string; value: string };
 
 export default function NewOrderPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [divisionId, setDivisionId] = useState<number | null>(null);
   const [companyName, setCompanyName] = useState("");
   const [description, setDescription] = useState("");
@@ -39,10 +40,17 @@ export default function NewOrderPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const { data: divisions = [] } = useQuery({
-    queryKey: ["order-form-divisions"],
-    queryFn: fetchDivisions,
+  const { data: divisions = [], isSuccess: divisionsLoaded } = useQuery({
+    queryKey: ["order-form-divisions", "routing"],
+    queryFn: fetchDivisionsForRouting,
   });
+
+  useEffect(() => {
+    if (!divisionsLoaded || divisions.length !== 1) return;
+    setDivisionId((prev) => (prev == null ? divisions[0].id : prev));
+  }, [divisionsLoaded, divisions]);
+
+  const routableDivisionId = divisions.length === 1 ? (divisions[0]?.id ?? null) : divisionId;
 
   function addCustomField() {
     setCustomFields((prev) => [...prev, { title: "", value: "" }]);
@@ -60,7 +68,7 @@ export default function NewOrderPage() {
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!divisionId) {
+    if (routableDivisionId == null) {
       setError("Please select a division.");
       return;
     }
@@ -84,7 +92,7 @@ export default function NewOrderPage() {
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
-          divisionId,
+          divisionId: routableDivisionId,
           companyName: companyName.trim(),
           description: description.trim(),
           customFields: Object.keys(customFieldsObj).length ? customFieldsObj : undefined,
@@ -99,6 +107,8 @@ export default function NewOrderPage() {
         setError(data.error || "Failed to create enquiry");
         return;
       }
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       router.push(`/orders/${data.id}`);
       router.refresh();
     } finally {
@@ -123,7 +133,7 @@ export default function NewOrderPage() {
         <Card>
           <CardHeader>
             <CardTitle>Customer &amp; product</CardTitle>
-            <p className="text-sm text-slate-500 font-normal">Core order details shown on the enquiry record.</p>
+            <p className="text-sm text-slate-500 font-normal">Core enquiry details shown on the record.</p>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
@@ -153,22 +163,36 @@ export default function NewOrderPage() {
           <CardHeader>
             <CardTitle>Routing, sample &amp; extra fields</CardTitle>
             <p className="text-sm text-slate-500 font-normal">
-              Choose division, optional sample request, and any extra key/value fields.
+              Your enquiry is routed to your assigned division only. Optional sample request and extra fields below.
             </p>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label>Division (required)</Label>
-              <Select value={divisionId?.toString() ?? ""} onValueChange={(v) => setDivisionId(Number(v))}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select division" />
-                </SelectTrigger>
-                <SelectContent>
-                  {divisions.map((d) => (
-                    <SelectItem key={d.id} value={String(d.id)}>{d.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {divisionsLoaded && divisions.length === 0 ? (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                  You are not assigned to any division. Ask an administrator to map you to a division before creating
+                  an enquiry.
+                </div>
+              ) : divisions.length === 1 ? (
+                <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-900">
+                  {divisions[0].name}
+                  <span className="ml-2 font-normal text-slate-500">(your division)</span>
+                </div>
+              ) : (
+                <Select value={divisionId?.toString() ?? ""} onValueChange={(v) => setDivisionId(Number(v))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select division" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {divisions.map((d) => (
+                      <SelectItem key={d.id} value={String(d.id)}>
+                        {d.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
 
             <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
@@ -234,7 +258,9 @@ export default function NewOrderPage() {
             </div>
 
             <div className="flex gap-2 pt-2">
-              <Button type="submit" disabled={loading}>{loading ? "Creating..." : "Create enquiry"}</Button>
+              <Button type="submit" disabled={loading || divisions.length === 0 || routableDivisionId == null}>
+                {loading ? "Creating..." : "Create enquiry"}
+              </Button>
               <Button type="button" variant="outline" asChild><Link href="/orders">Cancel</Link></Button>
             </div>
           </CardContent>
