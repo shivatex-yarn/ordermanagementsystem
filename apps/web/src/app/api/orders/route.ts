@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { withAuth } from "@/lib/with-auth";
-import { Prisma } from "@prisma/client";
+import { Prisma, type OrderStatus } from "@prisma/client";
 import { createOrderSchema } from "@/lib/validation";
 import { createOrder } from "@/lib/order-engine";
 import { getRateLimitIdentifier, rateLimit } from "@/lib/rate-limit";
 import { cacheGet, cacheSet, cacheKeyOrdersList } from "@/lib/redis";
+import { getCreatedAtRange, normalizePeriodParam, parseCreatedAtRangeFromParams } from "@/lib/date-period";
+import { userMayRouteEnquiryToDivision } from "@/lib/division-access";
 
 function safeDbHint() {
   try {
@@ -59,14 +61,41 @@ export async function GET(req: Request) {
   const limit = Number(searchParams.get("limit")) || 20;
   const status = searchParams.get("status") || undefined;
   const divisionId = searchParams.get("divisionId") || undefined;
-  const cacheKey = cacheKeyOrdersList(JSON.stringify({ page, limit, status, divisionId, role: auth.payload.role }));
+  const period = normalizePeriodParam(searchParams.get("period"));
+  const dateFrom = searchParams.get("from")?.trim() || null;
+  const dateTo = searchParams.get("to")?.trim() || null;
+  const customCreatedRange = parseCreatedAtRangeFromParams(dateFrom, dateTo);
+  const wantStats = searchParams.get("stats") === "1";
+  const cacheKey = cacheKeyOrdersList(
+    JSON.stringify({
+      page,
+      limit,
+      status,
+      divisionId,
+      role: auth.payload.role,
+      period: customCreatedRange ? "" : period,
+      wantStats,
+      from: dateFrom ?? "",
+      to: dateTo ?? "",
+    })
+  );
 
-  const cached = await cacheGet<{ orders: unknown[]; total: number }>(cacheKey);
+  const cached = await cacheGet<{ orders: unknown[]; total: number; statusCounts?: Record<string, number> }>(
+    cacheKey
+  );
   if (cached) return NextResponse.json(cached);
 
-  const where: Record<string, unknown> = {};
-  if (status) where.status = status;
+  const where: Prisma.OrderWhereInput = {};
+  if (status) where.status = status as OrderStatus;
   if (divisionId) where.currentDivisionId = Number(divisionId);
+  if (customCreatedRange) {
+    where.createdAt = { gte: customCreatedRange.gte, lte: customCreatedRange.lte };
+  } else {
+    const createdRange = getCreatedAtRange(period);
+    if (createdRange) {
+      where.createdAt = { gte: createdRange.gte, lte: createdRange.lte };
+    }
+  }
   if (auth.payload.role === "USER") where.createdById = Number(auth.payload.sub);
   if (auth.payload.role === "MANAGER" || auth.payload.role === "SUPERVISOR") {
     const userId = Number(auth.payload.sub);
@@ -89,6 +118,7 @@ export async function GET(req: Request) {
 
   let orders: unknown[] = [];
   let total = 0;
+  let statusCounts: Record<string, number> | undefined;
   try {
     [orders, total] = await Promise.all([
       prisma.order.findMany({
@@ -100,6 +130,14 @@ export async function GET(req: Request) {
       }),
       prisma.order.count({ where }),
     ]);
+    if (wantStats) {
+      const grouped = await prisma.order.groupBy({
+        by: ["status"],
+        where,
+        _count: { _all: true },
+      });
+      statusCounts = Object.fromEntries(grouped.map((g) => [g.status, g._count._all])) as Record<string, number>;
+    }
   } catch (err) {
     console.error("[GET /api/orders]", err);
     // #region agent log
@@ -146,7 +184,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Failed to load enquiries" }, { status: 500 });
   }
 
-  const result = { orders, total, page, limit };
+  const result = { orders, total, page, limit, ...(statusCounts != null ? { statusCounts } : {}) };
   await cacheSet(cacheKey, result, 60);
   return NextResponse.json(result);
 }
@@ -169,7 +207,15 @@ export async function POST(req: Request) {
   if (!canCreate) {
     return NextResponse.json({ error: "Only users and supervisors can create enquiries" }, { status: 403 });
   }
-  const order = await createOrder(Number(auth.payload.sub), parsed.data.divisionId, {
+  const userId = Number(auth.payload.sub);
+  const mayUseDivision = await userMayRouteEnquiryToDivision(userId, auth.payload.role, parsed.data.divisionId);
+  if (!mayUseDivision) {
+    return NextResponse.json(
+      { error: "You can only raise enquiries for division(s) you are assigned to." },
+      { status: 403 }
+    );
+  }
+  const order = await createOrder(userId, parsed.data.divisionId, {
     companyName: parsed.data.companyName,
     description: parsed.data.description,
     customFields: parsed.data.customFields,

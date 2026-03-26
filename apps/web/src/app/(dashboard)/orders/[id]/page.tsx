@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useState } from "react";
+import { formatEnquiryNumber } from "@/lib/enquiry-display";
 
 const statusVariant: Record<string, "default" | "secondary" | "destructive" | "success" | "warning"> = {
   PLACED: "secondary",
@@ -74,6 +75,209 @@ function auditPayloadSummary(action: string, payload: unknown): string {
     default:
       return "";
   }
+}
+
+function auditActionLabel(action: string): string {
+  const m: Record<string, string> = {
+    OrderCreated: "Enquiry placed",
+    OrderAccepted: "Accepted by division",
+    OrderTransferred: "Transferred",
+    OrderRejected: "Rejected",
+    OrderReceived: "Received in new division",
+    OrderCompleted: "Completed",
+    SampleDetailsUpdated: "Sample details updated",
+    SampleApproved: "Sample approved",
+    SampleShipped: "Sample sent / shipped",
+    SalesFeedbackRecorded: "Sales / user response",
+    SLABreachDetected: "SLA breach",
+  };
+  return m[action] ?? action;
+}
+
+/** Card + label styling per event type for the detailed timeline. */
+function auditTimelineStyles(action: string): {
+  card: string;
+  label: string;
+  time: string;
+  user: string;
+  extra: string;
+} {
+  const base =
+    "relative overflow-hidden rounded-2xl border p-4 text-sm shadow-sm transition-[box-shadow,transform] duration-200 hover:shadow-md";
+  switch (action) {
+    case "OrderCreated":
+      return {
+        card: `${base} border-slate-200/90 bg-gradient-to-br from-slate-50 via-white to-violet-50/30 ring-1 ring-slate-500/5`,
+        label:
+          "inline-flex items-center rounded-full bg-slate-800 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-white shadow-sm",
+        time: "font-mono text-xs font-medium text-slate-600 tabular-nums",
+        user: "mt-2 text-slate-700",
+        extra: "mt-2 border-t border-slate-100/80 pt-2 text-slate-600",
+      };
+    case "OrderAccepted":
+      return {
+        card: `${base} border-emerald-200/80 bg-gradient-to-br from-emerald-50/90 via-white to-teal-50/50 ring-1 ring-emerald-500/10`,
+        label:
+          "inline-flex items-center rounded-full bg-emerald-600 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-white shadow-sm shadow-emerald-600/25",
+        time: "font-mono text-xs font-medium text-emerald-900/70 tabular-nums",
+        user: "mt-2 text-emerald-950/80",
+        extra: "mt-2 border-t border-emerald-100/80 pt-2 text-emerald-900/75",
+      };
+    case "OrderTransferred":
+      return {
+        card: `${base} border-amber-200/80 bg-gradient-to-br from-amber-50/90 via-white to-orange-50/40 ring-1 ring-amber-400/15`,
+        label:
+          "inline-flex items-center rounded-full bg-amber-500 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-white shadow-sm shadow-amber-500/30",
+        time: "font-mono text-xs font-medium text-amber-900/70 tabular-nums",
+        user: "mt-2 text-amber-950/80",
+        extra: "mt-2 border-t border-amber-100/80 pt-2 text-amber-950/75",
+      };
+    case "OrderRejected":
+      return {
+        card: `${base} border-rose-200/80 bg-gradient-to-br from-rose-50/90 via-white to-red-50/40 ring-1 ring-rose-500/15`,
+        label:
+          "inline-flex items-center rounded-full bg-rose-600 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-white shadow-sm shadow-rose-600/25",
+        time: "font-mono text-xs font-medium text-rose-900/70 tabular-nums",
+        user: "mt-2 text-rose-950/85",
+        extra: "mt-2 border-t border-rose-100/80 pt-2 text-rose-900/80",
+      };
+    case "OrderReceived":
+      return {
+        card: `${base} border-sky-200/80 bg-gradient-to-br from-sky-50/90 via-white to-blue-50/40 ring-1 ring-sky-400/15`,
+        label:
+          "inline-flex items-center rounded-full bg-sky-600 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-white shadow-sm shadow-sky-600/20",
+        time: "font-mono text-xs font-medium text-sky-900/70 tabular-nums",
+        user: "mt-2 text-sky-950/80",
+        extra: "mt-2 border-t border-sky-100/80 pt-2 text-sky-900/75",
+      };
+    case "OrderCompleted":
+      return {
+        card: `${base} border-green-200/80 bg-gradient-to-br from-green-50/90 via-white to-emerald-50/30 ring-1 ring-green-500/12`,
+        label:
+          "inline-flex items-center rounded-full bg-green-600 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-white shadow-sm shadow-green-600/25",
+        time: "font-mono text-xs font-medium text-green-900/70 tabular-nums",
+        user: "mt-2 text-green-950/80",
+        extra: "mt-2 border-t border-green-100/80 pt-2 text-green-900/75",
+      };
+    case "SampleDetailsUpdated":
+      return {
+        card: `${base} border-violet-200/80 bg-gradient-to-br from-violet-50/80 via-white to-fuchsia-50/30 ring-1 ring-violet-400/12`,
+        label:
+          "inline-flex items-center rounded-full bg-violet-600 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-white shadow-sm shadow-violet-600/20",
+        time: "font-mono text-xs font-medium text-violet-900/70 tabular-nums",
+        user: "mt-2 text-violet-950/80",
+        extra: "mt-2 border-t border-violet-100/80 pt-2 text-violet-900/75",
+      };
+    case "SampleApproved":
+      return {
+        card: `${base} border-cyan-200/80 bg-gradient-to-br from-cyan-50/90 via-white to-teal-50/35 ring-1 ring-cyan-400/15`,
+        label:
+          "inline-flex items-center rounded-full bg-cyan-600 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-white shadow-sm shadow-cyan-600/20",
+        time: "font-mono text-xs font-medium text-cyan-900/70 tabular-nums",
+        user: "mt-2 text-cyan-950/80",
+        extra: "mt-2 border-t border-cyan-100/80 pt-2 text-cyan-900/75",
+      };
+    case "SampleShipped":
+      return {
+        card: `${base} border-indigo-200/80 bg-gradient-to-br from-indigo-50/85 via-white to-blue-50/35 ring-1 ring-indigo-400/12`,
+        label:
+          "inline-flex items-center rounded-full bg-indigo-600 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-white shadow-sm shadow-indigo-600/20",
+        time: "font-mono text-xs font-medium text-indigo-900/70 tabular-nums",
+        user: "mt-2 text-indigo-950/80",
+        extra: "mt-2 border-t border-indigo-100/80 pt-2 text-indigo-900/75",
+      };
+    case "SalesFeedbackRecorded":
+      return {
+        card: `${base} border-fuchsia-200/75 bg-gradient-to-br from-fuchsia-50/85 via-white to-pink-50/30 ring-1 ring-fuchsia-400/12`,
+        label:
+          "inline-flex items-center rounded-full bg-fuchsia-600 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-white shadow-sm shadow-fuchsia-600/20",
+        time: "font-mono text-xs font-medium text-fuchsia-900/70 tabular-nums",
+        user: "mt-2 text-fuchsia-950/80",
+        extra: "mt-2 border-t border-fuchsia-100/80 pt-2 text-fuchsia-900/75",
+      };
+    case "SLABreachDetected":
+      return {
+        card: `${base} border-orange-300/80 bg-gradient-to-br from-orange-50/95 via-white to-amber-50/40 ring-1 ring-orange-500/20`,
+        label:
+          "inline-flex items-center rounded-full bg-orange-600 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-white shadow-sm shadow-orange-500/25",
+        time: "font-mono text-xs font-medium text-orange-900/75 tabular-nums",
+        user: "mt-2 text-orange-950/85",
+        extra: "mt-2 border-t border-orange-100/90 pt-2 text-orange-950/80",
+      };
+    default:
+      return {
+        card: `${base} border-slate-200/80 bg-gradient-to-br from-slate-50/80 via-white to-slate-100/30 ring-1 ring-slate-400/10`,
+        label:
+          "inline-flex items-center rounded-full bg-slate-600 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-white shadow-sm",
+        time: "font-mono text-xs font-medium text-slate-600 tabular-nums",
+        user: "mt-2 text-slate-700",
+        extra: "mt-2 border-t border-slate-100 pt-2 text-slate-600",
+      };
+  }
+}
+
+function EnquiryPipelineStrip({
+  order,
+}: {
+  order: {
+    status: string;
+    acceptedBy?: { name: string } | null;
+    transferCount: number;
+    sampleRequested: boolean;
+    sampleApprovedAt: string | null | undefined;
+    sampleShippedAt: string | null | undefined;
+  };
+}) {
+  const steps: { label: string; done: boolean }[] = [
+    { label: "Placed", done: true },
+    {
+      label: "Accepted / in progress",
+      done:
+        Boolean(order.acceptedBy) ||
+        ["IN_PROGRESS", "COMPLETED", "REJECTED", "TRANSFERRED"].includes(order.status),
+    },
+  ];
+  if (order.transferCount > 0) {
+    steps.push({ label: `Transfer recorded (${order.transferCount})`, done: true });
+  }
+  if (order.sampleRequested) {
+    const done = Boolean(order.sampleShippedAt);
+    steps.push({
+      label: order.sampleShippedAt
+        ? "Sample sent"
+        : order.sampleApprovedAt
+          ? "Sample approved (awaiting ship)"
+          : "Sample workflow",
+      done,
+    });
+  }
+  steps.push({
+    label: "Completed or rejected",
+    done: order.status === "COMPLETED" || order.status === "REJECTED",
+  });
+  return (
+    <div className="flex flex-wrap gap-2">
+      {steps.map((s) => (
+        <span
+          key={s.label}
+          className={`rounded-full px-3 py-1 text-xs font-medium border ${
+            s.done
+              ? "bg-emerald-50 text-emerald-900 border-emerald-200"
+              : "bg-slate-50 text-slate-500 border-slate-100"
+          }`}
+        >
+          {s.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function sampleProofUrlKind(url: string): "image" | "pdf" | "other" {
+  const path = url.split("?")[0].toLowerCase();
+  if (/\.(png|jpe?g|gif|webp)$/i.test(path)) return "image";
+  if (/\.pdf$/i.test(path)) return "pdf";
+  return "other";
 }
 
 export default function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -155,6 +359,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         setActionError("");
         queryClient.invalidateQueries({ queryKey: ["order", orderId] });
         queryClient.invalidateQueries({ queryKey: ["orders"] });
+        queryClient.invalidateQueries({ queryKey: ["dashboard"] });
         return;
       }
       const data = await res.json().catch(() => ({}));
@@ -176,6 +381,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         setToDivisionId("");
         queryClient.invalidateQueries({ queryKey: ["order", orderId] });
         queryClient.invalidateQueries({ queryKey: ["orders"] });
+        queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       }
     },
   });
@@ -193,6 +399,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         setRejectReason("");
         queryClient.invalidateQueries({ queryKey: ["order", orderId] });
         queryClient.invalidateQueries({ queryKey: ["orders"] });
+        queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       }
     },
   });
@@ -201,6 +408,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["order", orderId] });
       queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     },
   });
   const completeMutation = useMutation({
@@ -208,6 +416,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["order", orderId] });
       queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     },
   });
 
@@ -224,6 +433,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         setEditOpen(false);
         queryClient.invalidateQueries({ queryKey: ["order", orderId] });
         queryClient.invalidateQueries({ queryKey: ["orders"] });
+        queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       }
     },
   });
@@ -283,6 +493,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       setSampleProofFile(null);
       setSalesFeedback("");
       queryClient.invalidateQueries({ queryKey: ["order", orderId] });
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     },
     onError: (err: Error) => setSampleError(err.message),
   });
@@ -317,7 +529,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           <CardContent className="space-y-3 text-sm text-slate-600">
             <p>{orderError instanceof Error ? orderError.message : "This enquiry may not exist or you may not have access."}</p>
             <p className="text-slate-500">
-              If you recently upgraded the app, ask your admin to run database migrations and clear the order cache.
+              If you recently upgraded the app, ask your admin to run database migrations and clear the enquiry cache.
             </p>
             <Button type="button" variant="outline" size="sm" onClick={() => refetchOrder()}>
               Try again
@@ -335,14 +547,14 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="sm" asChild><Link href={backHref}>{backLabel}</Link></Button>
-          <h1 className="text-2xl font-bold">{order.orderNumber}</h1>
+          <h1 className="text-2xl font-bold">{formatEnquiryNumber(order.orderNumber)}</h1>
           <Badge variant={statusVariant[order.status]}>{order.status.replace("_", " ")}</Badge>
         </div>
       </div>
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Order details</CardTitle>
+          <CardTitle>Enquiry details</CardTitle>
           {canEdit && (
             <Button variant="outline" size="sm" onClick={() => { setEditCompanyName(order.companyName ?? ""); setEditDescription(order.description ?? ""); setEditOpen(true); }}>
               Edit enquiry
@@ -358,8 +570,13 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             <span className="text-slate-500">Product description:</span>{" "}
             {order.description?.trim() ? order.description : "—"}
           </p>
-          <p><span className="text-slate-500">Created by:</span> {order.createdBy?.name} ({order.createdBy?.email})</p>
-          <p><span className="text-slate-500">Current division:</span> {order.currentDivision?.name ?? "—"}</p>
+          <p>
+            <span className="text-slate-500">Created by:</span> {order.createdBy?.name} ({order.createdBy?.email}) ·{" "}
+            <span className="text-slate-500">Placed:</span> {new Date(order.createdAt).toLocaleString()}
+          </p>
+          {user?.role !== "MANAGER" ? (
+            <p><span className="text-slate-500">Current division:</span> {order.currentDivision?.name ?? "—"}</p>
+          ) : null}
           <p>
             <span className="text-slate-500">Sample requested:</span>{" "}
             {order.sampleRequested ? "Yes" : "No"}
@@ -380,7 +597,6 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               </ul>
             </div>
           )}
-          <p><span className="text-slate-500">Created:</span> {new Date(order.createdAt).toLocaleString()}</p>
           {order.slaDeadline && <p><span className="text-slate-500">SLA deadline:</span> {new Date(order.slaDeadline).toLocaleString()}</p>}
           {!isAuditView ? (
             <p>
@@ -429,8 +645,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                   <li>
                     <span className="text-slate-500">Workflow position:</span>{" "}
                     <span className="font-medium text-slate-900">{order.status.replace("_", " ")}</span>
-                    {" · "}
-                    <span className="text-slate-500">Current division:</span> {order.currentDivision?.name ?? "—"}
+                    {user?.role !== "MANAGER" ? (
+                      <>
+                        {" · "}
+                        <span className="text-slate-500">Current division:</span> {order.currentDivision?.name ?? "—"}
+                      </>
+                    ) : null}
                   </li>
                 </ul>
               </div>
@@ -512,6 +732,78 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           )}
         </CardContent>
       </Card>
+
+      {!isAuditView && (
+        <>
+          <Card>
+            <CardHeader>
+              <CardTitle>Enquiry pipeline</CardTitle>
+              <p className="text-sm text-slate-500 font-normal">Stages for this enquiry at a glance.</p>
+            </CardHeader>
+            <CardContent>
+              <EnquiryPipelineStrip order={order} />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Detailed timestamps</CardTitle>
+              <p className="text-sm text-slate-500 font-normal">
+                Placed, accept, transfer, rejection, sample, and responses — from the activity log (oldest first).
+              </p>
+            </CardHeader>
+            <CardContent>
+              {order.auditLogs?.length ? (
+                <div className="relative">
+                  <div
+                    className="pointer-events-none absolute left-[7px] top-3 bottom-3 w-px bg-linear-to-b from-slate-300/90 via-slate-200/60 to-transparent sm:left-[9px]"
+                    aria-hidden
+                  />
+                  <ul className="relative space-y-4">
+                    {(
+                      order.auditLogs as {
+                        id: number;
+                        action: string;
+                        createdAt: string;
+                        payload: unknown;
+                        user: { name: string; email: string } | null;
+                      }[]
+                    ).map((log) => {
+                      const extra = auditPayloadSummary(log.action, log.payload);
+                      const st = auditTimelineStyles(log.action);
+                      return (
+                        <li key={log.id} className="relative flex gap-3 sm:gap-4">
+                          <span
+                            className="relative z-10 mt-[18px] h-2.5 w-2.5 shrink-0 rounded-full border-2 border-white bg-slate-400 shadow ring-1 ring-slate-200/80"
+                            aria-hidden
+                          />
+                          <div className={`min-w-0 flex-1 ${st.card}`}>
+                            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3">
+                              <span className={st.time}>{new Date(log.createdAt).toLocaleString()}</span>
+                              <span className={st.label}>{auditActionLabel(log.action)}</span>
+                            </div>
+                            {log.user ? (
+                              <p className={st.user}>
+                                <span className="font-medium">{log.user.name}</span>
+                                <span className="opacity-50"> · </span>
+                                {log.user.email}
+                              </p>
+                            ) : (
+                              <p className="mt-2 text-xs font-medium text-slate-400">System</p>
+                            )}
+                            {extra ? <p className={st.extra}>{extra}</p> : null}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500">No logged events yet.</p>
+              )}
+            </CardContent>
+          </Card>
+        </>
+      )}
 
       {isAuditView && (
         <Card>
@@ -623,12 +915,33 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                   </p>
                 )}
                 {order.sampleProofUrl && (
-                  <p>
-                    <span className="text-slate-500">Proof:</span>{" "}
-                    <a className="text-blue-700 underline" href={order.sampleProofUrl} target="_blank" rel="noreferrer">
-                      View
-                    </a>
-                  </p>
+                  <div className="space-y-2">
+                    <p>
+                      <span className="text-slate-500">Proof:</span>{" "}
+                      <a
+                        className="text-blue-700 underline"
+                        href={order.sampleProofUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Open in new tab
+                      </a>
+                    </p>
+                    {sampleProofUrlKind(order.sampleProofUrl) === "image" ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- user-uploaded proof from our public/uploads
+                      <img
+                        src={order.sampleProofUrl}
+                        alt="Sample shipment proof"
+                        className="mt-1 max-h-96 w-full max-w-lg rounded-md border border-slate-200 bg-white object-contain"
+                      />
+                    ) : sampleProofUrlKind(order.sampleProofUrl) === "pdf" ? (
+                      <iframe
+                        title="Sample shipment proof"
+                        src={order.sampleProofUrl}
+                        className="mt-1 h-112 w-full max-w-2xl rounded-md border border-slate-200 bg-white"
+                      />
+                    ) : null}
+                  </div>
                 )}
               </div>
             )}

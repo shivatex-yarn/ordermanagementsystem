@@ -24,7 +24,7 @@ export async function createOrder(
     sampleRequestNotes?: string | null;
   }
 ) {
-  const orderNumber = `ORD-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  const orderNumber = `Enq-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
   const slaDeadline = addHours(new Date(), SLA_HOURS);
   const sampleRequested = Boolean(data.sampleRequested);
   const order = await prisma.order.create({
@@ -437,8 +437,8 @@ export async function recordSampleShipment(
     orderId: updated.id,
     orderNumber: updated.orderNumber,
     divisionId: updated.currentDivisionId,
-    courierName: updated.courierName ?? undefined,
-    trackingId: updated.trackingId ?? undefined,
+    courierName: updated.courierName ?? "",
+    trackingId: updated.trackingId ?? "",
     timestamp: new Date().toISOString(),
     userId,
   });

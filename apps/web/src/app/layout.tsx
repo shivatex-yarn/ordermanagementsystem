@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Order Management System",
-  description: "Enterprise order management with SLA and audit",
+  title: "Enquiry Management System",
+  description: "Enterprise enquiry management with divisions, SLA, and audit",
 };
 
 export default function RootLayout({

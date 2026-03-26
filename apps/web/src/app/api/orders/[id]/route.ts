@@ -36,6 +36,11 @@ const fullInclude = {
   },
   comments: { include: { user: { select: { id: true, name: true, email: true } } } },
   editHistory: { include: { user: { select: { id: true, name: true, email: true } } } },
+  auditLogs: {
+    orderBy: { createdAt: "asc" as const },
+    take: 200,
+    include: { user: { select: { id: true, name: true, email: true } } },
+  },
 };
 
 export async function GET(
@@ -46,7 +51,7 @@ export async function GET(
   if (auth.response) return auth.response;
   const id = Number((await params).id);
   if (!Number.isInteger(id)) {
-    return NextResponse.json({ error: "Invalid order id" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid enquiry id" }, { status: 400 });
   }
   const cached = await cacheGet<unknown>(cacheKeyOrder(id));
   if (cached) return NextResponse.json(cached);
@@ -88,7 +93,7 @@ export async function GET(
       { status: 500 }
     );
   }
-  if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
+  if (!order) return NextResponse.json({ error: "Enquiry not found" }, { status: 404 });
 
   if (auth.payload.role === "USER" && order.createdById !== Number(auth.payload.sub)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -125,7 +130,7 @@ export async function PATCH(
   if (auth.response) return auth.response;
   const id = Number((await params).id);
   if (!Number.isInteger(id)) {
-    return NextResponse.json({ error: "Invalid order id" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid enquiry id" }, { status: 400 });
   }
   const body = await req.json();
   const parsed = updateOrderSchema.safeParse(body);

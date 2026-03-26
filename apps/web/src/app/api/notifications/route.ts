@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { withAuth } from "@/lib/with-auth";
+import { enrichNotificationRecords } from "@/lib/notification-enrich";
 
 export async function GET(req: Request) {
   const auth = await withAuth();
@@ -16,11 +17,12 @@ export async function GET(req: Request) {
 
   const unreadOnly = searchParams.get("unreadOnly") === "true";
   const limit = Math.min(50, Math.max(1, Number(searchParams.get("limit")) || 20));
-  const notifications = await prisma.notification.findMany({
+  const rows = await prisma.notification.findMany({
     where: { userId: Number(auth.payload!.sub), ...(unreadOnly ? { read: false } : {}) },
     orderBy: { createdAt: "desc" },
     take: limit,
   });
+  const notifications = await enrichNotificationRecords(rows);
   return NextResponse.json({ notifications });
 }
 

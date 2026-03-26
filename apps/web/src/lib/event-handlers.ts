@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/db";
 import { subscribe } from "@/lib/events";
 import type { OrderEvent } from "@/lib/events";
+import { formatEnquiryNumber } from "@/lib/enquiry-display";
+import { getNotificationShortLabel } from "@/lib/notification-labels";
 import { sendEnquiryNotificationEmail } from "@/lib/email";
 import { postEventToN8n } from "@/lib/n8n-webhook";
 
@@ -18,7 +20,7 @@ async function auditHandler(event: OrderEvent): Promise<void> {
 }
 
 async function notificationHandler(event: OrderEvent): Promise<void> {
-  const title = `Enquiry ${event.orderNumber}: ${event.type}`;
+  const title = `${formatEnquiryNumber(event.orderNumber)} · ${getNotificationShortLabel(event.type)}`;
   const body = JSON.stringify(event);
   // Notify relevant users (e.g. division managers, super admin for SLA)
   const order = await prisma.order.findUnique({
@@ -62,7 +64,7 @@ async function notificationHandler(event: OrderEvent): Promise<void> {
   }
 }
 
-function eventTypeToSummary(type: string, event: OrderEvent): string {
+export function eventTypeToSummary(type: string, event: OrderEvent): string {
   switch (type) {
     case "OrderCreated":
       return `A new enquiry ${event.orderNumber} was created and assigned to a division.`;
