@@ -30,7 +30,15 @@ type Division = {
   active?: boolean;
   managers: { user: { id: number; name: string; email: string; active?: boolean } }[];
 };
-type UserItem = { id: number; name: string; email: string; role: string; active?: boolean };
+type UserItem = {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+  active?: boolean;
+  divisionId?: number | null;
+  division?: { id: number; name: string } | null;
+};
 
 async function safeReadJson(res: Response): Promise<Record<string, unknown>> {
   const contentType = res.headers.get("content-type") ?? "";
@@ -395,6 +403,8 @@ export default function AdminDivisionsPage() {
                     .map((u) => (
                       <SelectItem key={u.id} value={String(u.id)}>
                         {u.name} ({u.email}) — {u.role}
+                        {" — "}
+                        {u.division?.name ? `Division: ${u.division.name}` : "No division"}
                       </SelectItem>
                     ))}
                 </SelectContent>

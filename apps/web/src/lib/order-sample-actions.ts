@@ -24,7 +24,7 @@ export async function userCanManageSampleForOrder(
   return u?.divisionId === currentDivisionId;
 }
 
-/** Creator, supervisor, division manager (incl. multi-division), super roles */
+/** Creator (sales/user) and super roles */
 export async function canSubmitSalesFeedbackAsync(
   userId: number,
   role: Role,
@@ -32,10 +32,6 @@ export async function canSubmitSalesFeedbackAsync(
 ): Promise<boolean> {
   if (role === "SUPER_ADMIN" || role === "MANAGING_DIRECTOR") return true;
   if (order.createdById === userId) return true;
-  if (role === "SUPERVISOR") return true;
-  if (role === "MANAGER") {
-    return userCanManageSampleForOrder(userId, role, order.currentDivisionId);
-  }
   return false;
 }
 
@@ -72,6 +68,7 @@ export async function runSampleAction(
       const order = await updateOrderSampleDetails(orderId, userId, {
         sampleDetails: action.sampleDetails,
         sampleQuantity: action.sampleQuantity,
+        sampleWeight: action.sampleWeight,
       });
       if (!order) {
         return NextResponse.json(
@@ -93,8 +90,10 @@ export async function runSampleAction(
     }
     case "ship": {
       const order = await recordSampleShipment(orderId, userId, {
+        sentByCourier: action.sentByCourier,
         courierName: action.courierName,
         trackingId: action.trackingId,
+        sampleProofUrl: action.sampleProofUrl,
       });
       if (!order) {
         return NextResponse.json(

@@ -115,11 +115,14 @@ model Order {
   sampleRequestNotes  String?   @map("sample_request_notes") @db.Text
   sampleDetails       String?   @map("sample_details") @db.Text
   sampleQuantity      String?   @map("sample_quantity")
+  sampleWeight        String?   @map("sample_weight")
   sampleApprovedAt    DateTime? @map("sample_approved_at")
   sampleApprovedById  Int?      @map("sample_approved_by_id")
   sampleShippedAt     DateTime? @map("sample_shipped_at")
+  sampleShippedByCourier Boolean @default(true) @map("sample_shipped_by_courier")
   courierName         String?   @map("courier_name")
   trackingId          String?   @map("tracking_id")
+  sampleProofUrl      String?   @map("sample_proof_url")
   salesFeedback       String?   @map("sales_feedback") @db.Text
   salesFeedbackAt     DateTime? @map("sales_feedback_at")
 

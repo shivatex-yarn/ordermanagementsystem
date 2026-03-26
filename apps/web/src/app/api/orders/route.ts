@@ -1,10 +1,26 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { withAuth } from "@/lib/with-auth";
+import { Prisma } from "@prisma/client";
 import { createOrderSchema } from "@/lib/validation";
 import { createOrder } from "@/lib/order-engine";
 import { getRateLimitIdentifier, rateLimit } from "@/lib/rate-limit";
 import { cacheGet, cacheSet, cacheKeyOrdersList } from "@/lib/redis";
+
+function safeDbHint() {
+  try {
+    const url = process.env.DATABASE_URL ? new URL(process.env.DATABASE_URL) : null;
+    if (!url) return { hasDbUrl: false };
+    return {
+      hasDbUrl: true,
+      host: url.host,
+      db: url.pathname?.replace(/^\//, "") || undefined,
+      schema: url.searchParams.get("schema") || undefined,
+    };
+  } catch {
+    return { hasDbUrl: Boolean(process.env.DATABASE_URL) };
+  }
+}
 
 const orderInclude = {
   createdBy: { select: { id: true, name: true, email: true } },
@@ -22,6 +38,22 @@ export async function GET(req: Request) {
   const { ok } = rateLimit(getRateLimitIdentifier(req));
   if (!ok) return NextResponse.json({ error: "Too many requests" }, { status: 429 });
 
+  // #region agent log
+  fetch("http://127.0.0.1:7328/ingest/3b6d6cf8-0b13-4001-8f24-c47cea3cb28e", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9f4942" },
+    body: JSON.stringify({
+      sessionId: "9f4942",
+      runId: "post-fix",
+      hypothesisId: "H_env_db_mismatch",
+      location: "apps/web/src/app/api/orders/route.ts:GET",
+      message: "orders list request",
+      data: { role: auth.payload.role, db: safeDbHint() },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
+
   const { searchParams } = new URL(req.url);
   const page = Number(searchParams.get("page")) || 1;
   const limit = Number(searchParams.get("limit")) || 20;
@@ -37,20 +69,82 @@ export async function GET(req: Request) {
   if (divisionId) where.currentDivisionId = Number(divisionId);
   if (auth.payload.role === "USER") where.createdById = Number(auth.payload.sub);
   if (auth.payload.role === "MANAGER" || auth.payload.role === "SUPERVISOR") {
-    if (auth.payload.divisionId) where.currentDivisionId = auth.payload.divisionId;
+    const userId = Number(auth.payload.sub);
+    const managed = await prisma.divisionManager.findMany({
+      where: { userId },
+      select: { divisionId: true },
+    });
+    const accessibleDivisionIds = Array.from(
+      new Set([auth.payload.divisionId ?? null, ...managed.map((m) => m.divisionId)].filter((v): v is number => typeof v === "number"))
+    );
+    if (accessibleDivisionIds.length > 0) {
+      // Only list enquiries for divisions the manager/supervisor is mapped to.
+      where.currentDivisionId = { in: accessibleDivisionIds };
+    } else {
+      // No division mapping → no enquiries.
+      where.currentDivisionId = -1;
+    }
   }
   // SUPER_ADMIN and MANAGING_DIRECTOR see all (no extra filter)
 
-  const [orders, total] = await Promise.all([
-    prisma.order.findMany({
-      where,
-      include: orderInclude,
-      orderBy: { createdAt: "desc" },
-      skip: (page - 1) * limit,
-      take: limit,
-    }),
-    prisma.order.count({ where }),
-  ]);
+  let orders: unknown[] = [];
+  let total = 0;
+  try {
+    [orders, total] = await Promise.all([
+      prisma.order.findMany({
+        where,
+        include: orderInclude,
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.order.count({ where }),
+    ]);
+  } catch (err) {
+    console.error("[GET /api/orders]", err);
+    // #region agent log
+    fetch("http://127.0.0.1:7328/ingest/3b6d6cf8-0b13-4001-8f24-c47cea3cb28e", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9f4942" },
+      body: JSON.stringify({
+        sessionId: "9f4942",
+        runId: "post-fix",
+        hypothesisId: "H_db_schema_drift",
+        location: "apps/web/src/app/api/orders/route.ts:catch",
+        message: "orders list failed",
+        data: {
+          prismaCode:
+            err instanceof Prisma.PrismaClientKnownRequestError ? err.code : undefined,
+          errMsg: err instanceof Error ? err.message : String(err),
+          db: safeDbHint(),
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2022") {
+      return NextResponse.json(
+        {
+          error:
+            "Database is missing required columns (sample workflow / schema update). From apps/web run: npx prisma migrate deploy",
+          code: "SCHEMA_DRIFT",
+        },
+        { status: 503 }
+      );
+    }
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/column/i.test(msg) && /does not exist/i.test(msg)) {
+      return NextResponse.json(
+        {
+          error:
+            "Database schema is out of date. Run migrations: cd apps/web && npx prisma migrate deploy",
+          code: "SCHEMA_DRIFT",
+        },
+        { status: 503 }
+      );
+    }
+    return NextResponse.json({ error: "Failed to load enquiries" }, { status: 500 });
+  }
 
   const result = { orders, total, page, limit };
   await cacheSet(cacheKey, result, 60);

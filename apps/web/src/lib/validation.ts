@@ -51,20 +51,36 @@ const setSampleDetailsBody = z
     action: z.literal("setDetails"),
     sampleDetails: z.string().max(20000).optional(),
     sampleQuantity: z.string().max(500).optional(),
+    sampleWeight: z.string().max(500).optional(),
   })
-  .refine((d) => (d.sampleDetails?.trim()?.length ?? 0) > 0 || (d.sampleQuantity?.trim()?.length ?? 0) > 0, {
-    message: "Provide sample details and/or quantity",
-  });
+  .refine(
+    (d) =>
+      (d.sampleDetails?.trim()?.length ?? 0) > 0 ||
+      (d.sampleQuantity?.trim()?.length ?? 0) > 0 ||
+      (d.sampleWeight?.trim()?.length ?? 0) > 0,
+    { message: "Provide sample details and/or quantity and/or weight" }
+  );
 
 /** Division head / Super Admin / n8n integration — sample workflow */
 export const orderSampleActionSchema = z.union([
   setSampleDetailsBody,
   z.object({ action: z.literal("approve") }),
-  z.object({
-    action: z.literal("ship"),
-    courierName: z.string().min(1).max(255),
-    trackingId: z.string().min(1).max(500),
-  }),
+  z
+    .object({
+      action: z.literal("ship"),
+      sentByCourier: z.boolean().optional(),
+      courierName: z.string().max(255).optional(),
+      trackingId: z.string().max(500).optional(),
+      sampleProofUrl: z.string().max(2000).optional(),
+    })
+    .refine(
+      (d) => {
+        const byCourier = d.sentByCourier !== false;
+        if (!byCourier) return true;
+        return Boolean(d.courierName?.trim()) && Boolean(d.trackingId?.trim());
+      },
+      { message: "Courier name and tracking ID are required when sent by courier" }
+    ),
   z.object({
     action: z.literal("salesFeedback"),
     salesFeedback: z.string().min(1).max(20000),

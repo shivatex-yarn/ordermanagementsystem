@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { withAuth } from "@/lib/with-auth";
 import { createOrderCommentSchema } from "@/lib/validation";
+import { cacheDel, cacheKeyOrder, cacheKeyOrdersList } from "@/lib/redis";
 
 export async function GET(
   _req: Request,
@@ -27,12 +28,22 @@ export async function GET(
   if (auth.payload.role === "USER" && order.createdById !== Number(auth.payload.sub)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
-  if (["MANAGER", "SUPERVISOR"].includes(auth.payload.role) && auth.payload.divisionId) {
-    const canView =
-      order.currentDivisionId === auth.payload.divisionId ||
-      order.previousDivisionId === auth.payload.divisionId;
-    if (!canView && auth.payload.role !== "SUPER_ADMIN") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (["MANAGER", "SUPERVISOR"].includes(auth.payload.role)) {
+    const userId = Number(auth.payload.sub);
+    if (order.createdById !== userId) {
+      const managed = await prisma.divisionManager.findMany({
+        where: { userId },
+        select: { divisionId: true },
+      });
+      const accessibleDivisionIds = Array.from(
+        new Set([auth.payload.divisionId ?? null, ...managed.map((m) => m.divisionId)].filter((v): v is number => typeof v === "number"))
+      );
+      const canView =
+        accessibleDivisionIds.includes(order.currentDivisionId) ||
+        (order.previousDivisionId != null && accessibleDivisionIds.includes(order.previousDivisionId));
+      if (!canView && auth.payload.role !== "SUPER_ADMIN") {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
     }
   }
 
@@ -74,12 +85,18 @@ export async function POST(
   if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
 
   const userId = Number(auth.payload.sub);
+  const managed = ["MANAGER", "SUPERVISOR"].includes(auth.payload.role)
+    ? await prisma.divisionManager.findMany({ where: { userId }, select: { divisionId: true } })
+    : [];
+  const accessibleDivisionIds = Array.from(
+    new Set([auth.payload.divisionId ?? null, ...managed.map((m) => m.divisionId)].filter((v): v is number => typeof v === "number"))
+  );
   const canComment =
     auth.payload.role === "SUPER_ADMIN" ||
     order.createdById === userId ||
     (["MANAGER", "SUPERVISOR"].includes(auth.payload.role) &&
-      (order.currentDivisionId === auth.payload.divisionId ||
-        order.previousDivisionId === auth.payload.divisionId));
+      (accessibleDivisionIds.includes(order.currentDivisionId) ||
+        (order.previousDivisionId != null && accessibleDivisionIds.includes(order.previousDivisionId))));
   if (!canComment) {
     return NextResponse.json(
       { error: "Only Division Heads, creator, or Super Admin can add comments" },
@@ -91,5 +108,11 @@ export async function POST(
     data: { orderId, userId, body: parsed.data.body },
     include: { user: { select: { id: true, name: true, email: true } } },
   });
+
+  // Ensure creator (sales/user) and others immediately see the new comment,
+  // since /api/orders/[id] is cached and includes comments.
+  await cacheDel(cacheKeyOrder(orderId));
+  await cacheDel(cacheKeyOrdersList("*"));
+
   return NextResponse.json(comment, { status: 201 });
 }
