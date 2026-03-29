@@ -9,8 +9,10 @@ export function getRedis(): Redis | null {
   if (!redis) {
     try {
       redis = new Redis(getRedisUrl(), {
-        maxRetriesPerRequest: 3,
+        maxRetriesPerRequest: 2,
         lazyConnect: true,
+        connectTimeout: 3_000,
+        commandTimeout: 2_000,
       });
     } catch {
       return null;

@@ -9,21 +9,6 @@ import { cacheGet, cacheSet, cacheKeyOrdersList } from "@/lib/redis";
 import { getCreatedAtRange, normalizePeriodParam, parseCreatedAtRangeFromParams } from "@/lib/date-period";
 import { userMayRouteEnquiryToDivision } from "@/lib/division-access";
 
-function safeDbHint() {
-  try {
-    const url = process.env.DATABASE_URL ? new URL(process.env.DATABASE_URL) : null;
-    if (!url) return { hasDbUrl: false };
-    return {
-      hasDbUrl: true,
-      host: url.host,
-      db: url.pathname?.replace(/^\//, "") || undefined,
-      schema: url.searchParams.get("schema") || undefined,
-    };
-  } catch {
-    return { hasDbUrl: Boolean(process.env.DATABASE_URL) };
-  }
-}
-
 const orderInclude = {
   createdBy: { select: { id: true, name: true, email: true } },
   currentDivision: { select: { id: true, name: true } },
@@ -40,22 +25,6 @@ export async function GET(req: Request) {
   const { ok } = rateLimit(getRateLimitIdentifier(req));
   if (!ok) return NextResponse.json({ error: "Too many requests" }, { status: 429 });
 
-  // #region agent log
-  fetch("http://127.0.0.1:7328/ingest/3b6d6cf8-0b13-4001-8f24-c47cea3cb28e", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9f4942" },
-    body: JSON.stringify({
-      sessionId: "9f4942",
-      runId: "post-fix",
-      hypothesisId: "H_env_db_mismatch",
-      location: "apps/web/src/app/api/orders/route.ts:GET",
-      message: "orders list request",
-      data: { role: auth.payload.role, db: safeDbHint() },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
-
   const { searchParams } = new URL(req.url);
   const page = Number(searchParams.get("page")) || 1;
   const limit = Number(searchParams.get("limit")) || 20;
@@ -68,6 +37,7 @@ export async function GET(req: Request) {
   const wantStats = searchParams.get("stats") === "1";
   const cacheKey = cacheKeyOrdersList(
     JSON.stringify({
+      userId: auth.payload.sub,
       page,
       limit,
       status,
@@ -140,26 +110,6 @@ export async function GET(req: Request) {
     }
   } catch (err) {
     console.error("[GET /api/orders]", err);
-    // #region agent log
-    fetch("http://127.0.0.1:7328/ingest/3b6d6cf8-0b13-4001-8f24-c47cea3cb28e", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9f4942" },
-      body: JSON.stringify({
-        sessionId: "9f4942",
-        runId: "post-fix",
-        hypothesisId: "H_db_schema_drift",
-        location: "apps/web/src/app/api/orders/route.ts:catch",
-        message: "orders list failed",
-        data: {
-          prismaCode:
-            err instanceof Prisma.PrismaClientKnownRequestError ? err.code : undefined,
-          errMsg: err instanceof Error ? err.message : String(err),
-          db: safeDbHint(),
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2022") {
       return NextResponse.json(
         {
