@@ -1,35 +1,74 @@
+import { createHash } from "crypto";
+import type { Redis } from "ioredis";
+import { getRedis } from "@/lib/redis";
+
 /**
- * In-memory rate limiter for API routes.
- * For production at scale, use Redis-based limiter (e.g. @upstash/ratelimit).
+ * Distributed rate limiting when REDIS_URL is set; otherwise in-memory (single instance only).
  */
 
-const store = new Map<string, { count: number; resetAt: number }>();
-const WINDOW_MS = 60 * 1000; // 1 minute
-const MAX_REQUESTS = 100; // per minute per identifier
+const WINDOW_SEC = 60;
+const MAX_REQUESTS_DEFAULT = 200;
 
-function cleanup(): void {
+const memoryStore = new Map<string, { count: number; resetAt: number }>();
+
+function cleanupMemory(): void {
   const now = Date.now();
-  for (const [key, v] of store.entries()) {
-    if (v.resetAt < now) store.delete(key);
+  for (const [key, v] of memoryStore.entries()) {
+    if (v.resetAt < now) memoryStore.delete(key);
   }
 }
 
-export function rateLimit(identifier: string): { ok: boolean; remaining: number } {
-  cleanup();
+function rateLimitMemory(identifier: string, maxRequests: number): { ok: boolean; remaining: number } {
+  cleanupMemory();
   const now = Date.now();
-  const entry = store.get(identifier);
+  const windowMs = WINDOW_SEC * 1000;
+  const entry = memoryStore.get(identifier);
   if (!entry) {
-    store.set(identifier, { count: 1, resetAt: now + WINDOW_MS });
-    return { ok: true, remaining: MAX_REQUESTS - 1 };
+    memoryStore.set(identifier, { count: 1, resetAt: now + windowMs });
+    return { ok: true, remaining: maxRequests - 1 };
   }
   if (entry.resetAt < now) {
     entry.count = 1;
-    entry.resetAt = now + WINDOW_MS;
-    return { ok: true, remaining: MAX_REQUESTS - 1 };
+    entry.resetAt = now + windowMs;
+    return { ok: true, remaining: maxRequests - 1 };
   }
   entry.count += 1;
-  const remaining = Math.max(0, MAX_REQUESTS - entry.count);
-  return { ok: entry.count <= MAX_REQUESTS, remaining };
+  const remaining = Math.max(0, maxRequests - entry.count);
+  return { ok: entry.count <= maxRequests, remaining };
+}
+
+function redisRateLimitKey(identifier: string): string {
+  const hash = createHash("sha256").update(identifier).digest("hex");
+  return `oms:ratelimit:${hash}`;
+}
+
+async function rateLimitRedis(
+  client: Redis,
+  identifier: string,
+  maxRequests: number
+): Promise<{ ok: boolean; remaining: number }> {
+  const key = redisRateLimitKey(identifier);
+  const count = await client.incr(key);
+  if (count === 1) {
+    await client.expire(key, WINDOW_SEC);
+  }
+  const remaining = Math.max(0, maxRequests - count);
+  return { ok: count <= maxRequests, remaining };
+}
+
+export async function rateLimit(
+  identifier: string,
+  maxRequests: number = MAX_REQUESTS_DEFAULT
+): Promise<{ ok: boolean; remaining: number }> {
+  const redis = getRedis();
+  if (redis) {
+    try {
+      return await rateLimitRedis(redis, identifier, maxRequests);
+    } catch {
+      return rateLimitMemory(identifier, maxRequests);
+    }
+  }
+  return rateLimitMemory(identifier, maxRequests);
 }
 
 export function getRateLimitIdentifier(req: Request): string {
@@ -41,4 +80,10 @@ export function getRateLimitIdentifier(req: Request): string {
     return `auth:${token}`;
   }
   return `ip:${ip}`;
+}
+
+/** Prefer after auth so limits are per-user, not shared by NAT IP. */
+export function getRateLimitIdentifierForUser(req: Request, userId: number): string {
+  const base = getRateLimitIdentifier(req);
+  return `user:${userId}:${base}`;
 }

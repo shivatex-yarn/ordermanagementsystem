@@ -40,6 +40,7 @@ const STATUS_COLORS: Record<string, string> = {
   TRANSFERRED: "#f59e0b",
   REJECTED: "#ef4444",
   COMPLETED: "#22c55e",
+  CANCELLED: "#78716c",
 };
 
 const statusVariant: Record<string, "default" | "secondary" | "destructive" | "success" | "warning"> = {
@@ -48,6 +49,7 @@ const statusVariant: Record<string, "default" | "secondary" | "destructive" | "s
   TRANSFERRED: "warning",
   REJECTED: "destructive",
   COMPLETED: "success",
+  CANCELLED: "secondary",
 };
 
 function buildOrdersQuery(period: EnquiryPeriodFilter, dateFrom: string, dateTo: string): string {
@@ -91,6 +93,7 @@ export default function DashboardPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["dashboard", period, page, dateFrom, dateTo],
     queryFn: () => fetchDashboard(period, page, dateFrom, dateTo),
+    staleTime: 45_000,
   });
 
   const hideDivision = user?.role === "MANAGER";

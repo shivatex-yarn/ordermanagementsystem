@@ -39,6 +39,7 @@ export async function GET() {
       { status: "TRANSFERRED", count: ordersByStatusMap["TRANSFERRED"] ?? 0 },
       { status: "REJECTED", count: ordersByStatusMap["REJECTED"] ?? 0 },
       { status: "COMPLETED", count: ordersByStatusMap["COMPLETED"] ?? 0 },
+      { status: "CANCELLED", count: ordersByStatusMap["CANCELLED"] ?? 0 },
     ],
     totalOrders,
     totalDivisions,

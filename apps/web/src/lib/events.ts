@@ -9,6 +9,7 @@ export type OrderEventType =
   | "OrderTransferred"
   | "OrderRejected"
   | "OrderCompleted"
+  | "OrderCancelled"
   | "OrderReceived"
   | "SLABreachDetected"
   | "SampleDetailsUpdated"
@@ -56,6 +57,13 @@ export interface OrderCompletedEvent extends BaseOrderEvent {
   durationMs?: number;
 }
 
+export interface OrderCancelledEvent extends BaseOrderEvent {
+  type: "OrderCancelled";
+  divisionId: number;
+  cancelledById: number;
+  reason: string;
+}
+
 export interface OrderReceivedEvent extends BaseOrderEvent {
   type: "OrderReceived";
   receivedById: number;
@@ -97,6 +105,7 @@ export type OrderEvent =
   | OrderTransferredEvent
   | OrderRejectedEvent
   | OrderCompletedEvent
+  | OrderCancelledEvent
   | OrderReceivedEvent
   | SLABreachEvent
   | SampleDetailsUpdatedEvent

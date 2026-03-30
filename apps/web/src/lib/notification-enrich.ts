@@ -24,6 +24,8 @@ export function getNotificationActorId(type: string, metadata: unknown): number 
       return n(m.transferredById) ?? n(m.userId);
     case "OrderRejected":
       return n(m.rejectedById) ?? n(m.userId);
+    case "OrderCancelled":
+      return n(m.cancelledById) ?? n(m.userId);
     case "OrderReceived":
       return n(m.receivedById) ?? n(m.userId);
     case "OrderCompleted":

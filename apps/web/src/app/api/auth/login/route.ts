@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
@@ -5,6 +6,8 @@ import { signToken } from "@/lib/auth";
 import { loginSchema } from "@/lib/validation";
 import { getRateLimitIdentifier, rateLimit } from "@/lib/rate-limit";
 import { Role } from "@prisma/client";
+
+const LOGIN_MAX_PER_MINUTE = 30;
 
 const COOKIE_NAME = "oms_token";
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
@@ -17,11 +20,11 @@ const MOCK_PASSWORD = "shivatex@12345";
 const OFFLINE_MOCK_SUB = "0";
 
 export async function POST(req: Request) {
-  const { ok, remaining } = rateLimit(getRateLimitIdentifier(req));
+  const { ok, remaining } = await rateLimit(getRateLimitIdentifier(req), LOGIN_MAX_PER_MINUTE);
   if (!ok) {
     return NextResponse.json(
       { error: "Too many requests" },
-      { status: 429, headers: { "X-RateLimit-Remaining": "0" } }
+      { status: 429, headers: { "X-RateLimit-Remaining": String(remaining) } }
     );
   }
   const body = await req.json();
@@ -98,11 +101,33 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
   }
 
+  const sessionId = randomUUID();
+  const forwarded = req.headers.get("x-forwarded-for");
+  const ip =
+    forwarded?.split(",")[0]?.trim() ||
+    req.headers.get("x-real-ip")?.trim() ||
+    null;
+  const userAgent = req.headers.get("user-agent") ?? null;
+
+  try {
+    await prisma.userLoginSession.create({
+      data: {
+        userId: user.id,
+        sessionId,
+        ipAddress: ip,
+        userAgent,
+      },
+    });
+  } catch (err) {
+    console.error("[login] UserLoginSession create failed:", err);
+  }
+
   const token = await signToken({
     sub: String(user.id),
     email: user.email,
     role: user.role,
     divisionId: user.divisionId ?? undefined,
+    sid: sessionId,
   });
   const response = NextResponse.json(
     {

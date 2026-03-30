@@ -26,6 +26,7 @@ const statusVariant: Record<string, "default" | "secondary" | "destructive" | "s
   TRANSFERRED: "warning",
   REJECTED: "destructive",
   COMPLETED: "success",
+  CANCELLED: "secondary",
 };
 
 async function fetchOrders(page: number, period: EnquiryPeriodFilter) {
@@ -44,6 +45,7 @@ export default function OrdersPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["orders", page, period],
     queryFn: () => fetchOrders(page, period),
+    staleTime: 45_000,
   });
 
   const canCreate = user && ["USER", "SUPERVISOR", "SUPER_ADMIN"].includes(user.role);

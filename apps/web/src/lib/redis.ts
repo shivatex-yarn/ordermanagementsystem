@@ -55,6 +55,22 @@ export async function cacheDel(key: string): Promise<void> {
   }
 }
 
+/** Invalidate all order-list cache entries (keys differ by filters; do not use a single literal "*"). */
+export async function cacheInvalidateOrdersLists(): Promise<void> {
+  const client = getRedis();
+  if (!client) return;
+  try {
+    let cursor = "0";
+    do {
+      const [next, keys] = await client.scan(cursor, "MATCH", "oms:orders:list:*", "COUNT", 200);
+      cursor = next;
+      if (keys.length) await client.del(...keys);
+    } while (cursor !== "0");
+  } catch {
+    // ignore
+  }
+}
+
 export function cacheKeyOrdersList(filters: string): string {
   return `oms:orders:list:${filters}`;
 }

@@ -29,6 +29,9 @@ async function notificationHandler(event: OrderEvent): Promise<void> {
   });
   if (!order) return;
   const userIds = new Set<number>([order.createdById]);
+  if (event.type === "OrderCancelled") {
+    userIds.delete(order.createdById);
+  }
   const managers = await prisma.divisionManager.findMany({
     where: { divisionId: order.currentDivisionId },
     select: { userId: true },
@@ -74,6 +77,10 @@ export function eventTypeToSummary(type: string, event: OrderEvent): string {
       return `Enquiry ${event.orderNumber} was transferred to another division.`;
     case "OrderRejected":
       return `Enquiry ${event.orderNumber} was rejected.`;
+    case "OrderCancelled": {
+      const e = event as Extract<OrderEvent, { type: "OrderCancelled" }>;
+      return `Enquiry ${e.orderNumber} was cancelled by the submitter. Reason: ${e.reason}`;
+    }
     case "OrderReceived":
       return `Enquiry ${event.orderNumber} was received by the new division.`;
     case "OrderCompleted":

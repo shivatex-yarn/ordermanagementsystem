@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { withAuth } from "@/lib/with-auth";
 import { createOrderCommentSchema } from "@/lib/validation";
-import { cacheDel, cacheKeyOrder, cacheKeyOrdersList } from "@/lib/redis";
+import { cacheDel, cacheInvalidateOrdersLists, cacheKeyOrder } from "@/lib/redis";
 
 export async function GET(
   _req: Request,
@@ -80,9 +80,13 @@ export async function POST(
       createdById: true,
       currentDivisionId: true,
       previousDivisionId: true,
+      status: true,
     },
   });
   if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
+  if (order.status === "CANCELLED") {
+    return NextResponse.json({ error: "Comments are closed for cancelled enquiries." }, { status: 400 });
+  }
 
   const userId = Number(auth.payload.sub);
   const managed = ["MANAGER", "SUPERVISOR"].includes(auth.payload.role)
@@ -112,7 +116,7 @@ export async function POST(
   // Ensure creator (sales/user) and others immediately see the new comment,
   // since /api/orders/[id] is cached and includes comments.
   await cacheDel(cacheKeyOrder(orderId));
-  await cacheDel(cacheKeyOrdersList("*"));
+  await cacheInvalidateOrdersLists();
 
   return NextResponse.json(comment, { status: 201 });
 }

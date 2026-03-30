@@ -4,25 +4,10 @@ import { withAuth } from "@/lib/with-auth";
 import { Prisma, type OrderStatus } from "@prisma/client";
 import { createOrderSchema } from "@/lib/validation";
 import { createOrder } from "@/lib/order-engine";
-import { getRateLimitIdentifier, rateLimit } from "@/lib/rate-limit";
+import { getRateLimitIdentifierForUser, rateLimit } from "@/lib/rate-limit";
 import { cacheGet, cacheSet, cacheKeyOrdersList } from "@/lib/redis";
 import { getCreatedAtRange, normalizePeriodParam, parseCreatedAtRangeFromParams } from "@/lib/date-period";
 import { userMayRouteEnquiryToDivision } from "@/lib/division-access";
-
-function safeDbHint() {
-  try {
-    const url = process.env.DATABASE_URL ? new URL(process.env.DATABASE_URL) : null;
-    if (!url) return { hasDbUrl: false };
-    return {
-      hasDbUrl: true,
-      host: url.host,
-      db: url.pathname?.replace(/^\//, "") || undefined,
-      schema: url.searchParams.get("schema") || undefined,
-    };
-  } catch {
-    return { hasDbUrl: Boolean(process.env.DATABASE_URL) };
-  }
-}
 
 const orderInclude = {
   createdBy: { select: { id: true, name: true, email: true } },
@@ -37,24 +22,15 @@ const orderInclude = {
 export async function GET(req: Request) {
   const auth = await withAuth();
   if (auth.response) return auth.response;
-  const { ok } = rateLimit(getRateLimitIdentifier(req));
-  if (!ok) return NextResponse.json({ error: "Too many requests" }, { status: 429 });
-
-  // #region agent log
-  fetch("http://127.0.0.1:7328/ingest/3b6d6cf8-0b13-4001-8f24-c47cea3cb28e", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9f4942" },
-    body: JSON.stringify({
-      sessionId: "9f4942",
-      runId: "post-fix",
-      hypothesisId: "H_env_db_mismatch",
-      location: "apps/web/src/app/api/orders/route.ts:GET",
-      message: "orders list request",
-      data: { role: auth.payload.role, db: safeDbHint() },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
+  const { ok, remaining } = await rateLimit(
+    getRateLimitIdentifierForUser(req, Number(auth.payload.sub))
+  );
+  if (!ok) {
+    return NextResponse.json(
+      { error: "Too many requests" },
+      { status: 429, headers: { "X-RateLimit-Remaining": String(remaining) } }
+    );
+  }
 
   const { searchParams } = new URL(req.url);
   const page = Number(searchParams.get("page")) || 1;
@@ -140,26 +116,6 @@ export async function GET(req: Request) {
     }
   } catch (err) {
     console.error("[GET /api/orders]", err);
-    // #region agent log
-    fetch("http://127.0.0.1:7328/ingest/3b6d6cf8-0b13-4001-8f24-c47cea3cb28e", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9f4942" },
-      body: JSON.stringify({
-        sessionId: "9f4942",
-        runId: "post-fix",
-        hypothesisId: "H_db_schema_drift",
-        location: "apps/web/src/app/api/orders/route.ts:catch",
-        message: "orders list failed",
-        data: {
-          prismaCode:
-            err instanceof Prisma.PrismaClientKnownRequestError ? err.code : undefined,
-          errMsg: err instanceof Error ? err.message : String(err),
-          db: safeDbHint(),
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2022") {
       return NextResponse.json(
         {
@@ -185,15 +141,22 @@ export async function GET(req: Request) {
   }
 
   const result = { orders, total, page, limit, ...(statusCounts != null ? { statusCounts } : {}) };
-  await cacheSet(cacheKey, result, 60);
+  await cacheSet(cacheKey, result, 90);
   return NextResponse.json(result);
 }
 
 export async function POST(req: Request) {
   const auth = await withAuth();
   if (auth.response) return auth.response;
-  const { ok } = rateLimit(getRateLimitIdentifier(req));
-  if (!ok) return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  const { ok, remaining } = await rateLimit(
+    getRateLimitIdentifierForUser(req, Number(auth.payload.sub))
+  );
+  if (!ok) {
+    return NextResponse.json(
+      { error: "Too many requests" },
+      { status: 429, headers: { "X-RateLimit-Remaining": String(remaining) } }
+    );
+  }
 
   const body = await req.json();
   const parsed = createOrderSchema.safeParse(body);

@@ -19,6 +19,7 @@ import {
   MessageSquareQuote,
   Bell,
   Check,
+  Ban,
   type LucideIcon,
 } from "lucide-react";
 
@@ -38,6 +39,7 @@ const TYPE_ICONS: Record<string, LucideIcon> = {
   OrderAccepted: CheckCircle2,
   OrderTransferred: ArrowLeftRight,
   OrderRejected: XCircle,
+  OrderCancelled: Ban,
   OrderReceived: Inbox,
   OrderCompleted: CircleCheck,
   SLABreachDetected: AlertTriangle,

@@ -11,6 +11,7 @@ import { useAuth } from "@/hooks/use-auth";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -18,8 +19,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useState } from "react";
-import { formatEnquiryNumber } from "@/lib/enquiry-display";
+import { useState, useMemo, useEffect } from "react";
+import { formatEnquiryNumber, formatEnquiryNumberShort } from "@/lib/enquiry-display";
 
 const statusVariant: Record<string, "default" | "secondary" | "destructive" | "success" | "warning"> = {
   PLACED: "secondary",
@@ -27,7 +28,24 @@ const statusVariant: Record<string, "default" | "secondary" | "destructive" | "s
   TRANSFERRED: "warning",
   REJECTED: "destructive",
   COMPLETED: "success",
+  CANCELLED: "secondary",
 };
+
+/** Visual emphasis for placed date: SLA-aware when deadline exists, otherwise a stable accent. */
+function placedDateClass(order: { status: string; slaDeadline?: string | null; createdAt: string }): string {
+  const terminal = order.status === "COMPLETED" || order.status === "REJECTED" || order.status === "CANCELLED";
+  if (terminal) return "text-slate-600";
+
+  if (order.slaDeadline) {
+    const deadline = new Date(order.slaDeadline).getTime();
+    const now = Date.now();
+    if (now > deadline) return "font-medium text-red-600";
+    const hoursLeft = (deadline - now) / (1000 * 60 * 60);
+    if (hoursLeft < 24) return "font-medium text-amber-700";
+    return "font-medium text-emerald-700";
+  }
+  return "font-medium text-indigo-700";
+}
 
 async function fetchOrder(id: number): Promise<any> { // eslint-disable-line @typescript-eslint/no-explicit-any -- wide API payload
   const res = await fetch(`/api/orders/${id}`, { credentials: "include" });
@@ -70,6 +88,8 @@ function auditPayloadSummary(action: string, payload: unknown): string {
       return p.reason ? `Reason: ${String(p.reason)}` : "";
     case "OrderRejected":
       return p.reason ? `Reason: ${String(p.reason)}` : "";
+    case "OrderCancelled":
+      return p.reason ? `Reason: ${String(p.reason)}` : "";
     case "OrderCompleted":
       return p.durationMs != null ? `Elapsed: ${Math.round(Number(p.durationMs) / 1000)}s` : "";
     default:
@@ -83,6 +103,7 @@ function auditActionLabel(action: string): string {
     OrderAccepted: "Accepted by division",
     OrderTransferred: "Transferred",
     OrderRejected: "Rejected",
+    OrderCancelled: "Cancelled by submitter",
     OrderReceived: "Received in new division",
     OrderCompleted: "Completed",
     SampleDetailsUpdated: "Sample details updated",
@@ -140,6 +161,15 @@ function auditTimelineStyles(action: string): {
         time: "font-mono text-xs font-medium text-rose-900/70 tabular-nums",
         user: "mt-2 text-rose-950/85",
         extra: "mt-2 border-t border-rose-100/80 pt-2 text-rose-900/80",
+      };
+    case "OrderCancelled":
+      return {
+        card: `${base} border-stone-200/80 bg-gradient-to-br from-stone-50/90 via-white to-neutral-50/30 ring-1 ring-stone-400/12`,
+        label:
+          "inline-flex items-center rounded-full bg-stone-700 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-white shadow-sm shadow-stone-900/15",
+        time: "font-mono text-xs font-medium text-stone-700 tabular-nums",
+        user: "mt-2 text-stone-800",
+        extra: "mt-2 border-t border-stone-100/80 pt-2 text-stone-800",
       };
     case "OrderReceived":
       return {
@@ -252,23 +282,31 @@ function EnquiryPipelineStrip({
     });
   }
   steps.push({
-    label: "Completed or rejected",
-    done: order.status === "COMPLETED" || order.status === "REJECTED",
+    label: "Completed",
+    done: order.status === "COMPLETED",
   });
+  steps.push({
+    label: "Rejected",
+    done: order.status === "REJECTED",
+  });
+  if (order.status === "CANCELLED") {
+    steps.push({ label: "Cancelled by submitter", done: true });
+  }
   return (
     <div className="flex flex-wrap gap-2">
-      {steps.map((s) => (
-        <span
-          key={s.label}
-          className={`rounded-full px-3 py-1 text-xs font-medium border ${
-            s.done
+      {steps.map((s) => {
+        const doneClass =
+          s.label === "Rejected" && s.done
+            ? "bg-rose-50 text-rose-900 border-rose-200"
+            : s.done
               ? "bg-emerald-50 text-emerald-900 border-emerald-200"
-              : "bg-slate-50 text-slate-500 border-slate-100"
-          }`}
-        >
-          {s.label}
-        </span>
-      ))}
+              : "bg-slate-50 text-slate-500 border-slate-100";
+        return (
+          <span key={s.label} className={`rounded-full px-3 py-1 text-xs font-medium border ${doneClass}`}>
+            {s.label}
+          </span>
+        );
+      })}
     </div>
   );
 }
@@ -295,9 +333,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [transferReason, setTransferReason] = useState("");
   const [toDivisionId, setToDivisionId] = useState("");
   const [rejectReason, setRejectReason] = useState("");
-  const [editOpen, setEditOpen] = useState(false);
-  const [editCompanyName, setEditCompanyName] = useState("");
-  const [editDescription, setEditDescription] = useState("");
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelError, setCancelError] = useState("");
   const [commentBody, setCommentBody] = useState("");
   const [commentError, setCommentError] = useState("");
   const [actionError, setActionError] = useState("");
@@ -310,6 +348,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [sampleProofFile, setSampleProofFile] = useState<File | null>(null);
   const [salesFeedback, setSalesFeedback] = useState("");
   const [sampleError, setSampleError] = useState("");
+  const [approveSampleOpen, setApproveSampleOpen] = useState(false);
 
   const {
     data: order,
@@ -322,17 +361,24 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     queryFn: () => fetchOrder(orderId),
     enabled: Number.isInteger(orderId),
     retry: 1,
+    staleTime: 30_000,
   });
 
-  const { data: auditData, isLoading: auditLoading } = useQuery({
+  const { data: auditData, isLoading: auditLoading, isError: auditQueryError } = useQuery({
     queryKey: ["order-audit", orderId],
     queryFn: async () => {
       const res = await fetch(`/api/audit?orderId=${orderId}&limit=200`, { credentials: "include" });
       if (!res.ok) throw new Error("Could not load activity log");
       return res.json() as Promise<{ logs: AuditLogRow[] }>;
     },
-    enabled: isAuditView && Number.isInteger(orderId),
+    enabled: Number.isInteger(orderId),
+    staleTime: 60_000,
   });
+
+  const auditLogsAsc = useMemo(
+    () => (auditData?.logs ? [...auditData.logs].reverse() : []),
+    [auditData]
+  );
 
   const { data: divisionsData } = useQuery({
     queryKey: ["divisions"],
@@ -341,6 +387,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       if (!res.ok) throw new Error("Failed to fetch divisions");
       return res.json();
     },
+    enabled: Boolean(user && ["MANAGER", "SUPER_ADMIN"].includes(user.role) && showInteractiveUi),
+    staleTime: 5 * 60_000,
   });
   const divisions = divisionsData?.divisions ?? [];
 
@@ -358,6 +406,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         setAcceptReason("");
         setActionError("");
         queryClient.invalidateQueries({ queryKey: ["order", orderId] });
+        queryClient.invalidateQueries({ queryKey: ["order-audit", orderId] });
         queryClient.invalidateQueries({ queryKey: ["orders"] });
         queryClient.invalidateQueries({ queryKey: ["dashboard"] });
         return;
@@ -380,6 +429,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         setTransferReason("");
         setToDivisionId("");
         queryClient.invalidateQueries({ queryKey: ["order", orderId] });
+        queryClient.invalidateQueries({ queryKey: ["order-audit", orderId] });
         queryClient.invalidateQueries({ queryKey: ["orders"] });
         queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       }
@@ -398,6 +448,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         setRejectOpen(false);
         setRejectReason("");
         queryClient.invalidateQueries({ queryKey: ["order", orderId] });
+        queryClient.invalidateQueries({ queryKey: ["order-audit", orderId] });
         queryClient.invalidateQueries({ queryKey: ["orders"] });
         queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       }
@@ -407,6 +458,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     mutationFn: () => fetch(`/api/orders/${orderId}/receive`, { method: "POST", credentials: "include" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["order", orderId] });
+      queryClient.invalidateQueries({ queryKey: ["order-audit", orderId] });
       queryClient.invalidateQueries({ queryKey: ["orders"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     },
@@ -415,27 +467,38 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     mutationFn: () => fetch(`/api/orders/${orderId}/complete`, { method: "POST", credentials: "include" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["order", orderId] });
+      queryClient.invalidateQueries({ queryKey: ["order-audit", orderId] });
       queryClient.invalidateQueries({ queryKey: ["orders"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     },
   });
 
-  const updateMutation = useMutation({
-    mutationFn: (payload: { companyName?: string; description?: string; customFields?: Record<string, string> }) =>
-      fetch(`/api/orders/${orderId}`, {
-        method: "PATCH",
+  const cancelMutation = useMutation({
+    mutationFn: async (reason: string) => {
+      const res = await fetch(`/api/orders/${orderId}/cancel`, {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify(payload),
-      }),
-    onSuccess: (res) => {
-      if (res.ok) {
-        setEditOpen(false);
-        queryClient.invalidateQueries({ queryKey: ["order", orderId] });
-        queryClient.invalidateQueries({ queryKey: ["orders"] });
-        queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+        body: JSON.stringify({ reason }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(typeof (data as { error?: string }).error === "string" ? (data as { error: string }).error : "Could not cancel enquiry");
       }
+      return data;
     },
+    onSuccess: () => {
+      setCancelOpen(false);
+      setCancelReason("");
+      setCancelError("");
+      queryClient.invalidateQueries({ queryKey: ["order", orderId] });
+      queryClient.invalidateQueries({ queryKey: ["order-audit", orderId] });
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["notifications-unread-count"] });
+    },
+    onError: (err: Error) => setCancelError(err.message),
   });
 
   const commentMutation = useMutation({
@@ -451,6 +514,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         setCommentBody("");
         setCommentError("");
         queryClient.invalidateQueries({ queryKey: ["order", orderId] });
+        queryClient.invalidateQueries({ queryKey: ["order-audit", orderId] });
       }
     },
     onError: (err: Error) => setCommentError(err.message),
@@ -458,15 +522,18 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
   const isManager = user && ["MANAGER", "SUPER_ADMIN"].includes(user.role);
   const canAct = order && isManager && ["PLACED", "TRANSFERRED", "IN_PROGRESS"].includes(order.status);
+  /** Division-side reject — not shown to the person who raised the enquiry (they use Cancel enquiry instead). */
+  const canRejectEnquiry =
+    canAct && order && user && Number(user.id) !== order.createdById;
   const mightManageSample =
     user &&
     order &&
     ["MANAGER", "SUPER_ADMIN", "MANAGING_DIRECTOR"].includes(user.role) &&
-    !["REJECTED", "COMPLETED"].includes(order.status);
+    !["REJECTED", "COMPLETED", "CANCELLED"].includes(order.status);
   const mightSubmitFeedback =
     user &&
     order &&
-    !["REJECTED"].includes(order.status) &&
+    !["REJECTED", "COMPLETED", "CANCELLED"].includes(order.status) &&
     (order.createdById === user.id ||
       ["SUPER_ADMIN", "MANAGING_DIRECTOR"].includes(user.role));
 
@@ -482,29 +549,51 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       if (!res.ok) throw new Error((data as { error?: string }).error || "Sample action failed");
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       setSampleError("");
-      setSampleDetails("");
-      setSampleQuantity("");
-      setSampleWeight("");
-      setSentByCourier(true);
-      setCourierName("");
-      setTrackingId("");
-      setSampleProofFile(null);
-      setSalesFeedback("");
+      const action = (variables as { action?: string }).action;
+      if (action === "ship") {
+        setSentByCourier(true);
+        setCourierName("");
+        setTrackingId("");
+        setSampleProofFile(null);
+      } else if (action === "salesFeedback") {
+        setSalesFeedback("");
+      } else if (action === "approve") {
+        setApproveSampleOpen(false);
+      }
       queryClient.invalidateQueries({ queryKey: ["order", orderId] });
+      queryClient.invalidateQueries({ queryKey: ["order-audit", orderId] });
       queryClient.invalidateQueries({ queryKey: ["orders"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     },
     onError: (err: Error) => setSampleError(err.message),
   });
-  const canEdit =
+
+  useEffect(() => {
+    if (!order?.sampleRequested) return;
+    setSampleDetails(order.sampleDetails ?? "");
+    setSampleQuantity(order.sampleQuantity ?? "");
+    setSampleWeight(order.sampleWeight ?? "");
+  }, [order?.id, order?.sampleDetails, order?.sampleQuantity, order?.sampleWeight, order?.sampleRequested]);
+
+  const isEnquirySubmitter = Boolean(order && user && Number(user.id) === order.createdById);
+  const canCancel =
     showInteractiveUi &&
     order &&
     order.status === "PLACED" &&
     user &&
-    (Number(user.id) === order.createdById || user.role === "SUPER_ADMIN");
-  const canComment = order && user && (isManager || Number(user.id) === order.createdById);
+    Number(user.id) === order.createdById;
+  const canComment =
+    order &&
+    user &&
+    order.status !== "CANCELLED" &&
+    (isManager || Number(user.id) === order.createdById);
+
+  const hasSampleDetailsSaved =
+    Boolean(order?.sampleDetails?.trim()) ||
+    Boolean(order?.sampleQuantity?.trim()) ||
+    Boolean(order?.sampleWeight?.trim());
 
   const backHref = isAuditView ? "/md#audit" : "/orders";
   const backLabel = isAuditView ? "← Activity log" : "← Enquiries";
@@ -540,24 +629,61 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     );
   }
 
-  const auditLogsChrono = auditData?.logs ? [...auditData.logs].reverse() : [];
-
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" asChild><Link href={backHref}>{backLabel}</Link></Button>
-          <h1 className="text-2xl font-bold">{formatEnquiryNumber(order.orderNumber)}</h1>
-          <Badge variant={statusVariant[order.status]}>{order.status.replace("_", " ")}</Badge>
-        </div>
-      </div>
+      <header className="space-y-2">
+        <Link
+          href={backHref}
+          className="inline-block text-sm text-slate-500 hover:text-slate-800 transition-colors"
+        >
+          {backLabel}
+        </Link>
+        <h1
+          className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-2xl font-bold tracking-tight text-slate-900"
+          aria-label={`${formatEnquiryNumber(order.orderNumber)}, ${order.currentDivision?.name ?? "—"}, ${new Date(order.createdAt).toLocaleString()}, ${order.status.replace("_", " ")}`}
+        >
+          <span title={formatEnquiryNumber(order.orderNumber)}>
+            {formatEnquiryNumberShort(order.orderNumber)}
+          </span>
+          <span className="font-normal text-slate-400" aria-hidden>
+            →
+          </span>
+          <span className="font-semibold text-slate-800">
+            {order.currentDivision?.name?.trim() ? order.currentDivision.name : "—"}
+          </span>
+          <span className="font-normal text-slate-400" aria-hidden>
+            →
+          </span>
+          <time
+            dateTime={order.createdAt}
+            className={`font-semibold tabular-nums ${placedDateClass(order)}`}
+          >
+            {new Date(order.createdAt).toLocaleString()}
+          </time>
+          <span className="font-normal text-slate-400" aria-hidden>
+            →
+          </span>
+          <Badge variant={statusVariant[order.status] ?? "secondary"} className="text-xs font-semibold uppercase tracking-wide">
+            {order.status.replace("_", " ")}
+          </Badge>
+        </h1>
+      </header>
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
+        <CardHeader className="flex flex-row items-center justify-between gap-2">
           <CardTitle>Enquiry details</CardTitle>
-          {canEdit && (
-            <Button variant="outline" size="sm" onClick={() => { setEditCompanyName(order.companyName ?? ""); setEditDescription(order.description ?? ""); setEditOpen(true); }}>
-              Edit enquiry
+          {canCancel && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0 text-destructive border-destructive/40 hover:bg-destructive/5"
+              onClick={() => {
+                setCancelReason("");
+                setCancelError("");
+                setCancelOpen(true);
+              }}
+            >
+              Cancel enquiry
             </Button>
           )}
         </CardHeader>
@@ -571,11 +697,21 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             {order.description?.trim() ? order.description : "—"}
           </p>
           <p>
-            <span className="text-slate-500">Created by:</span> {order.createdBy?.name} ({order.createdBy?.email}) ·{" "}
-            <span className="text-slate-500">Placed:</span> {new Date(order.createdAt).toLocaleString()}
+            <span className="text-slate-500">Created by:</span> {order.createdBy?.name} ({order.createdBy?.email})
           </p>
-          {user?.role !== "MANAGER" ? (
-            <p><span className="text-slate-500">Current division:</span> {order.currentDivision?.name ?? "—"}</p>
+          {order.status === "CANCELLED" && order.cancellationReason ? (
+            <div className="rounded-lg border border-stone-200 bg-stone-50/90 p-3 text-sm">
+              <p className="font-medium text-stone-900">This enquiry was cancelled</p>
+              <p className="mt-1 text-stone-700">
+                <span className="text-slate-500">Reason:</span> {order.cancellationReason}
+              </p>
+              {order.cancelledAt ? (
+                <p className="mt-2 text-xs text-slate-500">
+                  {order.cancelledBy?.name ? `${order.cancelledBy.name} · ` : ""}
+                  {new Date(order.cancelledAt).toLocaleString()}
+                </p>
+              ) : null}
+            </div>
           ) : null}
           <p>
             <span className="text-slate-500">Sample requested:</span>{" "}
@@ -601,7 +737,10 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           {!isAuditView ? (
             <p>
               <span className="text-slate-500">Transfers:</span> {order.transferCount} ·{" "}
-              <span className="text-slate-500">Rejections:</span> {order.rejectionCount}
+              <span className="text-slate-500">
+                {isEnquirySubmitter ? "Declined by division:" : "Rejections:"}
+              </span>{" "}
+              {order.rejectionCount}
             </p>
           ) : (
             <div className="border-t border-slate-100 pt-4 space-y-4 text-sm">
@@ -752,7 +891,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               </p>
             </CardHeader>
             <CardContent>
-              {order.auditLogs?.length ? (
+              {auditQueryError ? (
+                <p className="text-sm text-red-600">Could not load activity log.</p>
+              ) : auditLoading && auditLogsAsc.length === 0 ? (
+                <p className="text-sm text-slate-500">Loading activity…</p>
+              ) : auditLogsAsc.length ? (
                 <div className="relative">
                   <div
                     className="pointer-events-none absolute left-[7px] top-3 bottom-3 w-px bg-linear-to-b from-slate-300/90 via-slate-200/60 to-transparent sm:left-[9px]"
@@ -760,7 +903,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                   />
                   <ul className="relative space-y-4">
                     {(
-                      order.auditLogs as {
+                      auditLogsAsc as {
                         id: number;
                         action: string;
                         createdAt: string;
@@ -814,13 +957,15 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             </p>
           </CardHeader>
           <CardContent>
-            {auditLoading ? (
+            {auditQueryError ? (
+              <p className="text-sm text-red-600">Could not load activity log.</p>
+            ) : auditLoading && auditLogsAsc.length === 0 ? (
               <p className="text-sm text-slate-500">Loading timeline…</p>
-            ) : auditLogsChrono.length === 0 ? (
+            ) : auditLogsAsc.length === 0 ? (
               <p className="text-sm text-slate-500">No audit entries recorded.</p>
             ) : (
               <ul className="space-y-3">
-                {auditLogsChrono.map((log) => {
+                {auditLogsAsc.map((log) => {
                   const extra = auditPayloadSummary(log.action, log.payload);
                   return (
                     <li
@@ -864,8 +1009,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           <CardHeader>
             <CardTitle>Sample workflow</CardTitle>
             <p className="text-sm text-slate-500 font-normal">
-              Division Head sets details and approves; shipment requires courier and tracking ID. Sales can add
-              feedback anytime before rejection.
+              First submit and save sample details. After they are saved, approve the sample in a separate step.
+              Shipment requires courier and tracking ID. Sales can add feedback anytime before rejection.
             </p>
           </CardHeader>
           <CardContent className="space-y-4 text-sm">
@@ -959,58 +1104,76 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             )}
 
             {showInteractiveUi && mightManageSample && (
-              <div className="space-y-4 border-t border-slate-100 pt-4">
+              <div className="space-y-6 border-t border-slate-100 pt-4">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Division actions</p>
                 {!order.sampleApprovedAt && (
-                  <div className="space-y-2">
-                    <Label>Update sample details / quantity</Label>
-                    <textarea
-                      value={sampleDetails}
-                      onChange={(e) => setSampleDetails(e.target.value)}
-                      placeholder="Sample specifications, color, finish…"
-                      rows={2}
-                      className="flex min-h-[56px] w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                    />
-                    <Input
-                      value={sampleQuantity}
-                      onChange={(e) => setSampleQuantity(e.target.value)}
-                      placeholder="e.g. 2 meters, 3 swatches"
-                    />
-                    <Input
-                      value={sampleWeight}
-                      onChange={(e) => setSampleWeight(e.target.value)}
-                      placeholder="Weight (e.g. 250 gsm, 1.5 kg)"
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={
-                        sampleMutation.isPending ||
-                        (!sampleDetails.trim() && !sampleQuantity.trim() && !sampleWeight.trim())
-                      }
-                      onClick={() =>
-                        sampleMutation.mutate({
-                          action: "setDetails",
-                          sampleDetails: sampleDetails.trim() || undefined,
-                          sampleQuantity: sampleQuantity.trim() || undefined,
-                          sampleWeight: sampleWeight.trim() || undefined,
-                        })
-                      }
-                    >
-                      Save sample details
-                    </Button>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-3">
+                    <p className="text-sm font-medium text-slate-900">Step 1 — Submit sample details</p>
+                    <p className="text-xs text-slate-500">
+                      Enter details and click Save. Approval is only available after details are saved.
+                    </p>
+                    <div className="space-y-2">
+                      <Label htmlFor="sample-details">Sample details</Label>
+                      <textarea
+                        id="sample-details"
+                        value={sampleDetails}
+                        onChange={(e) => setSampleDetails(e.target.value)}
+                        placeholder="Sample specifications, color, finish…"
+                        rows={2}
+                        className="flex min-h-[56px] w-full rounded-md border border-slate-200 px-3 py-2 text-sm bg-white"
+                      />
+                      <Input
+                        value={sampleQuantity}
+                        onChange={(e) => setSampleQuantity(e.target.value)}
+                        placeholder="e.g. 2 meters, 3 swatches"
+                      />
+                      <Input
+                        value={sampleWeight}
+                        onChange={(e) => setSampleWeight(e.target.value)}
+                        placeholder="Weight (e.g. 250 gsm, 1.5 kg)"
+                      />
+                      <Button
+                        type="button"
+                        variant="default"
+                        size="sm"
+                        disabled={
+                          sampleMutation.isPending ||
+                          (!sampleDetails.trim() && !sampleQuantity.trim() && !sampleWeight.trim())
+                        }
+                        onClick={() =>
+                          sampleMutation.mutate({
+                            action: "setDetails",
+                            sampleDetails: sampleDetails.trim() || undefined,
+                            sampleQuantity: sampleQuantity.trim() || undefined,
+                            sampleWeight: sampleWeight.trim() || undefined,
+                          })
+                        }
+                      >
+                        Save sample details
+                      </Button>
+                    </div>
                   </div>
                 )}
                 {!order.sampleApprovedAt && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    disabled={sampleMutation.isPending}
-                    onClick={() => sampleMutation.mutate({ action: "approve" })}
-                  >
-                    Approve sample
-                  </Button>
+                  <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+                    <p className="text-sm font-medium text-slate-900">Step 2 — Approve sample</p>
+                    {!hasSampleDetailsSaved ? (
+                      <p className="text-sm text-slate-500">
+                        Save sample details in step 1 first. At least one of details, quantity, or weight must be
+                        saved before you can approve.
+                      </p>
+                    ) : (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={sampleMutation.isPending}
+                        onClick={() => setApproveSampleOpen(true)}
+                      >
+                        Approve sample…
+                      </Button>
+                    )}
+                  </div>
                 )}
                 {order.sampleApprovedAt && !order.sampleShippedAt && (
                   <div className="space-y-2">
@@ -1187,7 +1350,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
       {!isAuditView && order.rejections?.length > 0 && (
         <Card>
-          <CardHeader><CardTitle>Rejections</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle>{isEnquirySubmitter ? "Division did not proceed" : "Rejections"}</CardTitle>
+          </CardHeader>
           <CardContent>
             <ul className="space-y-2">
               {order.rejections.map((r: { id: number; division: { name: string }; reason: string; rejectedBy: { name: string }; createdAt: string }) => (
@@ -1220,7 +1385,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               </Button>
             )}
             <Button variant="outline" onClick={() => setTransferOpen(true)}>Transfer</Button>
-            <Button variant="destructive" onClick={() => setRejectOpen(true)}>Reject</Button>
+            {canRejectEnquiry && (
+              <Button variant="destructive" onClick={() => setRejectOpen(true)}>Reject</Button>
+            )}
             {actionError && <p className="w-full text-sm text-red-600">{actionError}</p>}
           </CardContent>
         </Card>
@@ -1327,30 +1494,67 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         </DialogContent>
       </Dialog>
 
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+      <Dialog open={approveSampleOpen} onOpenChange={setApproveSampleOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Edit enquiry</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Approve sample</DialogTitle>
+            <DialogDescription>
+              This confirms the saved sample details and allows shipment to be recorded next. This step is separate
+              from saving details.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setApproveSampleOpen(false)}>
+              Back
+            </Button>
+            <Button
+              type="button"
+              disabled={sampleMutation.isPending}
+              onClick={() => sampleMutation.mutate({ action: "approve" })}
+            >
+              {sampleMutation.isPending ? "Approving…" : "Confirm approval"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={cancelOpen}
+        onOpenChange={(open) => {
+          setCancelOpen(open);
+          if (!open) setCancelError("");
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancel this enquiry</DialogTitle>
+            <p className="text-sm font-normal text-slate-600 pt-1">
+              Division heads will be notified with the reason you provide. This cannot be undone.
+            </p>
+          </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>Company name</Label>
-              <Input value={editCompanyName} onChange={(e) => setEditCompanyName(e.target.value)} placeholder="Company name" />
+              <Label>Reason (min 10 characters)</Label>
+              <textarea
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                placeholder="Explain why you are withdrawing this enquiry"
+                rows={4}
+                className="flex min-h-[96px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] outline-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+              />
             </div>
-            <div className="space-y-2">
-              <Label>Product description</Label>
-              <Input value={editDescription} onChange={(e) => setEditDescription(e.target.value)} placeholder="Product description" />
-            </div>
+            {cancelError ? <p className="text-sm text-destructive">{cancelError}</p> : null}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setCancelOpen(false)}>
+              Back
+            </Button>
             <Button
-              onClick={() => updateMutation.mutate({
-                companyName: editCompanyName.trim() || undefined,
-                description: editDescription.trim() || undefined,
-                customFields: order?.customFields as Record<string, string> | undefined,
-              })}
-              disabled={!editCompanyName.trim() || !editDescription.trim() || updateMutation.isPending}
+              variant="destructive"
+              onClick={() => cancelMutation.mutate(cancelReason.trim())}
+              disabled={cancelReason.trim().length < 10 || cancelMutation.isPending}
             >
-              Save
+              {cancelMutation.isPending ? "Cancelling…" : "Confirm cancellation"}
             </Button>
           </DialogFooter>
         </DialogContent>

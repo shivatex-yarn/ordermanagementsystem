@@ -24,6 +24,7 @@ enum OrderStatus {
   TRANSFERRED
   REJECTED
   COMPLETED
+  CANCELLED
 }
 
 model User {
@@ -56,6 +57,24 @@ model User {
   multiDivisionRequestsCreated MultiDivisionAccessRequest[] @relation("MultiDivisionRequestUser")
   multiDivisionRequestsApproved MultiDivisionAccessRequest[] @relation("MultiDivisionRequestApprover")
   sampleApprovals Order[] @relation("SampleApprovedBy")
+  cancelledOrders Order[] @relation("OrderCancelledBy")
+  loginSessions   UserLoginSession[]
+}
+
+model UserLoginSession {
+  id          Int       @id @default(autoincrement())
+  userId      Int       @map("user_id")
+  sessionId   String    @unique @map("session_id") @db.Uuid
+  loggedInAt  DateTime  @default(now()) @map("logged_in_at")
+  loggedOutAt DateTime? @map("logged_out_at")
+  ipAddress   String?   @map("ip_address")
+  userAgent   String?   @map("user_agent") @db.Text
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([loggedInAt(sort: Desc)])
+  @@map("user_login_sessions")
 }
 
 model Division {
@@ -110,6 +129,9 @@ model Order {
   rejectedById       Int?        @map("rejected_by_id")
   receivedById       Int?        @map("received_by_id")
   completedById      Int?        @map("completed_by_id")
+  cancelledAt        DateTime?   @map("cancelled_at")
+  cancellationReason String?     @map("cancellation_reason") @db.Text
+  cancelledById      Int?        @map("cancelled_by_id")
 
   sampleRequested     Boolean   @default(false) @map("sample_requested")
   sampleRequestNotes  String?   @map("sample_request_notes") @db.Text
@@ -133,6 +155,7 @@ model Order {
   rejectedBy      User?     @relation("OrderRejectedBy", fields: [rejectedById], references: [id])
   receivedBy      User?     @relation("OrderReceivedBy", fields: [receivedById], references: [id])
   completedBy     User?     @relation("OrderCompletedBy", fields: [completedById], references: [id])
+  cancelledBy     User?     @relation("OrderCancelledBy", fields: [cancelledById], references: [id])
   sampleApprovedBy  User?     @relation("SampleApprovedBy", fields: [sampleApprovedById], references: [id])
 
   transfers      OrderTransfer[]

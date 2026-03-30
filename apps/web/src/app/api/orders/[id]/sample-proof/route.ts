@@ -8,21 +8,6 @@ import { promises as fs } from "fs";
 
 export const runtime = "nodejs";
 
-function safeDbHint() {
-  try {
-    const url = process.env.DATABASE_URL ? new URL(process.env.DATABASE_URL) : null;
-    if (!url) return { hasDbUrl: false };
-    return {
-      hasDbUrl: true,
-      host: url.host,
-      db: url.pathname?.replace(/^\//, "") || undefined,
-      schema: url.searchParams.get("schema") || undefined,
-    };
-  } catch {
-    return { hasDbUrl: Boolean(process.env.DATABASE_URL) };
-  }
-}
-
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -94,26 +79,6 @@ export async function POST(
     return NextResponse.json({ url: relUrl });
   } catch (err) {
     console.error("[sample-proof upload]", err);
-    // #region agent log
-    fetch("http://127.0.0.1:7328/ingest/3b6d6cf8-0b13-4001-8f24-c47cea3cb28e", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9f4942" },
-      body: JSON.stringify({
-        sessionId: "9f4942",
-        runId: "post-fix",
-        hypothesisId: "H_db_schema_drift",
-        location: "apps/web/src/app/api/orders/[id]/sample-proof/route.ts:catch",
-        message: "sample proof upload failed",
-        data: {
-          prismaCode:
-            err instanceof Prisma.PrismaClientKnownRequestError ? err.code : undefined,
-          errMsg: err instanceof Error ? err.message : String(err),
-          db: safeDbHint(),
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2022") {
       return NextResponse.json(
         {

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { withRole } from "@/lib/with-auth";
+import { userCanViewOrder } from "@/lib/order-view-permission";
+import { withAuth } from "@/lib/with-auth";
 
 function payloadSnippet(p: unknown): string {
   if (p == null) return "";
@@ -14,26 +15,49 @@ function payloadSnippet(p: unknown): string {
 }
 
 export async function GET(req: Request) {
-  const auth = await withRole(["SUPER_ADMIN", "MANAGING_DIRECTOR", "MANAGER"]);
+  const auth = await withAuth();
   if (auth.response) return auth.response;
+
   const { searchParams } = new URL(req.url);
-  const orderId = searchParams.get("orderId");
+  const orderIdParam = searchParams.get("orderId");
   const actionFilter = searchParams.get("action")?.trim() || undefined;
   const page = Math.max(1, Number(searchParams.get("page")) || 1);
-  const limit = Math.min(100, Math.max(1, Number(searchParams.get("limit")) || 20));
+  const rawLimit = Number(searchParams.get("limit")) || 20;
+  const limit = orderIdParam
+    ? Math.min(200, Math.max(1, rawLimit))
+    : Math.min(100, Math.max(1, rawLimit));
+
+  const { role } = auth.payload;
 
   const where: Prisma.AuditLogWhereInput = {};
   if (actionFilter) {
     where.action = actionFilter;
   }
-  if (orderId) {
-    where.orderId = Number(orderId);
-  } else if (auth.payload.role === "MANAGER" && auth.payload.divisionId) {
-    const orderIds = await prisma.order.findMany({
-      where: { currentDivisionId: auth.payload.divisionId },
-      select: { id: true },
+
+  if (orderIdParam) {
+    const oid = Number(orderIdParam);
+    if (!Number.isInteger(oid)) {
+      return NextResponse.json({ error: "Invalid order id" }, { status: 400 });
+    }
+    const order = await prisma.order.findUnique({
+      where: { id: oid },
+      select: { id: true, createdById: true, currentDivisionId: true, previousDivisionId: true },
     });
-    where.orderId = { in: orderIds.map((o) => o.id) };
+    if (!order) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    const ok = await userCanViewOrder(auth.payload, order);
+    if (!ok) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    where.orderId = oid;
+  } else {
+    if (!["SUPER_ADMIN", "MANAGING_DIRECTOR", "MANAGER"].includes(role)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+    if (role === "MANAGER" && auth.payload.divisionId) {
+      const orderIds = await prisma.order.findMany({
+        where: { currentDivisionId: auth.payload.divisionId },
+        select: { id: true },
+      });
+      where.orderId = { in: orderIds.map((o) => o.id) };
+    }
   }
 
   const [logs, total] = await Promise.all([
