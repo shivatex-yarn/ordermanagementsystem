@@ -1,10 +1,37 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 
+type ResendStatus = { apiKeyConfigured: boolean; fromCustom: boolean };
+
 export default function AdminSettingsPage() {
+  const [resendStatus, setResendStatus] = useState<ResendStatus | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/admin/settings/resend", { credentials: "include" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: ResendStatus | null) => {
+        if (!cancelled && data) setResendStatus(data);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const resendLabel =
+    resendStatus === null
+      ? "…"
+      : resendStatus.apiKeyConfigured
+        ? resendStatus.fromCustom
+          ? "Active · custom RESEND_FROM"
+          : "Active · default from address"
+        : "Not configured";
+
   return (
     <div className="space-y-8">
       <div>
@@ -47,7 +74,7 @@ export default function AdminSettingsPage() {
                 Send email on enquiry events via Resend. Set RESEND_API_KEY and RESEND_FROM in .env.
               </p>
             </div>
-            <span className="text-sm text-slate-500">Via Resend</span>
+            <span className="text-sm text-slate-600">{resendLabel}</span>
           </div>
           <div className="flex items-center justify-between rounded-lg border border-slate-100 p-4">
             <div>

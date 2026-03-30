@@ -44,6 +44,7 @@ export async function GET(req: Request) {
   const wantStats = searchParams.get("stats") === "1";
   const cacheKey = cacheKeyOrdersList(
     JSON.stringify({
+      userId: auth.payload.sub,
       page,
       limit,
       status,

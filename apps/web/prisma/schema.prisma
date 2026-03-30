@@ -169,6 +169,9 @@ model Order {
   @@index([currentDivisionId])
   @@index([createdById])
   @@index([slaDeadline])
+  @@index([createdAt(sort: Desc)])
+  @@index([createdById, createdAt(sort: Desc)])
+  @@index([currentDivisionId, createdAt(sort: Desc)])
 }
 
 model OrderTransfer {

@@ -63,10 +63,26 @@ function buildOrdersQuery(period: EnquiryPeriodFilter, dateFrom: string, dateTo:
   return "";
 }
 
-async function fetchDashboard(period: EnquiryPeriodFilter, page: number, dateFrom: string, dateTo: string) {
+const SLA_ROLES = new Set(["SUPER_ADMIN", "MANAGING_DIRECTOR"]);
+
+async function fetchDashboard(
+  period: EnquiryPeriodFilter,
+  page: number,
+  dateFrom: string,
+  dateTo: string,
+  role: string
+) {
   const q = buildOrdersQuery(period, dateFrom, dateTo);
+  const ordersUrl = `/api/orders?page=${page}&limit=5&stats=1${q}`;
+  if (!SLA_ROLES.has(role)) {
+    const pipeRes = await fetch(ordersUrl, { credentials: "include" });
+    const pipe = pipeRes.ok
+      ? await pipeRes.json()
+      : { total: 0, orders: [], statusCounts: {}, page: 1, limit: 5 };
+    return { ...pipe, slaBreaches: 0, enquiriesAtRisk: 0 };
+  }
   const [pipeRes, slaRes] = await Promise.all([
-    fetch(`/api/orders?page=${page}&limit=5&stats=1${q}`, { credentials: "include" }),
+    fetch(ordersUrl, { credentials: "include" }),
     fetch("/api/sla", { credentials: "include" }),
   ]);
   const pipe = pipeRes.ok
@@ -81,7 +97,7 @@ async function fetchDashboard(period: EnquiryPeriodFilter, page: number, dateFro
 }
 
 export default function DashboardPage() {
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   const [period, setPeriod] = useState<EnquiryPeriodFilter>("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -95,6 +111,7 @@ export default function DashboardPage() {
     queryFn: () => fetchDashboard(period, page, dateFrom, dateTo),
     staleTime: 45_000,
   });
+  const isLoading = authLoading || dashboardLoading;
 
   const hideDivision = user?.role === "MANAGER";
 
