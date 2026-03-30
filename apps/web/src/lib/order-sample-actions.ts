@@ -79,6 +79,20 @@ export async function runSampleAction(
       return NextResponse.json(order);
     }
     case "approve": {
+      const pre = await prisma.order.findUnique({
+        where: { id: orderId },
+        select: { sampleDetails: true, sampleQuantity: true, sampleWeight: true },
+      });
+      const hasSaved = [pre?.sampleDetails, pre?.sampleQuantity, pre?.sampleWeight].some((s) => s?.trim());
+      if (!hasSaved) {
+        return NextResponse.json(
+          {
+            error:
+              "Save sample details first — enter at least one of details, quantity, or weight, then save.",
+          },
+          { status: 400 }
+        );
+      }
       const order = await approveOrderSample(orderId, userId);
       if (!order) {
         return NextResponse.json(

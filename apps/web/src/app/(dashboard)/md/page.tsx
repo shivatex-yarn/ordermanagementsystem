@@ -138,6 +138,7 @@ const statusVariant: Record<string, "default" | "secondary" | "destructive" | "s
   TRANSFERRED: "warning",
   REJECTED: "destructive",
   COMPLETED: "success",
+  CANCELLED: "secondary",
 };
 
 const sections = [
@@ -268,7 +269,7 @@ export default function MdOverviewPage() {
             <p className="mt-1 text-xs text-slate-500">Awaiting head action (shown up to 50)</p>
           </CardContent>
         </Card>
-        {["PLACED", "IN_PROGRESS", "TRANSFERRED", "COMPLETED"].map((s) => (
+        {["PLACED", "IN_PROGRESS", "TRANSFERRED", "REJECTED", "CANCELLED", "COMPLETED"].map((s) => (
           <Card key={s} className="shadow-sm">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-slate-500">{s.replace("_", " ")}</CardTitle>

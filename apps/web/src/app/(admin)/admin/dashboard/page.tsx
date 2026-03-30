@@ -21,6 +21,7 @@ const STATUS_COLORS: Record<string, string> = {
   TRANSFERRED: "#f59e0b",
   REJECTED: "#ef4444",
   COMPLETED: "#22c55e",
+  CANCELLED: "#78716c",
 };
 
 async function fetchAdminStats() {

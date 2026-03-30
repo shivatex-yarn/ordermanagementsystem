@@ -4,7 +4,7 @@ import { withAuth } from "@/lib/with-auth";
 import { Prisma, type OrderStatus } from "@prisma/client";
 import { createOrderSchema } from "@/lib/validation";
 import { createOrder } from "@/lib/order-engine";
-import { getRateLimitIdentifier, rateLimit } from "@/lib/rate-limit";
+import { getRateLimitIdentifierForUser, rateLimit } from "@/lib/rate-limit";
 import { cacheGet, cacheSet, cacheKeyOrdersList } from "@/lib/redis";
 import { getCreatedAtRange, normalizePeriodParam, parseCreatedAtRangeFromParams } from "@/lib/date-period";
 import { userMayRouteEnquiryToDivision } from "@/lib/division-access";
@@ -22,8 +22,15 @@ const orderInclude = {
 export async function GET(req: Request) {
   const auth = await withAuth();
   if (auth.response) return auth.response;
-  const { ok } = rateLimit(getRateLimitIdentifier(req));
-  if (!ok) return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  const { ok, remaining } = await rateLimit(
+    getRateLimitIdentifierForUser(req, Number(auth.payload.sub))
+  );
+  if (!ok) {
+    return NextResponse.json(
+      { error: "Too many requests" },
+      { status: 429, headers: { "X-RateLimit-Remaining": String(remaining) } }
+    );
+  }
 
   const { searchParams } = new URL(req.url);
   const page = Number(searchParams.get("page")) || 1;
@@ -135,15 +142,22 @@ export async function GET(req: Request) {
   }
 
   const result = { orders, total, page, limit, ...(statusCounts != null ? { statusCounts } : {}) };
-  await cacheSet(cacheKey, result, 60);
+  await cacheSet(cacheKey, result, 90);
   return NextResponse.json(result);
 }
 
 export async function POST(req: Request) {
   const auth = await withAuth();
   if (auth.response) return auth.response;
-  const { ok } = rateLimit(getRateLimitIdentifier(req));
-  if (!ok) return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  const { ok, remaining } = await rateLimit(
+    getRateLimitIdentifierForUser(req, Number(auth.payload.sub))
+  );
+  if (!ok) {
+    return NextResponse.json(
+      { error: "Too many requests" },
+      { status: 429, headers: { "X-RateLimit-Remaining": String(remaining) } }
+    );
+  }
 
   const body = await req.json();
   const parsed = createOrderSchema.safeParse(body);

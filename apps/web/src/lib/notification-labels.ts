@@ -4,6 +4,7 @@ export const NOTIFICATION_SHORT_LABELS: Record<string, string> = {
   OrderAccepted: "Accepted",
   OrderTransferred: "Transferred",
   OrderRejected: "Rejected",
+  OrderCancelled: "Cancelled by submitter",
   OrderReceived: "Received",
   OrderCompleted: "Completed",
   SLABreachDetected: "SLA alert",

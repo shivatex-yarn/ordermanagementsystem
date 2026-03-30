@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db";
 import { publish } from "@/lib/events";
 import { registerEventHandlers } from "@/lib/event-handlers";
-import { cacheDel, cacheKeyOrder, cacheKeyOrdersList } from "@/lib/redis";
+import { cacheDel, cacheInvalidateOrdersLists, cacheKeyOrder } from "@/lib/redis";
 
 const SLA_HOURS = 48;
 
@@ -55,7 +55,7 @@ export async function createOrder(
     timestamp: order.createdAt.toISOString(),
     userId: createdById,
   });
-  await cacheDel(cacheKeyOrdersList("*"));
+  await cacheInvalidateOrdersLists();
   return order;
 }
 
@@ -126,7 +126,7 @@ export async function updateOrderWithEditHistory(
     ),
   ]);
   await cacheDel(cacheKeyOrder(orderId));
-  await cacheDel(cacheKeyOrdersList("*"));
+  await cacheInvalidateOrdersLists();
   return prisma.order.findUnique({
     where: { id: orderId },
     include: {
@@ -175,7 +175,7 @@ export async function acceptOrder(orderId: number, acceptedById: number, reason:
     userId: acceptedById,
   });
   await cacheDel(cacheKeyOrder(orderId));
-  await cacheDel(cacheKeyOrdersList("*"));
+  await cacheInvalidateOrdersLists();
   return updated;
 }
 
@@ -232,14 +232,14 @@ export async function transferOrder(
     userId: transferredById,
   });
   await cacheDel(cacheKeyOrder(orderId));
-  await cacheDel(cacheKeyOrdersList("*"));
+  await cacheInvalidateOrdersLists();
   return updated;
 }
 
 export async function rejectOrder(orderId: number, rejectedById: number, reason: string) {
   const order = await prisma.order.findUnique({ where: { id: orderId } });
   if (!order) return null;
-  if (order.status === "REJECTED" || order.status === "COMPLETED") return null;
+  if (order.status === "REJECTED" || order.status === "COMPLETED" || order.status === "CANCELLED") return null;
   await prisma.$transaction([
     prisma.orderRejection.create({
       data: { orderId, divisionId: order.currentDivisionId, reason, rejectedById },
@@ -274,7 +274,46 @@ export async function rejectOrder(orderId: number, rejectedById: number, reason:
     userId: rejectedById,
   });
   await cacheDel(cacheKeyOrder(orderId));
-  await cacheDel(cacheKeyOrdersList("*"));
+  await cacheInvalidateOrdersLists();
+  return updated;
+}
+
+/** Creator withdraws an enquiry before division action (status must be PLACED). */
+export async function cancelOrderByCreator(orderId: number, cancelledById: number, reason: string) {
+  const order = await prisma.order.findUnique({ where: { id: orderId } });
+  if (!order) return null;
+  if (order.status !== "PLACED") return null;
+  if (order.createdById !== cancelledById) return null;
+  const trimmed = reason.trim();
+  if (trimmed.length < 10) return null;
+
+  const updated = await prisma.order.update({
+    where: { id: orderId },
+    data: {
+      status: "CANCELLED",
+      cancelledAt: new Date(),
+      cancelledById,
+      cancellationReason: trimmed,
+      slaDeadline: null,
+    },
+    include: {
+      createdBy: { select: { id: true, name: true, email: true } },
+      currentDivision: { select: { id: true, name: true } },
+      cancelledBy: { select: { id: true, name: true, email: true } },
+    },
+  });
+  await publish({
+    type: "OrderCancelled",
+    orderId: updated.id,
+    orderNumber: updated.orderNumber,
+    divisionId: updated.currentDivisionId,
+    cancelledById,
+    reason: trimmed,
+    timestamp: new Date().toISOString(),
+    userId: cancelledById,
+  });
+  await cacheDel(cacheKeyOrder(orderId));
+  await cacheInvalidateOrdersLists();
   return updated;
 }
 
@@ -302,7 +341,7 @@ export async function receiveOrder(orderId: number, receivedById: number) {
     userId: receivedById,
   });
   await cacheDel(cacheKeyOrder(orderId));
-  await cacheDel(cacheKeyOrdersList("*"));
+  await cacheInvalidateOrdersLists();
   return updated;
 }
 
@@ -331,7 +370,7 @@ export async function completeOrder(orderId: number, completedById: number) {
     durationMs,
   });
   await cacheDel(cacheKeyOrder(orderId));
-  await cacheDel(cacheKeyOrdersList("*"));
+  await cacheInvalidateOrdersLists();
   return updated;
 }
 
@@ -342,7 +381,7 @@ export async function updateOrderSampleDetails(
 ) {
   const order = await prisma.order.findUnique({ where: { id: orderId } });
   if (!order?.sampleRequested) return null;
-  if (order.status === "REJECTED" || order.status === "COMPLETED") return null;
+  if (order.status === "REJECTED" || order.status === "COMPLETED" || order.status === "CANCELLED") return null;
   const sampleDetails =
     input.sampleDetails !== undefined ? input.sampleDetails.trim() || null : undefined;
   const sampleQuantity =
@@ -371,14 +410,19 @@ export async function updateOrderSampleDetails(
     userId,
   });
   await cacheDel(cacheKeyOrder(orderId));
-  await cacheDel(cacheKeyOrdersList("*"));
+  await cacheInvalidateOrdersLists();
   return updated;
 }
 
 export async function approveOrderSample(orderId: number, userId: number) {
   const order = await prisma.order.findUnique({ where: { id: orderId } });
   if (!order?.sampleRequested || order.sampleApprovedAt) return null;
-  if (order.status === "REJECTED" || order.status === "COMPLETED") return null;
+  if (order.status === "REJECTED" || order.status === "COMPLETED" || order.status === "CANCELLED") return null;
+  const hasSavedDetails =
+    Boolean(order.sampleDetails?.trim()) ||
+    Boolean(order.sampleQuantity?.trim()) ||
+    Boolean(order.sampleWeight?.trim());
+  if (!hasSavedDetails) return null;
   const updated = await prisma.order.update({
     where: { id: orderId },
     data: {
@@ -401,7 +445,7 @@ export async function approveOrderSample(orderId: number, userId: number) {
     userId,
   });
   await cacheDel(cacheKeyOrder(orderId));
-  await cacheDel(cacheKeyOrdersList("*"));
+  await cacheInvalidateOrdersLists();
   return updated;
 }
 
@@ -412,7 +456,7 @@ export async function recordSampleShipment(
 ) {
   const order = await prisma.order.findUnique({ where: { id: orderId } });
   if (!order?.sampleRequested || !order.sampleApprovedAt || order.sampleShippedAt) return null;
-  if (order.status === "REJECTED" || order.status === "COMPLETED") return null;
+  if (order.status === "REJECTED" || order.status === "COMPLETED" || order.status === "CANCELLED") return null;
   const sentByCourier = input.sentByCourier !== false;
   const courierName = input.courierName?.trim() || null;
   const trackingId = input.trackingId?.trim() || null;
@@ -443,14 +487,14 @@ export async function recordSampleShipment(
     userId,
   });
   await cacheDel(cacheKeyOrder(orderId));
-  await cacheDel(cacheKeyOrdersList("*"));
+  await cacheInvalidateOrdersLists();
   return updated;
 }
 
 export async function recordSalesFeedback(orderId: number, userId: number, salesFeedback: string) {
   const order = await prisma.order.findUnique({ where: { id: orderId } });
   if (!order) return null;
-  if (order.status === "REJECTED") return null;
+  if (order.status === "REJECTED" || order.status === "COMPLETED" || order.status === "CANCELLED") return null;
   const trimmed = salesFeedback.trim();
   if (!trimmed) return null;
   const updated = await prisma.order.update({
@@ -470,6 +514,6 @@ export async function recordSalesFeedback(orderId: number, userId: number, sales
     userId,
   });
   await cacheDel(cacheKeyOrder(orderId));
-  await cacheDel(cacheKeyOrdersList("*"));
+  await cacheInvalidateOrdersLists();
   return updated;
 }

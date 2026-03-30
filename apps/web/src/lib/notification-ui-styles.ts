@@ -29,6 +29,12 @@ export function notificationCardStyles(type: string): {
         iconWrap: "bg-rose-600 text-white shadow-sm shadow-rose-600/20",
         dot: "bg-rose-500",
       };
+    case "OrderCancelled":
+      return {
+        shell: "border-stone-200/85 bg-gradient-to-br from-stone-50/90 via-white to-neutral-50/30 ring-1 ring-stone-400/12",
+        iconWrap: "bg-stone-700 text-white shadow-sm shadow-stone-900/15",
+        dot: "bg-stone-500",
+      };
     case "OrderReceived":
       return {
         shell: "border-sky-200/85 bg-gradient-to-br from-sky-50/85 via-white to-blue-50/30 ring-1 ring-sky-400/12",

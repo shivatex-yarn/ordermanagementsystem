@@ -8,7 +8,7 @@ import { getRateLimitIdentifier, rateLimit } from "@/lib/rate-limit";
 export async function POST(req: Request) {
   const auth = await withRole(["SUPER_ADMIN"]);
   if (auth.response) return auth.response;
-  const { ok } = rateLimit(getRateLimitIdentifier(req));
+  const { ok } = await rateLimit(getRateLimitIdentifier(req), 60);
   if (!ok) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }

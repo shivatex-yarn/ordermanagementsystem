@@ -23,6 +23,8 @@ function responseLabel(order: {
       return order.receivedBy
         ? `Transferred · received by ${order.receivedBy.name}`
         : "Awaiting receive in new division (Division Head must receive)";
+    case "CANCELLED":
+      return "Cancelled by submitter";
     default:
       return order.status;
   }
@@ -76,7 +78,7 @@ export async function GET() {
     prisma.order.findMany({
       take: 100,
       orderBy: { updatedAt: "desc" },
-      where: { status: { not: "REJECTED" } },
+      where: { status: { notIn: ["REJECTED", "CANCELLED"] } },
       select: {
         id: true,
         orderNumber: true,

@@ -93,6 +93,10 @@ export const updateOrderSchema = z.object({
   customFields: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
 });
 
+export const cancelOrderSchema = z.object({
+  reason: z.string().min(10, "Please enter at least 10 characters").max(10000),
+});
+
 export const createOrderCommentSchema = z.object({
   body: z.string().min(1).max(10000),
 });
