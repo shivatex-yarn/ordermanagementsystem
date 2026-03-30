@@ -12,7 +12,6 @@ import {
   LineChart,
   ChevronDown,
   LogOut,
-  History,
 } from "lucide-react";
 import { performLogout } from "@/components/logout-button";
 import { useAuth } from "@/hooks/use-auth";
@@ -27,27 +26,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
-function headerTitle(pathname: string): string {
-  if (pathname === "/dashboard") return "Dashboard";
-  if (pathname === "/md") return "Executive overview";
-  if (pathname.startsWith("/orders/new")) return "New enquiry";
-  if (pathname.startsWith("/orders/")) return "Enquiry details";
-  if (pathname.startsWith("/orders")) return "Enquiries";
-  if (pathname.startsWith("/notifications")) return "Notifications";
-  if (pathname.startsWith("/login-history")) return "Login history";
-  if (pathname.startsWith("/sla")) return "SLA & breaches";
-  if (pathname.startsWith("/divisions")) return "Divisions";
-  if (pathname.startsWith("/audit")) return "Audit";
-  return "Dashboard";
-}
-
 const nav = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/orders", label: "Enquiries", icon: Package },
   { href: "/sla", label: "SLA & Breaches", icon: AlertTriangle },
   { href: "/md", label: "Executive overview", icon: LineChart, mdOverviewOnly: true },
   { href: "/notifications", label: "Notifications", icon: Bell },
-  { href: "/login-history", label: "Login history", icon: History },
   { href: "/admin", label: "Admin Panel", icon: KeyRound, superAdminOnly: true },
 ];
 
@@ -95,7 +79,7 @@ export default function DashboardLayout({
 
   const filteredNav = nav.filter((item) => {
     if (user.role === "MANAGING_DIRECTOR") {
-      return item.href === "/md" || item.href === "/notifications" || item.href === "/login-history";
+      return item.href === "/md" || item.href === "/notifications";
     }
     if ("superAdminOnly" in item && item.superAdminOnly && user.role !== "SUPER_ADMIN" && user.role !== "MANAGING_DIRECTOR") {
       return false;
@@ -192,11 +176,6 @@ export default function DashboardLayout({
                         {unreadCount > 99 ? "99+" : unreadCount}
                       </span>
                     ) : null}
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/login-history" className="cursor-pointer">
-                    Login history
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
