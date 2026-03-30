@@ -106,10 +106,11 @@ export default function DashboardPage() {
 
   const useCustomRange = Boolean(dateFrom.trim() && dateTo.trim());
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["dashboard", period, page, dateFrom, dateTo],
-    queryFn: () => fetchDashboard(period, page, dateFrom, dateTo),
+  const { data, isLoading: dashboardLoading } = useQuery({
+    queryKey: ["dashboard", period, page, dateFrom, dateTo, user?.role],
+    queryFn: () => fetchDashboard(period, page, dateFrom, dateTo, user?.role ?? "USER"),
     staleTime: 45_000,
+    enabled: !!user,
   });
   const isLoading = authLoading || dashboardLoading;
 
