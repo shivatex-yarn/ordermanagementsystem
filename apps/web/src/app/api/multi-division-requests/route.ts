@@ -8,6 +8,22 @@ const createSchema = z.object({
   divisionIds: z.array(z.number().int().positive()).min(1).max(20),
 });
 
+/** Division Head (MANAGER): view own multi-division access requests */
+export async function GET() {
+  const auth = await withRole(["MANAGER"]);
+  if (auth.response) return auth.response;
+  const userId = Number(auth.payload.sub);
+  const requests = await prisma.multiDivisionAccessRequest.findMany({
+    where: { userId },
+    orderBy: { createdAt: "desc" },
+    include: {
+      approvedBy: { select: { id: true, name: true, email: true } },
+      divisions: { include: { division: { select: { id: true, name: true } } } },
+    },
+  });
+  return NextResponse.json({ requests });
+}
+
 /** Division Head (MANAGER): submit multi-division access request */
 export async function POST(req: Request) {
   const auth = await withRole(["MANAGER"]);

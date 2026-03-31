@@ -34,7 +34,6 @@ const fullInclude = {
       rejectedBy: { select: { id: true, name: true, email: true } },
     },
   },
-  comments: { include: { user: { select: { id: true, name: true, email: true } } } },
   editHistory: { include: { user: { select: { id: true, name: true, email: true } } } },
 };
 
