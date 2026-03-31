@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "WATCHPACK_POLLING=true CHOKIDAR_USEPOLLING=true next dev",
-    "dev:turbo": "WATCHPACK_POLLING=true CHOKIDAR_USEPOLLING=true next dev --turbopack",
+    "dev": "WATCHPACK_POLLING=true CHOKIDAR_USEPOLLING=true next dev --hostname 127.0.0.1",
+    "dev:turbo": "WATCHPACK_POLLING=true CHOKIDAR_USEPOLLING=true next dev --turbopack --hostname 127.0.0.1",
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "eslint src",
