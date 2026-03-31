@@ -13,6 +13,7 @@ export type OrderEventType =
   | "OrderReceived"
   | "SLABreachDetected"
   | "SampleDetailsUpdated"
+  | "SampleDevelopmentUpdated"
   | "SampleApproved"
   | "SampleShipped"
   | "SalesFeedbackRecorded";
@@ -81,6 +82,12 @@ export interface SampleDetailsUpdatedEvent extends BaseOrderEvent {
   divisionId: number;
 }
 
+export interface SampleDevelopmentUpdatedEvent extends BaseOrderEvent {
+  type: "SampleDevelopmentUpdated";
+  divisionId: number;
+  developmentType: "existing" | "new";
+}
+
 export interface SampleApprovedEvent extends BaseOrderEvent {
   type: "SampleApproved";
   divisionId: number;
@@ -109,6 +116,7 @@ export type OrderEvent =
   | OrderReceivedEvent
   | SLABreachEvent
   | SampleDetailsUpdatedEvent
+  | SampleDevelopmentUpdatedEvent
   | SampleApprovedEvent
   | SampleShippedEvent
   | SalesFeedbackRecordedEvent;

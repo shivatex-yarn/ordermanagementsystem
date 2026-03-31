@@ -61,9 +61,53 @@ const setSampleDetailsBody = z
     { message: "Provide sample details and/or quantity and/or weight" }
   );
 
+const setSampleDevelopmentBody = z.object({
+  action: z.literal("setDevelopment"),
+  developmentType: z.enum(["existing", "new"]),
+  /** Required if developmentType === "existing" */
+  existingReference: z.string().max(2000).optional(),
+  /** Required if developmentType === "new" */
+  whyNewDevelopment: z.string().max(20000).optional(),
+  technicalDetails: z.string().max(20000).optional(),
+  requestedDetailsToSubmit: z.string().max(20000).optional(),
+});
+
 /** Division head / Super Admin / n8n integration — sample workflow */
 export const orderSampleActionSchema = z.union([
   setSampleDetailsBody,
+  setSampleDevelopmentBody.superRefine((d, ctx) => {
+    if (d.developmentType === "existing") {
+      if (!d.existingReference?.trim()) {
+        ctx.addIssue({
+          code: "custom",
+          message: "Provide an existing sample reference (style code / previous enquiry / notes)",
+          path: ["existingReference"],
+        });
+      }
+      return;
+    }
+    if (!d.whyNewDevelopment?.trim() || d.whyNewDevelopment.trim().length < 20) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Explain why this is new development (min 20 characters)",
+        path: ["whyNewDevelopment"],
+      });
+    }
+    if (!d.technicalDetails?.trim() || d.technicalDetails.trim().length < 20) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Provide technical details (min 20 characters)",
+        path: ["technicalDetails"],
+      });
+    }
+    if (!d.requestedDetailsToSubmit?.trim() || d.requestedDetailsToSubmit.trim().length < 10) {
+      ctx.addIssue({
+        code: "custom",
+        message: "List the details the team must submit (min 10 characters)",
+        path: ["requestedDetailsToSubmit"],
+      });
+    }
+  }),
   z.object({ action: z.literal("approve") }),
   z
     .object({

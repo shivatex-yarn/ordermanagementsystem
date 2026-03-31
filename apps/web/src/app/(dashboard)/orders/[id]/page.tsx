@@ -107,6 +107,7 @@ function auditActionLabel(action: string): string {
     OrderReceived: "Received in new division",
     OrderCompleted: "Completed",
     SampleDetailsUpdated: "Sample details updated",
+    SampleDevelopmentUpdated: "Sample type / development details",
     SampleApproved: "Sample approved",
     SampleShipped: "Sample sent / shipped",
     SalesFeedbackRecorded: "Sales / user response",
@@ -347,6 +348,13 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [salesFeedback, setSalesFeedback] = useState("");
   const [sampleError, setSampleError] = useState("");
   const [approveSampleOpen, setApproveSampleOpen] = useState(false);
+  const [sampleDevType, setSampleDevType] = useState<"existing" | "new">("existing");
+  const [sampleExistingRef, setSampleExistingRef] = useState("");
+  const [newDevOpen, setNewDevOpen] = useState(false);
+  const [newDevViewOpen, setNewDevViewOpen] = useState(false);
+  const [newDevWhy, setNewDevWhy] = useState("");
+  const [newDevTech, setNewDevTech] = useState("");
+  const [newDevRequestList, setNewDevRequestList] = useState("");
 
   const {
     data: order,
@@ -365,7 +373,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const { data: auditData, isLoading: auditLoading, isError: auditQueryError } = useQuery({
     queryKey: ["order-audit", orderId],
     queryFn: async () => {
-      const res = await fetch(`/api/audit?orderId=${orderId}&limit=200`, { credentials: "include" });
+      const res = await fetch(`/api/audit?orderId=${orderId}&limit=60`, { credentials: "include" });
       if (!res.ok) throw new Error("Could not load activity log");
       return res.json() as Promise<{ logs: AuditLogRow[] }>;
     },
@@ -381,7 +389,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const { data: divisionsData } = useQuery({
     queryKey: ["divisions"],
     queryFn: async () => {
-      const res = await fetch("/api/divisions", { credentials: "include" });
+      const res = await fetch("/api/divisions?scope=transfer", { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch divisions");
       return res.json();
     },
@@ -540,6 +548,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         setSalesFeedback("");
       } else if (action === "approve") {
         setApproveSampleOpen(false);
+      } else if (action === "setDevelopment") {
+        setNewDevOpen(false);
       }
       queryClient.invalidateQueries({ queryKey: ["order", orderId] });
       queryClient.invalidateQueries({ queryKey: ["order-audit", orderId] });
@@ -556,6 +566,25 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     setSampleWeight(order.sampleWeight ?? "");
   }, [order?.id, order?.sampleDetails, order?.sampleQuantity, order?.sampleWeight, order?.sampleRequested]);
 
+  useEffect(() => {
+    if (!order?.sampleRequested) return;
+    const cf = order.customFields;
+    if (!cf || typeof cf !== "object") return;
+    const sd = (cf as Record<string, unknown>).sampleDevelopment;
+    if (!sd || typeof sd !== "object") return;
+    const sdr = sd as Record<string, unknown>;
+    const t = sdr.type;
+    if (t === "existing") {
+      setSampleDevType("existing");
+      if (typeof sdr.existingReference === "string") setSampleExistingRef(sdr.existingReference);
+    } else if (t === "new") {
+      setSampleDevType("new");
+      if (typeof sdr.whyNewDevelopment === "string") setNewDevWhy(sdr.whyNewDevelopment);
+      if (typeof sdr.technicalDetails === "string") setNewDevTech(sdr.technicalDetails);
+      if (typeof sdr.requestedDetailsToSubmit === "string") setNewDevRequestList(sdr.requestedDetailsToSubmit);
+    }
+  }, [order?.id, order?.customFields, order?.sampleRequested]);
+
   const isEnquirySubmitter = Boolean(order && user && Number(user.id) === order.createdById);
   const canCancel =
     showInteractiveUi &&
@@ -568,6 +597,41 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     Boolean(order?.sampleDetails?.trim()) ||
     Boolean(order?.sampleQuantity?.trim()) ||
     Boolean(order?.sampleWeight?.trim());
+
+  const sampleDevelopment = useMemo(() => {
+    const cf = order?.customFields;
+    if (!cf || typeof cf !== "object") return null;
+    const sd = (cf as Record<string, unknown>).sampleDevelopment;
+    if (!sd || typeof sd !== "object") return null;
+    return sd as Record<string, unknown>;
+  }, [order?.customFields]);
+
+  const sampleDevelopmentUpdatedAtLabel = useMemo(() => {
+    if (!sampleDevelopment) return "";
+    const raw = sampleDevelopment.updatedAt;
+    if (typeof raw !== "string" || !raw.trim()) return "";
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toLocaleString();
+  }, [sampleDevelopment]);
+
+  const hasSampleDevelopmentSaved = useMemo(() => {
+    if (!sampleDevelopment) return false;
+    if (sampleDevelopment.type === "existing") {
+      return typeof sampleDevelopment.existingReference === "string" && sampleDevelopment.existingReference.trim().length > 0;
+    }
+    if (sampleDevelopment.type === "new") {
+      return (
+        typeof sampleDevelopment.whyNewDevelopment === "string" &&
+        sampleDevelopment.whyNewDevelopment.trim().length > 0 &&
+        typeof sampleDevelopment.technicalDetails === "string" &&
+        sampleDevelopment.technicalDetails.trim().length > 0
+      );
+    }
+    return false;
+  }, [sampleDevelopment]);
+
+  const canApproveSampleNow = hasSampleDetailsSaved || hasSampleDevelopmentSaved;
 
   const backHref = isAuditView ? "/md#audit" : "/orders";
   const backLabel = isAuditView ? "← Activity log" : "← Enquiries";
@@ -988,6 +1052,40 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             </p>
           </CardHeader>
           <CardContent className="space-y-4 text-sm">
+            {sampleDevelopment && (
+              <div className="rounded-lg border border-slate-100 bg-slate-50/80 p-3 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="font-medium text-slate-900">Sample type</p>
+                  {sampleDevelopmentUpdatedAtLabel ? (
+                    <span className="text-xs text-slate-500">Updated: {sampleDevelopmentUpdatedAtLabel}</span>
+                  ) : null}
+                </div>
+
+                {sampleDevelopment.type === "existing" ? (
+                  <div className="space-y-2">
+                    {typeof sampleDevelopment.existingReference === "string" ? (
+                      <p className="text-slate-700">
+                        <span className="text-slate-500">Existing sample (previous):</span>{" "}
+                        {sampleDevelopment.existingReference}
+                      </p>
+                    ) : (
+                      <p className="text-slate-600">—</p>
+                    )}
+                  </div>
+                ) : sampleDevelopment.type === "new" ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-slate-700">
+                      <span className="text-slate-500">New development:</span> submitted
+                    </p>
+                    <Button type="button" size="sm" variant="outline" onClick={() => setNewDevViewOpen(true)}>
+                      View details…
+                    </Button>
+                  </div>
+                ) : (
+                  <p className="text-slate-600">—</p>
+                )}
+              </div>
+            )}
             {(order.sampleDetails || order.sampleQuantity) && (
               <div className="rounded-lg border border-slate-100 bg-slate-50/80 p-3 space-y-1">
                 {order.sampleDetails && (
@@ -1086,6 +1184,63 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                     <p className="text-xs text-slate-500">
                       Enter details and click Save. Approval is only available after details are saved.
                     </p>
+                    {isManager && (
+                      <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-2">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                          Sample type (manager only)
+                        </p>
+                        <label className="flex items-center gap-2 text-sm text-slate-800">
+                          <input
+                            type="checkbox"
+                            checked={sampleDevType === "new"}
+                            onChange={(e) => setSampleDevType(e.target.checked ? "new" : "existing")}
+                          />
+                          New development (not an existing sample)
+                        </label>
+                        {sampleDevType === "existing" ? (
+                          <div className="space-y-2">
+                            <Label htmlFor="existing-ref">Existing sample reference</Label>
+                            <Input
+                              id="existing-ref"
+                              value={sampleExistingRef}
+                              onChange={(e) => setSampleExistingRef(e.target.value)}
+                              placeholder="Previous sample name/title or brief details"
+                            />
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              disabled={sampleMutation.isPending || !sampleExistingRef.trim()}
+                              onClick={() =>
+                                sampleMutation.mutate({
+                                  action: "setDevelopment",
+                                  developmentType: "existing",
+                                  existingReference: sampleExistingRef.trim(),
+                                })
+                              }
+                            >
+                              Save existing reference
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setNewDevOpen(true)}
+                            >
+                              Explain new development…
+                            </Button>
+                            {hasSampleDevelopmentSaved ? (
+                              <span className="text-xs text-emerald-700 font-medium">Saved</span>
+                            ) : (
+                              <span className="text-xs text-slate-500">Not yet submitted</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
                     <div className="space-y-2">
                       <Label htmlFor="sample-details">Sample details</Label>
                       <textarea
@@ -1131,10 +1286,10 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 {!order.sampleApprovedAt && (
                   <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
                     <p className="text-sm font-medium text-slate-900">Step 2 — Approve sample</p>
-                    {!hasSampleDetailsSaved ? (
+                    {!canApproveSampleNow ? (
                       <p className="text-sm text-slate-500">
-                        Save sample details in step 1 first. At least one of details, quantity, or weight must be
-                        saved before you can approve.
+                        Save sample details in step 1 first (or submit the manager-only sample type / new development
+                        details). At least one of these must be saved before you can approve.
                       </p>
                     ) : (
                       <Button
@@ -1459,6 +1614,125 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               onClick={() => sampleMutation.mutate({ action: "approve" })}
             >
               {sampleMutation.isPending ? "Approving…" : "Confirm approval"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={newDevOpen}
+        onOpenChange={(open) => {
+          setNewDevOpen(open);
+          if (!open) {
+            // leave values for convenience
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>New development details</DialogTitle>
+            <DialogDescription>
+              Explain why this is new development and what technical information is required. This is visible in the
+              workflow and used for approvals.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Why new development? (technical justification)</Label>
+              <textarea
+                value={newDevWhy}
+                onChange={(e) => setNewDevWhy(e.target.value)}
+                placeholder="Why can’t we use an existing sample? What is different/new?"
+                rows={3}
+                className="flex min-h-[84px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] outline-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Technical details / development process</Label>
+              <textarea
+                value={newDevTech}
+                onChange={(e) => setNewDevTech(e.target.value)}
+                placeholder="Materials/spec, construction, tolerances, test requirements, risks, timeline, etc."
+                rows={4}
+                className="flex min-h-[110px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] outline-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Details the team must submit</Label>
+              <textarea
+                value={newDevRequestList}
+                onChange={(e) => setNewDevRequestList(e.target.value)}
+                placeholder="e.g. target shade, finish, reference standards, lab dips, GSM, MOQ, lead time…"
+                rows={3}
+                className="flex min-h-[84px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-ring/50 focus-visible:ring-[3px] outline-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setNewDevOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={
+                sampleMutation.isPending ||
+                newDevWhy.trim().length < 20 ||
+                newDevTech.trim().length < 20 ||
+                newDevRequestList.trim().length < 10
+              }
+              onClick={() =>
+                sampleMutation.mutate({
+                  action: "setDevelopment",
+                  developmentType: "new",
+                  whyNewDevelopment: newDevWhy.trim(),
+                  technicalDetails: newDevTech.trim(),
+                  requestedDetailsToSubmit: newDevRequestList.trim(),
+                })
+              }
+            >
+              Submit new development details
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={newDevViewOpen} onOpenChange={setNewDevViewOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>New development details</DialogTitle>
+            <DialogDescription>
+              {sampleDevelopmentUpdatedAtLabel ? `Submitted / updated: ${sampleDevelopmentUpdatedAtLabel}` : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2 text-sm">
+            <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-1">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Why new development</p>
+              <p className="whitespace-pre-wrap text-slate-800">
+                {typeof sampleDevelopment?.whyNewDevelopment === "string"
+                  ? sampleDevelopment.whyNewDevelopment
+                  : "—"}
+              </p>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-1">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Technical details</p>
+              <p className="whitespace-pre-wrap text-slate-800">
+                {typeof sampleDevelopment?.technicalDetails === "string"
+                  ? sampleDevelopment.technicalDetails
+                  : "—"}
+              </p>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-1">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Details to submit</p>
+              <p className="whitespace-pre-wrap text-slate-800">
+                {typeof sampleDevelopment?.requestedDetailsToSubmit === "string"
+                  ? sampleDevelopment.requestedDetailsToSubmit
+                  : "—"}
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setNewDevViewOpen(false)}>
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>

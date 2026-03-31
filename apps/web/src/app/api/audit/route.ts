@@ -3,6 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { userCanViewOrder } from "@/lib/order-view-permission";
 import { withAuth } from "@/lib/with-auth";
+import { cacheGet, cacheSet } from "@/lib/redis";
 
 function payloadSnippet(p: unknown): string {
   if (p == null) return "";
@@ -60,6 +61,10 @@ export async function GET(req: Request) {
     }
   }
 
+  const cacheKey = `oms:audit:v1:${orderIdParam ?? "all"}:${actionFilter ?? ""}:${page}:${limit}:${auth.payload.role}:${auth.payload.sub}:${auth.payload.divisionId ?? ""}`;
+  const cached = await cacheGet<{ logs: unknown[]; total: number; page: number; limit: number }>(cacheKey);
+  if (cached) return NextResponse.json(cached);
+
   const [logs, total] = await Promise.all([
     prisma.auditLog.findMany({
       where,
@@ -85,5 +90,7 @@ export async function GET(req: Request) {
     orderNumber: l.order.orderNumber,
   }));
 
-  return NextResponse.json({ logs: serialized, total, page, limit });
+  const payload = { logs: serialized, total, page, limit };
+  await cacheSet(cacheKey, payload, 30);
+  return NextResponse.json(payload);
 }

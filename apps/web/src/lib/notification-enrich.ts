@@ -35,6 +35,7 @@ export function getNotificationActorId(type: string, metadata: unknown): number 
     case "SalesFeedbackRecorded":
       return n(m.submittedById) ?? n(m.userId);
     case "SampleDetailsUpdated":
+    case "SampleDevelopmentUpdated":
     case "SampleShipped":
     case "SLABreachDetected":
       return n(m.userId);

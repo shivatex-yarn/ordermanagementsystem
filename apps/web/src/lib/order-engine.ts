@@ -403,6 +403,67 @@ export async function updateOrderSampleDetails(
   return updated;
 }
 
+export async function updateOrderSampleDevelopment(
+  orderId: number,
+  userId: number,
+  input: {
+    developmentType: "existing" | "new";
+    existingReference?: string;
+    whyNewDevelopment?: string;
+    technicalDetails?: string;
+    requestedDetailsToSubmit?: string;
+  }
+) {
+  const order = await prisma.order.findUnique({ where: { id: orderId } });
+  if (!order?.sampleRequested) return null;
+  if (order.status === "REJECTED" || order.status === "COMPLETED" || order.status === "CANCELLED") return null;
+
+  const current = (order.customFields && typeof order.customFields === "object"
+    ? (order.customFields as Record<string, unknown>)
+    : {}) as Record<string, unknown>;
+
+  const sd: Record<string, unknown> = {
+    type: input.developmentType,
+    updatedAt: new Date().toISOString(),
+    updatedById: userId,
+  };
+
+  if (input.developmentType === "existing") {
+    sd.existingReference = input.existingReference?.trim() || "";
+  } else {
+    sd.whyNewDevelopment = input.whyNewDevelopment?.trim() || "";
+    sd.technicalDetails = input.technicalDetails?.trim() || "";
+    sd.requestedDetailsToSubmit = input.requestedDetailsToSubmit?.trim() || "";
+  }
+
+  const updated = await prisma.order.update({
+    where: { id: orderId },
+    data: {
+      customFields: {
+        ...current,
+        sampleDevelopment: sd,
+      } as object,
+    },
+    include: {
+      createdBy: { select: { id: true, name: true, email: true } },
+      currentDivision: { select: { id: true, name: true } },
+    },
+  });
+
+  await publish({
+    type: "SampleDevelopmentUpdated",
+    orderId: updated.id,
+    orderNumber: updated.orderNumber,
+    divisionId: updated.currentDivisionId,
+    developmentType: input.developmentType,
+    timestamp: new Date().toISOString(),
+    userId,
+  });
+  await cacheDel(cacheKeyOrder(orderId));
+  await cacheInvalidateOrdersLists();
+  return updated;
+}
+
 export async function approveOrderSample(orderId: number, userId: number) {
   const order = await prisma.order.findUnique({ where: { id: orderId } });
   if (!order?.sampleRequested || order.sampleApprovedAt) return null;
@@ -411,7 +472,20 @@ export async function approveOrderSample(orderId: number, userId: number) {
     Boolean(order.sampleDetails?.trim()) ||
     Boolean(order.sampleQuantity?.trim()) ||
     Boolean(order.sampleWeight?.trim());
-  if (!hasSavedDetails) return null;
+  const sd =
+    order.customFields && typeof order.customFields === "object"
+      ? ((order.customFields as Record<string, unknown>).sampleDevelopment as Record<string, unknown> | undefined)
+      : undefined;
+  const hasNewDev =
+    sd &&
+    sd.type === "new" &&
+    typeof sd.whyNewDevelopment === "string" &&
+    sd.whyNewDevelopment.trim().length > 0 &&
+    typeof sd.technicalDetails === "string" &&
+    sd.technicalDetails.trim().length > 0;
+  const hasExistingRef =
+    sd && sd.type === "existing" && typeof sd.existingReference === "string" && sd.existingReference.trim().length > 0;
+  if (!hasSavedDetails && !hasNewDev && !hasExistingRef) return null;
   const updated = await prisma.order.update({
     where: { id: orderId },
     data: {

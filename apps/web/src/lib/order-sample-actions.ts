@@ -4,6 +4,7 @@ import {
   approveOrderSample,
   recordSalesFeedback,
   recordSampleShipment,
+  updateOrderSampleDevelopment,
   updateOrderSampleDetails,
 } from "@/lib/order-engine";
 import { orderSampleActionSchema } from "@/lib/validation";
@@ -78,13 +79,45 @@ export async function runSampleAction(
       }
       return NextResponse.json(order);
     }
+    case "setDevelopment": {
+      const order = await updateOrderSampleDevelopment(orderId, userId, {
+        developmentType: action.developmentType,
+        existingReference: action.existingReference,
+        whyNewDevelopment: action.whyNewDevelopment,
+        technicalDetails: action.technicalDetails,
+        requestedDetailsToSubmit: action.requestedDetailsToSubmit,
+      });
+      if (!order) {
+        return NextResponse.json(
+          { error: "Cannot update sample development info (sample not requested or invalid state)" },
+          { status: 400 }
+        );
+      }
+      return NextResponse.json(order);
+    }
     case "approve": {
       const pre = await prisma.order.findUnique({
         where: { id: orderId },
-        select: { sampleDetails: true, sampleQuantity: true, sampleWeight: true },
+        select: { sampleDetails: true, sampleQuantity: true, sampleWeight: true, customFields: true },
       });
       const hasSaved = [pre?.sampleDetails, pre?.sampleQuantity, pre?.sampleWeight].some((s) => s?.trim());
+      const sd =
+        pre?.customFields && typeof pre.customFields === "object"
+          ? ((pre.customFields as Record<string, unknown>).sampleDevelopment as Record<string, unknown> | undefined)
+          : undefined;
+      const hasNewDev =
+        sd &&
+        sd.type === "new" &&
+        typeof sd.whyNewDevelopment === "string" &&
+        sd.whyNewDevelopment.trim().length > 0 &&
+        typeof sd.technicalDetails === "string" &&
+        sd.technicalDetails.trim().length > 0;
+      const hasExistingRef =
+        sd && sd.type === "existing" && typeof sd.existingReference === "string" && sd.existingReference.trim().length > 0;
       if (!hasSaved) {
+        if (hasNewDev || hasExistingRef) {
+          // ok — development info is saved
+        } else {
         return NextResponse.json(
           {
             error:
@@ -92,6 +125,7 @@ export async function runSampleAction(
           },
           { status: 400 }
         );
+        }
       }
       const order = await approveOrderSample(orderId, userId);
       if (!order) {
