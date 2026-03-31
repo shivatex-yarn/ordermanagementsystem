@@ -221,5 +221,8 @@ export function registerEventHandlers(): void {
   registered = true;
   subscribe(auditHandler);
   subscribe(notificationHandler);
-  subscribe(n8nWebhookHandler);
+  // n8n is optional; only post when configured to avoid local ECONNREFUSED noise.
+  if (process.env.N8N_WEBHOOK_URL?.trim()) {
+    subscribe(n8nWebhookHandler);
+  }
 }

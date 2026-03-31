@@ -29,10 +29,9 @@ export interface SendEmailOptions {
  */
 export async function sendEmail(options: SendEmailOptions): Promise<{ ok: boolean; error?: string }> {
   if (!resend) {
-    if (process.env.NODE_ENV === "development") {
-      console.log("[email] Skipped (no RESEND_API_KEY):", options.subject, "→", options.to);
-    }
-    return { ok: true };
+    const message = "Email not configured: RESEND_API_KEY is not set";
+    console.warn("[email]", message, "| skipped:", options.subject, "→", options.to);
+    return { ok: false, error: message };
   }
   const to = Array.isArray(options.to) ? options.to : [options.to];
   try {
