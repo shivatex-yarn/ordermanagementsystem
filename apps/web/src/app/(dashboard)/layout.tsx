@@ -10,6 +10,7 @@ import {
   AlertTriangle,
   KeyRound,
   LineChart,
+  Users,
   ChevronDown,
   LogOut,
 } from "lucide-react";
@@ -32,6 +33,7 @@ const nav = [
   { href: "/sla", label: "SLA & Breaches", icon: AlertTriangle },
   { href: "/md", label: "Executive overview", icon: LineChart, mdOverviewOnly: true },
   { href: "/notifications", label: "Notifications", icon: Bell },
+  { href: "/multi-division-access", label: "Multi-division access", icon: Users, managerOnly: true },
   { href: "/admin", label: "Admin Panel", icon: KeyRound, superAdminOnly: true },
 ];
 
@@ -81,6 +83,7 @@ export default function DashboardLayout({
     if (user.role === "MANAGING_DIRECTOR") {
       return item.href === "/md" || item.href === "/notifications";
     }
+    if ("managerOnly" in item && item.managerOnly && user.role !== "MANAGER") return false;
     if ("superAdminOnly" in item && item.superAdminOnly && user.role !== "SUPER_ADMIN" && user.role !== "MANAGING_DIRECTOR") {
       return false;
     }

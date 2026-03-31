@@ -336,8 +336,6 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [cancelError, setCancelError] = useState("");
-  const [commentBody, setCommentBody] = useState("");
-  const [commentError, setCommentError] = useState("");
   const [actionError, setActionError] = useState("");
   const [sampleDetails, setSampleDetails] = useState("");
   const [sampleQuantity, setSampleQuantity] = useState("");
@@ -501,25 +499,6 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     onError: (err: Error) => setCancelError(err.message),
   });
 
-  const commentMutation = useMutation({
-    mutationFn: (body: string) =>
-      fetch(`/api/orders/${orderId}/comments`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ body }),
-      }),
-    onSuccess: (res) => {
-      if (res.ok) {
-        setCommentBody("");
-        setCommentError("");
-        queryClient.invalidateQueries({ queryKey: ["order", orderId] });
-        queryClient.invalidateQueries({ queryKey: ["order-audit", orderId] });
-      }
-    },
-    onError: (err: Error) => setCommentError(err.message),
-  });
-
   const isManager = user && ["MANAGER", "SUPER_ADMIN"].includes(user.role);
   const canAct = order && isManager && ["PLACED", "TRANSFERRED", "IN_PROGRESS"].includes(order.status);
   /** Division-side reject — not shown to the person who raised the enquiry (they use Cancel enquiry instead). */
@@ -584,11 +563,6 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     order.status === "PLACED" &&
     user &&
     Number(user.id) === order.createdById;
-  const canComment =
-    order &&
-    user &&
-    order.status !== "CANCELLED" &&
-    (isManager || Number(user.id) === order.createdById);
 
   const hasSampleDetailsSaved =
     Boolean(order?.sampleDetails?.trim()) ||
@@ -1301,34 +1275,6 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 </li>
               ))}
             </ul>
-          </CardContent>
-        </Card>
-      )}
-
-      {((canComment && showInteractiveUi) || (isAuditView && (order.comments?.length ?? 0) > 0)) && (
-        <Card>
-          <CardHeader><CardTitle>Comments</CardTitle></CardHeader>
-          <CardContent className="space-y-4">
-            {order.comments?.length > 0 ? (
-              <ul className="space-y-2">
-                {order.comments.map((c: { id: number; body: string; user: { name: string }; createdAt: string }) => (
-                  <li key={c.id} className="rounded border border-slate-100 p-3 text-sm">
-                    <p>{c.body}</p>
-                    <p className="text-slate-500 mt-1">— {c.user.name} · {new Date(c.createdAt).toLocaleString()}</p>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              canComment &&
-              showInteractiveUi && <p className="text-slate-500 text-sm">No comments yet.</p>
-            )}
-            {canComment && showInteractiveUi && (
-              <form onSubmit={(e) => { e.preventDefault(); if (commentBody.trim()) commentMutation.mutate(commentBody.trim()); }} className="flex gap-2">
-                <Input value={commentBody} onChange={(e) => setCommentBody(e.target.value)} placeholder="Add a comment..." className="flex-1" />
-                <Button type="submit" disabled={!commentBody.trim() || commentMutation.isPending}>Add</Button>
-              </form>
-            )}
-            {commentError && <p className="text-sm text-red-600">{commentError}</p>}
           </CardContent>
         </Card>
       )}

@@ -98,7 +98,6 @@ export async function updateOrderWithEditHistory(
       include: {
         createdBy: { select: { id: true, name: true, email: true } },
         currentDivision: { select: { id: true, name: true } },
-        comments: { include: { user: { select: { id: true, name: true, email: true } } } },
         editHistory: { include: { user: { select: { id: true, name: true, email: true } } } },
       },
     });
@@ -132,39 +131,29 @@ export async function updateOrderWithEditHistory(
     include: {
       createdBy: { select: { id: true, name: true, email: true } },
       currentDivision: { select: { id: true, name: true } },
-      comments: { include: { user: { select: { id: true, name: true, email: true } } } },
       editHistory: { include: { user: { select: { id: true, name: true, email: true } } } },
     },
   });
 }
 
-export async function acceptOrder(orderId: number, acceptedById: number, reason: string) {
+export async function acceptOrder(orderId: number, acceptedById: number, _reason: string) {
+  void _reason;
   const order = await prisma.order.findUnique({ where: { id: orderId } });
   if (!order) return null;
   if (order.status !== "PLACED" && order.status !== "TRANSFERRED") return null;
-  const trimmedReason = reason.trim();
-  const [updated] = await prisma.$transaction([
-    prisma.order.update({
-      where: { id: orderId },
-      data: {
-        status: "IN_PROGRESS",
-        acceptedById,
-        slaDeadline: null,
-      },
-      include: {
-        createdBy: { select: { id: true, name: true, email: true } },
-        currentDivision: { select: { id: true, name: true } },
-        acceptedBy: { select: { id: true, name: true, email: true } },
-      },
-    }),
-    prisma.orderComment.create({
-      data: {
-        orderId,
-        userId: acceptedById,
-        body: `Accepted reason: ${trimmedReason}`,
-      },
-    }),
-  ]);
+  const updated = await prisma.order.update({
+    where: { id: orderId },
+    data: {
+      status: "IN_PROGRESS",
+      acceptedById,
+      slaDeadline: null,
+    },
+    include: {
+      createdBy: { select: { id: true, name: true, email: true } },
+      currentDivision: { select: { id: true, name: true } },
+      acceptedBy: { select: { id: true, name: true, email: true } },
+    },
+  });
   await publish({
     type: "OrderAccepted",
     orderId: updated.id,
