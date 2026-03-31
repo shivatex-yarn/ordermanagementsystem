@@ -8,23 +8,31 @@ import { getRateLimitIdentifierForUser, rateLimit } from "@/lib/rate-limit";
 import { cacheGet, cacheSet, cacheKeyOrdersList } from "@/lib/redis";
 import { getCreatedAtRange, normalizePeriodParam, parseCreatedAtRangeFromParams } from "@/lib/date-period";
 import { userMayRouteEnquiryToDivision } from "@/lib/division-access";
+import { timingHeaderValue, withTiming } from "@/lib/server-timing";
 
-const orderInclude = {
-  createdBy: { select: { id: true, name: true, email: true } },
-  currentDivision: { select: { id: true, name: true } },
-  previousDivision: { select: { id: true, name: true } },
-  acceptedBy: { select: { id: true, name: true, email: true } },
-  rejectedBy: { select: { id: true, name: true, email: true } },
-  receivedBy: { select: { id: true, name: true, email: true } },
-  completedBy: { select: { id: true, name: true, email: true } },
-};
+/**
+ * Keep list payload small: the Orders page only needs id, number, status, createdAt,
+ * division name, and (optionally) submitter name/email.
+ * Heavy relations belong in /api/orders/:id only.
+ */
+const orderListSelect = {
+  id: true,
+  orderNumber: true,
+  status: true,
+  createdAt: true,
+  currentDivision: { select: { name: true } },
+  createdBy: { select: { name: true, email: true } },
+} as const;
 
 export async function GET(req: Request) {
+  const marks: { name: string; durMs: number; desc?: string }[] = [];
   const auth = await withAuth();
   if (auth.response) return auth.response;
-  const { ok, remaining } = await rateLimit(
-    getRateLimitIdentifierForUser(req, Number(auth.payload.sub))
+  const rl = await withTiming("ratelimit", () =>
+    rateLimit(getRateLimitIdentifierForUser(req, Number(auth.payload.sub)))
   );
+  marks.push(rl.mark);
+  const { ok, remaining } = rl.value;
   if (!ok) {
     return NextResponse.json(
       { error: "Too many requests" },
@@ -57,10 +65,15 @@ export async function GET(req: Request) {
     })
   );
 
-  const cached = await cacheGet<{ orders: unknown[]; total: number; statusCounts?: Record<string, number> }>(
-    cacheKey
+  const cache = await withTiming("redis_get", () =>
+    cacheGet<{ orders: unknown[]; total: number; statusCounts?: Record<string, number> }>(cacheKey)
   );
-  if (cached) return NextResponse.json(cached);
+  marks.push(cache.mark);
+  if (cache.value) {
+    const res = NextResponse.json(cache.value);
+    res.headers.set("Server-Timing", timingHeaderValue([...marks, { name: "cache", durMs: 0, desc: "HIT" }]));
+    return res;
+  }
 
   const where: Prisma.OrderWhereInput = {};
   if (status) where.status = status as OrderStatus;
@@ -97,22 +110,30 @@ export async function GET(req: Request) {
   let total = 0;
   let statusCounts: Record<string, number> | undefined;
   try {
-    [orders, total] = await Promise.all([
+    const p1 = withTiming("db_findMany", () =>
       prisma.order.findMany({
         where,
-        include: orderInclude,
+        select: orderListSelect,
         orderBy: { createdAt: "desc" },
         skip: (page - 1) * limit,
         take: limit,
-      }),
-      prisma.order.count({ where }),
-    ]);
+      })
+    );
+    const p2 = withTiming("db_count", () => prisma.order.count({ where }));
+    const results = await Promise.all([p1, p2]);
+    marks.push(results[0].mark, results[1].mark);
+    orders = results[0].value;
+    total = results[1].value;
     if (wantStats) {
-      const grouped = await prisma.order.groupBy({
-        by: ["status"],
-        where,
-        _count: { _all: true },
-      });
+      const grp = await withTiming("db_groupBy", () =>
+        prisma.order.groupBy({
+          by: ["status"],
+          where,
+          _count: { _all: true },
+        })
+      );
+      marks.push(grp.mark);
+      const grouped = grp.value;
       statusCounts = Object.fromEntries(grouped.map((g) => [g.status, g._count._all])) as Record<string, number>;
     }
   } catch (err) {
@@ -142,8 +163,11 @@ export async function GET(req: Request) {
   }
 
   const result = { orders, total, page, limit, ...(statusCounts != null ? { statusCounts } : {}) };
-  await cacheSet(cacheKey, result, 90);
-  return NextResponse.json(result);
+  const set = await withTiming("redis_set", () => cacheSet(cacheKey, result, 90));
+  marks.push(set.mark);
+  const res = NextResponse.json(result);
+  res.headers.set("Server-Timing", timingHeaderValue([...marks, { name: "cache", durMs: 0, desc: "MISS" }]));
+  return res;
 }
 
 export async function POST(req: Request) {

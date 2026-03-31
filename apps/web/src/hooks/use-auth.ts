@@ -18,7 +18,13 @@ async function fetchMe(): Promise<{ user: User }> {
 }
 
 export function useAuth() {
-  const q = useQuery({ queryKey: ["auth", "me"], queryFn: fetchMe, retry: false });
+  const q = useQuery({
+    queryKey: ["auth", "me"],
+    queryFn: fetchMe,
+    retry: false,
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+  });
   return {
     user: q.data?.user ?? null,
     isLoading: q.isLoading,

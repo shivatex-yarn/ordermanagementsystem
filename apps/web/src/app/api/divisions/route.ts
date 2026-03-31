@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { withAuth, withRole } from "@/lib/with-auth";
 import { getRoutableDivisionIdsForUser } from "@/lib/division-access";
 import { z } from "zod";
+import { cacheGet, cacheSet } from "@/lib/redis";
 
 const createDivisionSchema = z.object({ name: z.string().min(1).max(255).trim() });
 
@@ -14,6 +15,7 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const includeInactive = searchParams.get("includeInactive") === "true" && (auth.payload.role === "SUPER_ADMIN" || auth.payload.role === "MANAGING_DIRECTOR");
     const routingScope = searchParams.get("scope") === "routing";
+    const transferScope = searchParams.get("scope") === "transfer";
 
     const where: Prisma.DivisionWhereInput = includeInactive ? {} : { active: true };
 
@@ -28,14 +30,26 @@ export async function GET(req: Request) {
       }
     }
 
-    const divisions = await prisma.division.findMany({
-      where,
-      orderBy: { name: "asc" },
-      include: {
-        managers: { include: { user: { select: { id: true, name: true, email: true, active: true } } } },
-      },
-    });
-    return NextResponse.json({ divisions });
+    const cacheKey = `oms:divisions:v2:${auth.payload.role}:${includeInactive ? "all" : "active"}:${routingScope ? "routing" : transferScope ? "transfer" : "full"}:${where.id ? "scoped" : "all"}`;
+    const cached = await cacheGet<{ divisions: unknown[] }>(cacheKey);
+    if (cached) return NextResponse.json(cached);
+
+    const divisions = transferScope
+      ? await prisma.division.findMany({
+          where,
+          orderBy: { name: "asc" },
+          select: { id: true, name: true, active: true },
+        })
+      : await prisma.division.findMany({
+          where,
+          orderBy: { name: "asc" },
+          include: {
+            managers: { include: { user: { select: { id: true, name: true, email: true, active: true } } } },
+          },
+        });
+    const payload = { divisions };
+    await cacheSet(cacheKey, payload, 120);
+    return NextResponse.json(payload);
   } catch (error) {
     console.error("GET /api/divisions failed", error);
     return NextResponse.json({ error: "Failed to load divisions" }, { status: 500 });

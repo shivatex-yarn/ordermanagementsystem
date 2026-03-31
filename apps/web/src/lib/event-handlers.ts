@@ -192,6 +192,12 @@ export function eventTypeToSummary(type: string, event: OrderEvent): string {
       return `Enquiry ${event.orderNumber} has breached the 48-hour SLA.`;
     case "SampleDetailsUpdated":
       return `Sample details were updated for enquiry ${event.orderNumber}.`;
+    case "SampleDevelopmentUpdated": {
+      const e = event as Extract<OrderEvent, { type: "SampleDevelopmentUpdated" }>;
+      return e.developmentType === "new"
+        ? `New development details were submitted for enquiry ${e.orderNumber}.`
+        : `Existing sample reference was recorded for enquiry ${e.orderNumber}.`;
+    }
     case "SampleApproved":
       return `Sample was approved for enquiry ${event.orderNumber}.`;
     case "SampleShipped": {

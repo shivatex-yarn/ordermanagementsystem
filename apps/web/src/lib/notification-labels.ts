@@ -9,6 +9,7 @@ export const NOTIFICATION_SHORT_LABELS: Record<string, string> = {
   OrderCompleted: "Completed",
   SLABreachDetected: "SLA alert",
   SampleDetailsUpdated: "Sample details",
+  SampleDevelopmentUpdated: "Sample development",
   SampleApproved: "Sample approved",
   SampleShipped: "Sample shipped",
   SalesFeedbackRecorded: "Sales feedback",

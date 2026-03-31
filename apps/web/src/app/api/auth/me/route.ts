@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { withAuth } from "@/lib/with-auth";
+import { cacheGet, cacheKeyUser, cacheSet } from "@/lib/redis";
+import { timingHeaderValue, withTiming } from "@/lib/server-timing";
 
 const MOCK_EMAIL = "superadmin@shivatex.in";
 const OFFLINE_MOCK_SUB = "0";
 
 export async function GET() {
+  const marks: { name: string; durMs: number; desc?: string }[] = [];
   try {
     const auth = await withAuth();
     if (auth.response) return auth.response;
@@ -27,21 +30,48 @@ export async function GET() {
     if (!Number.isInteger(userId) || userId < 1) {
       return NextResponse.json({ error: "Invalid session" }, { status: 401 });
     }
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        divisionId: true,
-        division: { select: { id: true, name: true } },
-      },
-    });
+
+    const cache = await withTiming("redis_get", () => cacheGet<{
+      user: {
+        id: number;
+        name: string;
+        email: string;
+        role: string;
+        divisionId: number | null;
+        division: { id: number; name: string } | null;
+      };
+    }>(cacheKeyUser(userId)));
+    marks.push(cache.mark);
+    if (cache.value?.user) {
+      const res = NextResponse.json(cache.value);
+      res.headers.set("Server-Timing", timingHeaderValue([...marks, { name: "cache", durMs: 0, desc: "HIT" }]));
+      return res;
+    }
+
+    const db = await withTiming("db_user", () =>
+      prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          divisionId: true,
+          division: { select: { id: true, name: true } },
+        },
+      })
+    );
+    marks.push(db.mark);
+    const user = db.value;
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
-    return NextResponse.json({ user });
+    const payload = { user };
+    const set = await withTiming("redis_set", () => cacheSet(cacheKeyUser(userId), payload, 300));
+    marks.push(set.mark);
+    const res = NextResponse.json(payload);
+    res.headers.set("Server-Timing", timingHeaderValue([...marks, { name: "cache", durMs: 0, desc: "MISS" }]));
+    return res;
   } catch (err) {
     console.error("[api/auth/me]", err);
     return NextResponse.json(

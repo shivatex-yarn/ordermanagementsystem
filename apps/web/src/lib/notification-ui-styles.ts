@@ -59,6 +59,12 @@ export function notificationCardStyles(type: string): {
         iconWrap: "bg-violet-600 text-white shadow-sm shadow-violet-600/20",
         dot: "bg-violet-500",
       };
+    case "SampleDevelopmentUpdated":
+      return {
+        shell: "border-purple-200/85 bg-gradient-to-br from-purple-50/80 via-white to-fuchsia-50/20 ring-1 ring-purple-400/10",
+        iconWrap: "bg-purple-600 text-white shadow-sm shadow-purple-600/20",
+        dot: "bg-purple-500",
+      };
     case "SampleApproved":
       return {
         shell: "border-cyan-200/85 bg-gradient-to-br from-cyan-50/85 via-white to-teal-50/30 ring-1 ring-cyan-400/12",
