@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { orderViewFieldsFromUnknown, userCanViewOrder } from "@/lib/order-view-permission";
+import { userCanViewOrder } from "@/lib/order-view-permission";
 import { withAuth } from "@/lib/with-auth";
-import { cacheGet, cacheSet, cacheKeyOrder } from "@/lib/redis";
 
 const fullInclude = {
   createdBy: { select: { id: true, name: true, email: true } },
@@ -47,18 +46,6 @@ export async function GET(
   if (!Number.isInteger(id)) {
     return NextResponse.json({ error: "Invalid enquiry id" }, { status: 400 });
   }
-  const cached = await cacheGet<unknown>(cacheKeyOrder(id));
-  if (cached) {
-    const fields = orderViewFieldsFromUnknown(cached);
-    if (fields) {
-      if (!(await userCanViewOrder(auth.payload, fields))) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-      }
-      return NextResponse.json(cached);
-    }
-    // Malformed cache entry — ignore and load from DB.
-  }
-
   let order;
   try {
     order = await prisma.order.findUnique({
@@ -108,7 +95,6 @@ export async function GET(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  await cacheSet(cacheKeyOrder(id), order, 180);
   return NextResponse.json(order);
 }
 

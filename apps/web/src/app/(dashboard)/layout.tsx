@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -45,6 +46,9 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const router = useRouter();
   const { user, isLoading } = useAuth();
+  /** Avoid hydration mismatch: unread counts differ between SSR and client. */
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   const { data: unreadData } = useQuery({
     queryKey: ["notifications-unread-count"],
@@ -58,7 +62,7 @@ export default function DashboardLayout({
   });
   const unreadCount = unreadData?.unreadCount ?? 0;
 
-  if (isLoading) {
+  if (!mounted || isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
         <div className="animate-pulse text-slate-500">Loading...</div>
@@ -133,7 +137,9 @@ export default function DashboardLayout({
               Welcome back, {user.name}
             </h2>
             <p className="text-xs text-slate-500">
-              {unreadCount > 0 ? `You have ${unreadCount} unread notification${unreadCount === 1 ? "" : "s"}.` : "You’re all caught up."}
+              {unreadCount > 0
+                ? `You have ${unreadCount} unread notification${unreadCount === 1 ? "" : "s"}.`
+                : "You’re all caught up."}
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2 sm:gap-3">
@@ -144,7 +150,9 @@ export default function DashboardLayout({
             <Link
               href="/notifications"
               className="relative flex h-9 w-9 items-center justify-center rounded-lg text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
-              aria-label={unreadCount ? `Notifications, ${unreadCount} unread` : "Notifications"}
+              aria-label={
+                unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"
+              }
             >
               <Bell className="h-5 w-5" />
               {unreadCount > 0 ? (

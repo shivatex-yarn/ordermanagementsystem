@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { withAuth } from "@/lib/with-auth";
 import { enrichNotificationRecords } from "@/lib/notification-enrich";
-import { cacheGet, cacheSet } from "@/lib/redis";
 
 /** JWT `sub` must be a non-negative integer (0 = offline mock user). */
 function parseUserId(sub: string): number | null {
@@ -21,13 +20,8 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
 
     if (searchParams.get("countOnly") === "true") {
-      const key = `oms:notifications:unreadCount:${userId}`;
-      const cached = await cacheGet<{ unreadCount: number }>(key);
-      if (cached) return NextResponse.json(cached);
       const unreadCount = await prisma.notification.count({ where: { userId, read: false } });
-      const payload = { unreadCount };
-      await cacheSet(key, payload, 15);
-      return NextResponse.json(payload);
+      return NextResponse.json({ unreadCount });
     }
 
     const unreadOnly = searchParams.get("unreadOnly") === "true";

@@ -4,7 +4,6 @@ import { prisma } from "@/lib/db";
 import { withAuth, withRole } from "@/lib/with-auth";
 import { getRoutableDivisionIdsForUser } from "@/lib/division-access";
 import { z } from "zod";
-import { cacheGet, cacheSet } from "@/lib/redis";
 
 const createDivisionSchema = z.object({ name: z.string().min(1).max(255).trim() });
 
@@ -30,10 +29,6 @@ export async function GET(req: Request) {
       }
     }
 
-    const cacheKey = `oms:divisions:v2:${auth.payload.role}:${includeInactive ? "all" : "active"}:${routingScope ? "routing" : transferScope ? "transfer" : "full"}:${where.id ? "scoped" : "all"}`;
-    const cached = await cacheGet<{ divisions: unknown[] }>(cacheKey);
-    if (cached) return NextResponse.json(cached);
-
     const divisions = transferScope
       ? await prisma.division.findMany({
           where,
@@ -47,9 +42,7 @@ export async function GET(req: Request) {
             managers: { include: { user: { select: { id: true, name: true, email: true, active: true } } } },
           },
         });
-    const payload = { divisions };
-    await cacheSet(cacheKey, payload, 120);
-    return NextResponse.json(payload);
+    return NextResponse.json({ divisions });
   } catch (error) {
     console.error("GET /api/divisions failed", error);
     return NextResponse.json({ error: "Failed to load divisions" }, { status: 500 });

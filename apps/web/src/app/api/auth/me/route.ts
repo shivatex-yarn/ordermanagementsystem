@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { withAuth } from "@/lib/with-auth";
-import { cacheGet, cacheKeyUser, cacheSet } from "@/lib/redis";
 import { timingHeaderValue, withTiming } from "@/lib/server-timing";
 
 const MOCK_EMAIL = "superadmin@shivatex.in";
@@ -31,23 +30,6 @@ export async function GET() {
       return NextResponse.json({ error: "Invalid session" }, { status: 401 });
     }
 
-    const cache = await withTiming("redis_get", () => cacheGet<{
-      user: {
-        id: number;
-        name: string;
-        email: string;
-        role: string;
-        divisionId: number | null;
-        division: { id: number; name: string } | null;
-      };
-    }>(cacheKeyUser(userId)));
-    marks.push(cache.mark);
-    if (cache.value?.user) {
-      const res = NextResponse.json(cache.value);
-      res.headers.set("Server-Timing", timingHeaderValue([...marks, { name: "cache", durMs: 0, desc: "HIT" }]));
-      return res;
-    }
-
     const db = await withTiming("db_user", () =>
       prisma.user.findUnique({
         where: { id: userId },
@@ -67,10 +49,8 @@ export async function GET() {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
     const payload = { user };
-    const set = await withTiming("redis_set", () => cacheSet(cacheKeyUser(userId), payload, 300));
-    marks.push(set.mark);
     const res = NextResponse.json(payload);
-    res.headers.set("Server-Timing", timingHeaderValue([...marks, { name: "cache", durMs: 0, desc: "MISS" }]));
+    res.headers.set("Server-Timing", timingHeaderValue(marks));
     return res;
   } catch (err) {
     console.error("[api/auth/me]", err);

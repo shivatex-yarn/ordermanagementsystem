@@ -1,8 +1,6 @@
 import { prisma } from "@/lib/db";
 import { publish } from "@/lib/events";
 import { registerEventHandlers } from "@/lib/event-handlers";
-import { cacheDel, cacheInvalidateOrdersLists, cacheKeyOrder } from "@/lib/redis";
-
 const SLA_HOURS = 48;
 
 registerEventHandlers();
@@ -55,7 +53,6 @@ export async function createOrder(
     timestamp: order.createdAt.toISOString(),
     userId: createdById,
   });
-  await cacheInvalidateOrdersLists();
   return order;
 }
 
@@ -124,8 +121,6 @@ export async function updateOrderWithEditHistory(
       })
     ),
   ]);
-  await cacheDel(cacheKeyOrder(orderId));
-  await cacheInvalidateOrdersLists();
   return prisma.order.findUnique({
     where: { id: orderId },
     include: {
@@ -163,8 +158,6 @@ export async function acceptOrder(orderId: number, acceptedById: number, _reason
     timestamp: new Date().toISOString(),
     userId: acceptedById,
   });
-  await cacheDel(cacheKeyOrder(orderId));
-  await cacheInvalidateOrdersLists();
   return updated;
 }
 
@@ -220,8 +213,6 @@ export async function transferOrder(
     timestamp: new Date().toISOString(),
     userId: transferredById,
   });
-  await cacheDel(cacheKeyOrder(orderId));
-  await cacheInvalidateOrdersLists();
   return updated;
 }
 
@@ -262,8 +253,6 @@ export async function rejectOrder(orderId: number, rejectedById: number, reason:
     timestamp: new Date().toISOString(),
     userId: rejectedById,
   });
-  await cacheDel(cacheKeyOrder(orderId));
-  await cacheInvalidateOrdersLists();
   return updated;
 }
 
@@ -301,8 +290,6 @@ export async function cancelOrderByCreator(orderId: number, cancelledById: numbe
     timestamp: new Date().toISOString(),
     userId: cancelledById,
   });
-  await cacheDel(cacheKeyOrder(orderId));
-  await cacheInvalidateOrdersLists();
   return updated;
 }
 
@@ -329,8 +316,6 @@ export async function receiveOrder(orderId: number, receivedById: number) {
     timestamp: new Date().toISOString(),
     userId: receivedById,
   });
-  await cacheDel(cacheKeyOrder(orderId));
-  await cacheInvalidateOrdersLists();
   return updated;
 }
 
@@ -358,8 +343,6 @@ export async function completeOrder(orderId: number, completedById: number) {
     userId: completedById,
     durationMs,
   });
-  await cacheDel(cacheKeyOrder(orderId));
-  await cacheInvalidateOrdersLists();
   return updated;
 }
 
@@ -398,8 +381,6 @@ export async function updateOrderSampleDetails(
     timestamp: new Date().toISOString(),
     userId,
   });
-  await cacheDel(cacheKeyOrder(orderId));
-  await cacheInvalidateOrdersLists();
   return updated;
 }
 
@@ -459,8 +440,6 @@ export async function updateOrderSampleDevelopment(
     timestamp: new Date().toISOString(),
     userId,
   });
-  await cacheDel(cacheKeyOrder(orderId));
-  await cacheInvalidateOrdersLists();
   return updated;
 }
 
@@ -507,8 +486,6 @@ export async function approveOrderSample(orderId: number, userId: number) {
     timestamp: new Date().toISOString(),
     userId,
   });
-  await cacheDel(cacheKeyOrder(orderId));
-  await cacheInvalidateOrdersLists();
   return updated;
 }
 
@@ -549,8 +526,6 @@ export async function recordSampleShipment(
     timestamp: new Date().toISOString(),
     userId,
   });
-  await cacheDel(cacheKeyOrder(orderId));
-  await cacheInvalidateOrdersLists();
   return updated;
 }
 
@@ -576,7 +551,5 @@ export async function recordSalesFeedback(orderId: number, userId: number, sales
     timestamp: new Date().toISOString(),
     userId,
   });
-  await cacheDel(cacheKeyOrder(orderId));
-  await cacheInvalidateOrdersLists();
   return updated;
 }

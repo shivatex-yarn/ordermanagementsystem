@@ -5,7 +5,6 @@ import { Prisma, type OrderStatus } from "@prisma/client";
 import { createOrderSchema } from "@/lib/validation";
 import { createOrder } from "@/lib/order-engine";
 import { getRateLimitIdentifierForUser, rateLimit } from "@/lib/rate-limit";
-import { cacheGet, cacheSet, cacheKeyOrdersList } from "@/lib/redis";
 import { getCreatedAtRange, normalizePeriodParam, parseCreatedAtRangeFromParams } from "@/lib/date-period";
 import { userMayRouteEnquiryToDivision } from "@/lib/division-access";
 import { timingHeaderValue, withTiming } from "@/lib/server-timing";
@@ -50,30 +49,6 @@ export async function GET(req: Request) {
   const dateTo = searchParams.get("to")?.trim() || null;
   const customCreatedRange = parseCreatedAtRangeFromParams(dateFrom, dateTo);
   const wantStats = searchParams.get("stats") === "1";
-  const cacheKey = cacheKeyOrdersList(
-    JSON.stringify({
-      userId: auth.payload.sub,
-      page,
-      limit,
-      status,
-      divisionId,
-      role: auth.payload.role,
-      period: customCreatedRange ? "" : period,
-      wantStats,
-      from: dateFrom ?? "",
-      to: dateTo ?? "",
-    })
-  );
-
-  const cache = await withTiming("redis_get", () =>
-    cacheGet<{ orders: unknown[]; total: number; statusCounts?: Record<string, number> }>(cacheKey)
-  );
-  marks.push(cache.mark);
-  if (cache.value) {
-    const res = NextResponse.json(cache.value);
-    res.headers.set("Server-Timing", timingHeaderValue([...marks, { name: "cache", durMs: 0, desc: "HIT" }]));
-    return res;
-  }
 
   const where: Prisma.OrderWhereInput = {};
   if (status) where.status = status as OrderStatus;
@@ -163,10 +138,8 @@ export async function GET(req: Request) {
   }
 
   const result = { orders, total, page, limit, ...(statusCounts != null ? { statusCounts } : {}) };
-  const set = await withTiming("redis_set", () => cacheSet(cacheKey, result, 90));
-  marks.push(set.mark);
   const res = NextResponse.json(result);
-  res.headers.set("Server-Timing", timingHeaderValue([...marks, { name: "cache", durMs: 0, desc: "MISS" }]));
+  res.headers.set("Server-Timing", timingHeaderValue(marks));
   return res;
 }
 

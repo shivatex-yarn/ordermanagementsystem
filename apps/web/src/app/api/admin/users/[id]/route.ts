@@ -92,24 +92,56 @@ export async function PATCH(
   return NextResponse.json(user);
 }
 
-/** Super Admin only: soft delete user (set active = false) */
+/** Super Admin only: permanently delete user when not referenced by enquiry workflow. Use PATCH { active: false } to deactivate. */
 export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await withRole(["SUPER_ADMIN"]);
   if (auth.response) return auth.response;
+  const sessionUserId = Number(auth.payload.sub);
   const id = Number((await params).id);
   if (!Number.isInteger(id)) {
     return NextResponse.json({ error: "Invalid user id" }, { status: 400 });
+  }
+  if (id === sessionUserId) {
+    return NextResponse.json({ error: "You cannot delete your own account" }, { status: 403 });
   }
   const user = await prisma.user.findUnique({ where: { id } });
   if (!user) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
-  await prisma.user.update({
-    where: { id },
-    data: { active: false },
+
+  const [orderRefs, transferRefs, rejectionRefs] = await Promise.all([
+    prisma.order.count({
+      where: {
+        OR: [
+          { createdById: id },
+          { acceptedById: id },
+          { rejectedById: id },
+          { receivedById: id },
+          { completedById: id },
+          { cancelledById: id },
+          { sampleApprovedById: id },
+        ],
+      },
+    }),
+    prisma.orderTransfer.count({ where: { transferredById: id } }),
+    prisma.orderRejection.count({ where: { rejectedById: id } }),
+  ]);
+  if (orderRefs + transferRefs + rejectionRefs > 0) {
+    return NextResponse.json(
+      {
+        error:
+          "This user is linked to enquiries or workflow history and cannot be removed. Deactivate them instead.",
+      },
+      { status: 409 }
+    );
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.divisionManager.deleteMany({ where: { userId: id } });
+    await tx.user.delete({ where: { id } });
   });
   return NextResponse.json({ ok: true });
 }

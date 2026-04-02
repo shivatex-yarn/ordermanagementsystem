@@ -24,6 +24,8 @@ export function useAuth() {
     retry: false,
     staleTime: 5 * 60_000,
     refetchOnWindowFocus: false,
+    // Relative `/api/...` URLs throw in Node during SSR (`Failed to parse URL`). Only fetch in the browser.
+    enabled: typeof window !== "undefined",
   });
   return {
     user: q.data?.user ?? null,

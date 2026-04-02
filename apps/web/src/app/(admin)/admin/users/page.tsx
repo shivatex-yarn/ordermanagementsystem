@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { UserPlus, Pencil, Trash2 } from "lucide-react";
+import { UserPlus, Pencil, UserX, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -36,15 +36,9 @@ type UserRow = {
   managedDivisions: Division[];
 };
 
-async function fetchUsers(): Promise<{ users: UserRow[] }> {
-  const res = await fetch("/api/admin/users", { credentials: "include" });
+async function fetchAdminUsersPage(): Promise<{ users: UserRow[]; divisions: Division[] }> {
+  const res = await fetch("/api/admin/users?includeDivisions=1", { credentials: "include" });
   if (!res.ok) throw new Error("Failed to fetch users");
-  return res.json();
-}
-
-async function fetchDivisions(): Promise<{ divisions: Division[] }> {
-  const res = await fetch("/api/divisions", { credentials: "include" });
-  if (!res.ok) throw new Error("Failed to fetch divisions");
   return res.json();
 }
 
@@ -54,6 +48,10 @@ export default function AdminUsersPage() {
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [editUser, setEditUser] = useState<UserRow | null>(null);
+  const [userToDeactivate, setUserToDeactivate] = useState<UserRow | null>(null);
+  const [userToDelete, setUserToDelete] = useState<UserRow | null>(null);
+  const [deactivateError, setDeactivateError] = useState("");
+  const [deleteError, setDeleteError] = useState("");
   const [error, setError] = useState("");
 
   const [name, setName] = useState("");
@@ -71,29 +69,55 @@ export default function AdminUsersPage() {
   const [editDivisionIds, setEditDivisionIds] = useState<number[]>([]);
   const [editActive, setEditActive] = useState(true);
 
-  const { data: usersData, isLoading } = useQuery({
+  const { data: pageData, isLoading } = useQuery({
     queryKey: ["admin-users"],
-    queryFn: fetchUsers,
+    queryFn: fetchAdminUsersPage,
   });
-  const { data: divisionsData } = useQuery({
-    queryKey: ["divisions"],
-    queryFn: fetchDivisions,
-  });
-  const users = usersData?.users ?? [];
-  const divisions = (divisionsData?.divisions ?? []).filter((d: Division) => d.active !== false);
-  const deleteUserMutation = useMutation({
+  const users = pageData?.users ?? [];
+  const divisions = (pageData?.divisions ?? []).filter((d: Division) => d.active !== false);
+
+  const invalidateUserQueries = () => {
+    queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+    queryClient.invalidateQueries({ queryKey: ["divisions"] });
+  };
+
+  const deactivateUserMutation = useMutation({
     mutationFn: async (id: number) => {
-      const res = await fetch(`/api/admin/users/${id}`, { method: "DELETE", credentials: "include" });
+      const res = await fetch(`/api/admin/users/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ active: false }),
+      });
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error || "Failed to deactivate");
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+      invalidateUserQueries();
       setEditUser(null);
+      setUserToDeactivate(null);
+      setDeactivateError("");
     },
-    onError: (err: Error) => setError(err.message),
+    onError: (err: Error) => setDeactivateError(err.message),
+  });
+
+  const deleteUserMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await fetch(`/api/admin/users/${id}`, { method: "DELETE", credentials: "include" });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to delete user");
+      }
+    },
+    onSuccess: () => {
+      invalidateUserQueries();
+      setEditUser(null);
+      setUserToDelete(null);
+      setDeleteError("");
+    },
+    onError: (err: Error) => setDeleteError(err.message),
   });
 
   const createMutation = useMutation({
@@ -116,7 +140,7 @@ export default function AdminUsersPage() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+      invalidateUserQueries();
       setCreateOpen(false);
       resetCreateForm();
       setError("");
@@ -150,7 +174,7 @@ export default function AdminUsersPage() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+      invalidateUserQueries();
       setEditUser(null);
       setError("");
     },
@@ -235,6 +259,8 @@ export default function AdminUsersPage() {
     updateMutation.mutate({ id: editUser.id, payload });
   }
 
+  const myUserId = user?.id;
+
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
@@ -307,12 +333,26 @@ export default function AdminUsersPage() {
                                 size="sm"
                                 className="text-red-600"
                                 onClick={() => {
-                                  if (confirm("Deactivate this user? They will not be able to log in."))
-                                    deleteUserMutation.mutate(u.id);
+                                  setDeactivateError("");
+                                  setUserToDeactivate(u);
+                                }}
+                              >
+                                <UserX className="h-4 w-4 mr-1" />
+                                Deactivate
+                              </Button>
+                            )}
+                            {myUserId !== undefined && u.id !== myUserId && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-red-600"
+                                onClick={() => {
+                                  setDeleteError("");
+                                  setUserToDelete(u);
                                 }}
                               >
                                 <Trash2 className="h-4 w-4 mr-1" />
-                                Deactivate
+                                Delete
                               </Button>
                             )}
                           </>
@@ -326,6 +366,111 @@ export default function AdminUsersPage() {
           )}
         </CardContent>
       </Card>
+
+      {!isViewOnly && (
+      <Dialog
+        open={!!userToDeactivate}
+        onOpenChange={(open) => {
+          if (!open) {
+            setUserToDeactivate(null);
+            setDeactivateError("");
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Deactivate user?</DialogTitle>
+          </DialogHeader>
+          {userToDeactivate && (
+            <>
+              <p className="text-slate-600">
+                <strong>{userToDeactivate.name}</strong> ({userToDeactivate.email}) will no longer be able to log in. You can reactivate them later from Edit user.
+              </p>
+              {deactivateError && (
+                <p className="text-sm text-red-600">{deactivateError}</p>
+              )}
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setUserToDeactivate(null);
+                    setDeactivateError("");
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  disabled={deactivateUserMutation.isPending}
+                  onClick={() =>
+                    userToDeactivate &&
+                    deactivateUserMutation.mutate(userToDeactivate.id)
+                  }
+                >
+                  {deactivateUserMutation.isPending ? "Deactivating…" : "Deactivate"}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+      )}
+
+      {!isViewOnly && (
+      <Dialog
+        open={!!userToDelete}
+        onOpenChange={(open) => {
+          if (!open) {
+            setUserToDelete(null);
+            setDeleteError("");
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete user permanently?</DialogTitle>
+          </DialogHeader>
+          {userToDelete && (
+            <>
+              <p className="text-slate-600">
+                <strong>{userToDelete.name}</strong> ({userToDelete.email}) will be removed from the database. This cannot be undone.
+              </p>
+              <p className="text-sm text-slate-500">
+                If this user is linked to enquiries or workflow history, deletion will be blocked — use <strong>Deactivate</strong> instead.
+              </p>
+              {deleteError && (
+                <p className="text-sm text-red-600">{deleteError}</p>
+              )}
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setUserToDelete(null);
+                    setDeleteError("");
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  disabled={deleteUserMutation.isPending}
+                  onClick={() =>
+                    userToDelete &&
+                    deleteUserMutation.mutate(userToDelete.id)
+                  }
+                >
+                  {deleteUserMutation.isPending ? "Deleting…" : "Delete permanently"}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+      )}
 
       {/* Create user dialog - hidden for MD */}
       {!isViewOnly && (

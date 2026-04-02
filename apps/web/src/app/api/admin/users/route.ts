@@ -4,11 +4,14 @@ import { prisma } from "@/lib/db";
 import { withRole } from "@/lib/with-auth";
 import { adminCreateUserSchema } from "@/lib/validation";
 
-/** Super Admin and MD (view): list users with division mapping */
-export async function GET() {
+/** Super Admin and MD (view): list users with division mapping. `?includeDivisions=1` adds active divisions in one response (admin Users UI). */
+export async function GET(req: Request) {
   try {
     const auth = await withRole(["SUPER_ADMIN", "MANAGING_DIRECTOR"]);
     if (auth.response) return auth.response;
+    const { searchParams } = new URL(req.url);
+    const includeDivisions = searchParams.get("includeDivisions") === "1";
+
     const users = await prisma.user.findMany({
       orderBy: [{ name: "asc" }],
       select: {
@@ -22,12 +25,19 @@ export async function GET() {
         managedDivisions: { include: { division: { select: { id: true, name: true } } } },
       },
     });
-    return NextResponse.json({
-      users: users.map((u) => ({
-        ...u,
-        managedDivisions: u.managedDivisions?.map((m) => m.division) ?? [],
-      })),
-    });
+    const userRows = users.map((u) => ({
+      ...u,
+      managedDivisions: u.managedDivisions?.map((m) => m.division) ?? [],
+    }));
+    if (includeDivisions) {
+      const divisions = await prisma.division.findMany({
+        where: { active: true },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true, active: true },
+      });
+      return NextResponse.json({ users: userRows, divisions });
+    }
+    return NextResponse.json({ users: userRows });
   } catch (error) {
     console.error("GET /api/admin/users failed", error);
     return NextResponse.json({ error: "Failed to load users" }, { status: 500 });

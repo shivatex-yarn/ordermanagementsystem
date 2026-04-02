@@ -1,9 +1,5 @@
-import { createHash } from "crypto";
-import type { Redis } from "ioredis";
-import { getRedis } from "@/lib/redis";
-
 /**
- * Distributed rate limiting when REDIS_URL is set; otherwise in-memory (single instance only).
+ * In-memory per-process rate limiting (sufficient for typical serverless single-region usage).
  */
 
 const WINDOW_SEC = 60;
@@ -37,37 +33,10 @@ function rateLimitMemory(identifier: string, maxRequests: number): { ok: boolean
   return { ok: entry.count <= maxRequests, remaining };
 }
 
-function redisRateLimitKey(identifier: string): string {
-  const hash = createHash("sha256").update(identifier).digest("hex");
-  return `oms:ratelimit:${hash}`;
-}
-
-async function rateLimitRedis(
-  client: Redis,
-  identifier: string,
-  maxRequests: number
-): Promise<{ ok: boolean; remaining: number }> {
-  const key = redisRateLimitKey(identifier);
-  const count = await client.incr(key);
-  if (count === 1) {
-    await client.expire(key, WINDOW_SEC);
-  }
-  const remaining = Math.max(0, maxRequests - count);
-  return { ok: count <= maxRequests, remaining };
-}
-
 export async function rateLimit(
   identifier: string,
   maxRequests: number = MAX_REQUESTS_DEFAULT
 ): Promise<{ ok: boolean; remaining: number }> {
-  const redis = getRedis();
-  if (redis) {
-    try {
-      return await rateLimitRedis(redis, identifier, maxRequests);
-    } catch {
-      return rateLimitMemory(identifier, maxRequests);
-    }
-  }
   return rateLimitMemory(identifier, maxRequests);
 }
 

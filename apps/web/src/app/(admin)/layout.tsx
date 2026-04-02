@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -33,8 +34,22 @@ export default function AdminLayout({
   const pathname = usePathname();
   const router = useRouter();
   const { user, isLoading } = useAuth();
+  /** Avoid hydration mismatch: auth/session can differ between SSR and client. */
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
-  if (isLoading) {
+  useEffect(() => {
+    if (isLoading || !mounted) return;
+    if (!user) {
+      router.replace("/login");
+      return;
+    }
+    if (user.role !== "SUPER_ADMIN" && user.role !== "MANAGING_DIRECTOR") {
+      router.replace("/dashboard");
+    }
+  }, [mounted, isLoading, user, router]);
+
+  if (!mounted || isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
         <div className="animate-pulse text-slate-500">Loading...</div>
@@ -43,13 +58,19 @@ export default function AdminLayout({
   }
 
   if (!user) {
-    router.replace("/login");
-    return null;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <div className="animate-pulse text-slate-500">Loading...</div>
+      </div>
+    );
   }
 
   if (user.role !== "SUPER_ADMIN" && user.role !== "MANAGING_DIRECTOR") {
-    router.replace("/dashboard");
-    return null;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <div className="animate-pulse text-slate-500">Loading...</div>
+      </div>
+    );
   }
   const isViewOnly = user.role === "MANAGING_DIRECTOR";
 
