@@ -1,6 +1,47 @@
 import { NextResponse } from "next/server";
+import type { OrderStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { withRole } from "@/lib/with-auth";
+import { runSlaBreachCheck } from "@/lib/sla-breach-job";
+import { parseCreatedAtRangeFromParams } from "@/lib/date-period";
+
+const ALL_ORDER_STATUSES: OrderStatus[] = [
+  "PLACED",
+  "IN_PROGRESS",
+  "TRANSFERRED",
+  "REJECTED",
+  "CANCELLED",
+  "COMPLETED",
+];
+
+function buildPipelineWhere(searchParams: URLSearchParams): Prisma.OrderWhereInput {
+  const dateFrom = searchParams.get("from")?.trim() || null;
+  const dateTo = searchParams.get("to")?.trim() || null;
+  const createdRange = parseCreatedAtRangeFromParams(dateFrom, dateTo);
+  const statusRaw = searchParams.get("status")?.trim() || "";
+  const divisionRaw = searchParams.get("divisionId")?.trim() || "";
+
+  const where: Prisma.OrderWhereInput = {};
+
+  if (statusRaw && ALL_ORDER_STATUSES.includes(statusRaw as OrderStatus)) {
+    where.status = statusRaw as OrderStatus;
+  } else {
+    where.status = { notIn: ["REJECTED", "CANCELLED"] };
+  }
+
+  if (createdRange) {
+    where.createdAt = { gte: createdRange.gte, lte: createdRange.lte };
+  }
+
+  if (divisionRaw) {
+    const id = Number(divisionRaw);
+    if (Number.isFinite(id) && id > 0) {
+      where.currentDivisionId = id;
+    }
+  }
+
+  return where;
+}
 
 function responseLabel(order: {
   status: string;
@@ -31,9 +72,17 @@ function responseLabel(order: {
 }
 
 /** Managing Director + Super Admin: full operational & escalation visibility */
-export async function GET() {
+export async function GET(req: Request) {
   const auth = await withRole(["MANAGING_DIRECTOR", "SUPER_ADMIN"]);
   if (auth.response) return auth.response;
+
+  /** Create `sla_breaches` + notify for any overdue orders (same as cron). Keeps UI in sync if cron is misconfigured. */
+  await runSlaBreachCheck().catch((err) => {
+    console.error("[md/overview] SLA breach sync failed:", err);
+  });
+
+  const { searchParams } = new URL(req.url);
+  const pipelineWhere = buildPipelineWhere(searchParams);
 
   const now = new Date();
 
@@ -78,7 +127,7 @@ export async function GET() {
     prisma.order.findMany({
       take: 100,
       orderBy: { updatedAt: "desc" },
-      where: { status: { notIn: ["REJECTED", "CANCELLED"] } },
+      where: pipelineWhere,
       select: {
         id: true,
         orderNumber: true,
