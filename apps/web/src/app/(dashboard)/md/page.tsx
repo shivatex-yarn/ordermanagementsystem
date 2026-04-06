@@ -6,6 +6,14 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useAuth } from "@/hooks/use-auth";
 import {
   AlertTriangle,
@@ -84,6 +92,16 @@ type Overview = {
 const MD_PIPELINE_PAGE_SIZE = 5;
 const MD_TRANSFERS_PAGE_SIZE = 5;
 
+const PIPELINE_STATUS_OPTIONS: { value: string; label: string }[] = [
+  { value: "", label: "All active" },
+  { value: "PLACED", label: "Placed" },
+  { value: "IN_PROGRESS", label: "In progress" },
+  { value: "TRANSFERRED", label: "Transferred" },
+  { value: "COMPLETED", label: "Completed" },
+  { value: "REJECTED", label: "Rejected" },
+  { value: "CANCELLED", label: "Cancelled" },
+];
+
 const AUDIT_PAGE_SIZE = 15;
 
 const AUDIT_ACTION_TABS = [
@@ -116,10 +134,37 @@ type MdAuditFeedResponse = {
   limit: number;
 };
 
-async function fetchOverview(): Promise<Overview> {
-  const res = await fetch("/api/md/overview", { credentials: "include" });
+type PipelineFilters = {
+  dateFrom: string;
+  dateTo: string;
+  status: string;
+  divisionId: string;
+};
+
+function buildOverviewQuery(f: PipelineFilters): string {
+  const q = new URLSearchParams();
+  if (f.dateFrom.trim() && f.dateTo.trim()) {
+    q.set("from", f.dateFrom.trim());
+    q.set("to", f.dateTo.trim());
+  }
+  if (f.status.trim()) q.set("status", f.status.trim());
+  if (f.divisionId.trim()) q.set("divisionId", f.divisionId.trim());
+  const s = q.toString();
+  return s ? `?${s}` : "";
+}
+
+async function fetchOverview(f: PipelineFilters): Promise<Overview> {
+  const res = await fetch(`/api/md/overview${buildOverviewQuery(f)}`, { credentials: "include" });
   if (!res.ok) throw new Error("Failed to load overview");
   return res.json();
+}
+
+async function fetchDivisionsForFilter(): Promise<{ id: number; name: string }[]> {
+  const res = await fetch("/api/divisions", { credentials: "include" });
+  if (!res.ok) throw new Error("Failed to load divisions");
+  const data = await res.json();
+  const list = data.divisions as { id: number; name: string }[];
+  return list ?? [];
 }
 
 async function fetchMdAuditFeed(page: number, action: string): Promise<MdAuditFeedResponse> {
@@ -156,9 +201,31 @@ export default function MdOverviewPage() {
   const [auditAction, setAuditAction] = useState("");
   const [pipelinePage, setPipelinePage] = useState(1);
   const [transfersPage, setTransfersPage] = useState(1);
+  const [pipelineDateFrom, setPipelineDateFrom] = useState("");
+  const [pipelineDateTo, setPipelineDateTo] = useState("");
+  const [pipelineStatus, setPipelineStatus] = useState("");
+  const [pipelineDivisionId, setPipelineDivisionId] = useState("");
+
+  const pipelineFilters: PipelineFilters = useMemo(
+    () => ({
+      dateFrom: pipelineDateFrom,
+      dateTo: pipelineDateTo,
+      status: pipelineStatus,
+      divisionId: pipelineDivisionId,
+    }),
+    [pipelineDateFrom, pipelineDateTo, pipelineStatus, pipelineDivisionId]
+  );
+
   const { data, isLoading, error } = useQuery({
-    queryKey: ["md-overview"],
-    queryFn: fetchOverview,
+    queryKey: ["md-overview", pipelineFilters],
+    queryFn: () => fetchOverview(pipelineFilters),
+  });
+
+  const { data: divisionOptions = [] } = useQuery({
+    queryKey: ["divisions-md-filter"],
+    queryFn: fetchDivisionsForFilter,
+    enabled: !!user,
+    staleTime: 60_000,
   });
   const {
     data: auditFeed,
@@ -193,6 +260,10 @@ export default function MdOverviewPage() {
     if (!data) return;
     setPipelinePage((p) => Math.min(p, pipelineTotalPages));
   }, [data, pipelineTotalPages]);
+
+  useEffect(() => {
+    setPipelinePage(1);
+  }, [pipelineDateFrom, pipelineDateTo, pipelineStatus, pipelineDivisionId]);
 
   useEffect(() => {
     if (!data) return;
@@ -287,9 +358,95 @@ export default function MdOverviewPage() {
           <h2 className="text-xl font-semibold text-slate-900">Enquiry pipeline</h2>
         </div>
         <p className="text-sm text-slate-500">
-          Up to 100 active enquiries (excluding rejected), shown {MD_PIPELINE_PAGE_SIZE} per page. Division Heads
-          responsible, response state, SLA risk, and recent transfer snippets.
+          Up to 100 enquiries per result set, shown {MD_PIPELINE_PAGE_SIZE} per page. Filter by created date,
+          status, or division. Default list excludes rejected and cancelled unless you choose those statuses.
         </p>
+        <Card className="border-slate-200/90 shadow-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Pipeline filters</CardTitle>
+            <p className="text-sm font-normal text-slate-500">
+              Date range filters by <strong className="font-medium text-slate-600">created date</strong> (UTC day
+              bounds). Both from and to are required for the range to apply.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:flex-wrap lg:items-end">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                <div className="space-y-2">
+                  <Label className="text-xs uppercase tracking-wide text-slate-500">From</Label>
+                  <input
+                    type="date"
+                    value={pipelineDateFrom}
+                    onChange={(e) => setPipelineDateFrom(e.target.value)}
+                    className="flex h-9 w-full min-w-40 rounded-md border border-slate-200 bg-white px-3 py-1 text-sm shadow-sm sm:w-40"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs uppercase tracking-wide text-slate-500">To</Label>
+                  <input
+                    type="date"
+                    value={pipelineDateTo}
+                    onChange={(e) => setPipelineDateTo(e.target.value)}
+                    className="flex h-9 w-full min-w-40 rounded-md border border-slate-200 bg-white px-3 py-1 text-sm shadow-sm sm:w-40"
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs uppercase tracking-wide text-slate-500">Status</Label>
+                <Select
+                  value={pipelineStatus || "all"}
+                  onValueChange={(v) => setPipelineStatus(v === "all" ? "" : v)}
+                >
+                  <SelectTrigger className="w-[200px]">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PIPELINE_STATUS_OPTIONS.map((o) => (
+                      <SelectItem key={o.value || "all"} value={o.value || "all"}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs uppercase tracking-wide text-slate-500">Division</Label>
+                <Select
+                  value={pipelineDivisionId || "all"}
+                  onValueChange={(v) => setPipelineDivisionId(v === "all" ? "" : v)}
+                >
+                  <SelectTrigger className="w-[220px]">
+                    <SelectValue placeholder="All divisions" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All divisions</SelectItem>
+                    {divisionOptions.map((d) => (
+                      <SelectItem key={d.id} value={String(d.id)}>
+                        {d.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {(pipelineDateFrom || pipelineDateTo || pipelineStatus || pipelineDivisionId) && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="text-slate-600"
+                  onClick={() => {
+                    setPipelineDateFrom("");
+                    setPipelineDateTo("");
+                    setPipelineStatus("");
+                    setPipelineDivisionId("");
+                  }}
+                >
+                  Clear filters
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1100px] text-left text-sm">

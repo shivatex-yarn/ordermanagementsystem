@@ -105,11 +105,14 @@ async function handleSlaBreachNotification(
     orderDetailUrl: `${appUrl}/orders/${fullOrder.id}`,
   };
 
-  for (const u of users) {
-    sendSlaBreachDetailEmail(u.email, u.name, payload).catch((err) =>
-      console.error("[email] SLA breach email failed for", u.email, err)
-    );
-  }
+  await Promise.all(
+    users.map(async (u) => {
+      const res = await sendSlaBreachDetailEmail(u.email, u.name, payload);
+      if (!res.ok) {
+        console.error("[email] SLA breach email failed for", u.email, res.error);
+      }
+    })
+  );
 }
 
 async function auditHandler(event: OrderEvent): Promise<void> {
