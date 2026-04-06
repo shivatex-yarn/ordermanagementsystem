@@ -91,6 +91,7 @@ type Overview = {
 
 const MD_PIPELINE_PAGE_SIZE = 5;
 const MD_TRANSFERS_PAGE_SIZE = 5;
+const MD_SLA_LIST_PAGE_SIZE = 5;
 
 const PIPELINE_STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: "", label: "All active" },
@@ -201,6 +202,8 @@ export default function MdOverviewPage() {
   const [auditAction, setAuditAction] = useState("");
   const [pipelinePage, setPipelinePage] = useState(1);
   const [transfersPage, setTransfersPage] = useState(1);
+  const [delayedPage, setDelayedPage] = useState(1);
+  const [breachesPage, setBreachesPage] = useState(1);
   const [pipelineDateFrom, setPipelineDateFrom] = useState("");
   const [pipelineDateTo, setPipelineDateTo] = useState("");
   const [pipelineStatus, setPipelineStatus] = useState("");
@@ -243,6 +246,12 @@ export default function MdOverviewPage() {
   const transfersTotalPages = data
     ? Math.max(1, Math.ceil(data.transfers.length / MD_TRANSFERS_PAGE_SIZE))
     : 1;
+  const delayedTotalPages = data
+    ? Math.max(1, Math.ceil(data.delayedEnquiries.length / MD_SLA_LIST_PAGE_SIZE))
+    : 1;
+  const breachesTotalPages = data
+    ? Math.max(1, Math.ceil(data.recentBreaches.length / MD_SLA_LIST_PAGE_SIZE))
+    : 1;
 
   const pipelineSlice = useMemo(() => {
     if (!data) return [];
@@ -256,6 +265,18 @@ export default function MdOverviewPage() {
     return data.transfers.slice(start, start + MD_TRANSFERS_PAGE_SIZE);
   }, [data, transfersPage]);
 
+  const delayedSlice = useMemo(() => {
+    if (!data) return [];
+    const start = (delayedPage - 1) * MD_SLA_LIST_PAGE_SIZE;
+    return data.delayedEnquiries.slice(start, start + MD_SLA_LIST_PAGE_SIZE);
+  }, [data, delayedPage]);
+
+  const breachesSlice = useMemo(() => {
+    if (!data) return [];
+    const start = (breachesPage - 1) * MD_SLA_LIST_PAGE_SIZE;
+    return data.recentBreaches.slice(start, start + MD_SLA_LIST_PAGE_SIZE);
+  }, [data, breachesPage]);
+
   useEffect(() => {
     if (!data) return;
     setPipelinePage((p) => Math.min(p, pipelineTotalPages));
@@ -263,12 +284,24 @@ export default function MdOverviewPage() {
 
   useEffect(() => {
     setPipelinePage(1);
+    setDelayedPage(1);
+    setBreachesPage(1);
   }, [pipelineDateFrom, pipelineDateTo, pipelineStatus, pipelineDivisionId]);
 
   useEffect(() => {
     if (!data) return;
     setTransfersPage((p) => Math.min(p, transfersTotalPages));
   }, [data, transfersTotalPages]);
+
+  useEffect(() => {
+    if (!data) return;
+    setDelayedPage((p) => Math.min(p, delayedTotalPages));
+  }, [data, delayedTotalPages]);
+
+  useEffect(() => {
+    if (!data) return;
+    setBreachesPage((p) => Math.min(p, breachesTotalPages));
+  }, [data, breachesTotalPages]);
 
   if (isLoading) {
     return (
@@ -577,30 +610,60 @@ export default function MdOverviewPage() {
             <h2 className="text-xl font-semibold text-slate-900">Past deadline (action needed)</h2>
           </div>
           <Card className="border-slate-200 shadow-sm">
-            <CardContent className="pt-6">
+            <CardContent className="p-0">
               {!data.delayedEnquiries.length ? (
-                <p className="text-sm text-slate-500">No enquiries currently past the SLA deadline.</p>
+                <p className="px-6 pt-6 pb-6 text-sm text-slate-500">No enquiries currently past the SLA deadline.</p>
               ) : (
-                <ul className="divide-y divide-slate-100">
-                  {data.delayedEnquiries.map((o) => (
-                    <li key={o.id} className="flex flex-wrap items-start justify-between gap-2 py-3 first:pt-0">
-                      <div>
-                        <Link href={`/orders/${o.id}`} className="font-semibold text-indigo-700 hover:underline">
-                          {o.orderNumber}
-                        </Link>
-                        <p className="text-xs text-slate-500">{o.companyName ?? "—"} · {o.currentDivision.name}</p>
-                      </div>
-                      <div className="text-right">
-                        <Badge variant="secondary">{o.status}</Badge>
-                        {o.slaDeadline && (
-                          <p className="mt-1 text-xs text-red-600">
-                            Due {new Date(o.slaDeadline).toLocaleString()}
-                          </p>
-                        )}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+                <>
+                  <ul className="divide-y divide-slate-100 px-6 pt-6">
+                    {delayedSlice.map((o) => (
+                      <li key={o.id} className="flex flex-wrap items-start justify-between gap-2 py-3 first:pt-0">
+                        <div>
+                          <Link href={`/orders/${o.id}`} className="font-semibold text-indigo-700 hover:underline">
+                            {o.orderNumber}
+                          </Link>
+                          <p className="text-xs text-slate-500">{o.companyName ?? "—"} · {o.currentDivision.name}</p>
+                        </div>
+                        <div className="text-right">
+                          <Badge variant="secondary">{o.status}</Badge>
+                          {o.slaDeadline && (
+                            <p className="mt-1 text-xs text-red-600">
+                              Due {new Date(o.slaDeadline).toLocaleString()}
+                            </p>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-xs text-slate-500">
+                      Page {delayedPage} of {delayedTotalPages} · {data.delayedEnquiries.length}{" "}
+                      {data.delayedEnquiries.length === 1 ? "enquiry" : "enquiries"}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8"
+                        disabled={delayedPage <= 1}
+                        onClick={() => setDelayedPage((p) => Math.max(1, p - 1))}
+                      >
+                        Previous
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8"
+                        disabled={delayedPage >= delayedTotalPages}
+                        onClick={() => setDelayedPage((p) => Math.min(delayedTotalPages, p + 1))}
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>
@@ -611,26 +674,56 @@ export default function MdOverviewPage() {
             <h2 className="text-xl font-semibold text-slate-900">Recorded escalations (open breaches)</h2>
           </div>
           <Card className="border-slate-200 shadow-sm">
-            <CardContent className="pt-6">
+            <CardContent className="p-0">
               {!data.recentBreaches.length ? (
-                <p className="text-sm text-slate-500">No open breach records.</p>
+                <p className="px-6 pt-6 pb-6 text-sm text-slate-500">No open breach records.</p>
               ) : (
-                <ul className="divide-y divide-slate-100">
-                  {data.recentBreaches.map((b) => (
-                    <li key={b.id} className="flex flex-wrap items-center justify-between gap-2 py-3 first:pt-0">
-                      <div>
-                        <Link
-                          href={`/orders/${b.order.id}`}
-                          className="font-semibold text-indigo-700 hover:underline"
-                        >
-                          {b.order.orderNumber}
-                        </Link>
-                        <p className="text-xs text-slate-500">{b.division.name}</p>
-                      </div>
-                      <span className="text-xs text-slate-500">{new Date(b.breachedAt).toLocaleString()}</span>
-                    </li>
-                  ))}
-                </ul>
+                <>
+                  <ul className="divide-y divide-slate-100 px-6 pt-6">
+                    {breachesSlice.map((b) => (
+                      <li key={b.id} className="flex flex-wrap items-center justify-between gap-2 py-3 first:pt-0">
+                        <div>
+                          <Link
+                            href={`/orders/${b.order.id}`}
+                            className="font-semibold text-indigo-700 hover:underline"
+                          >
+                            {b.order.orderNumber}
+                          </Link>
+                          <p className="text-xs text-slate-500">{b.division.name}</p>
+                        </div>
+                        <span className="text-xs text-slate-500">{new Date(b.breachedAt).toLocaleString()}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-xs text-slate-500">
+                      Page {breachesPage} of {breachesTotalPages} · {data.recentBreaches.length} breach
+                      {data.recentBreaches.length === 1 ? "" : "es"}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8"
+                        disabled={breachesPage <= 1}
+                        onClick={() => setBreachesPage((p) => Math.max(1, p - 1))}
+                      >
+                        Previous
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8"
+                        disabled={breachesPage >= breachesTotalPages}
+                        onClick={() => setBreachesPage((p) => Math.min(breachesTotalPages, p + 1))}
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>
