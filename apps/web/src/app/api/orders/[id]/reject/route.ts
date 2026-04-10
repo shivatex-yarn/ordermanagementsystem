@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { withRole } from "@/lib/with-auth";
 import { rejectOrderSchema } from "@/lib/validation";
 import { rejectOrder } from "@/lib/order-engine";
+import { prisma } from "@/lib/db";
 
 export async function POST(
   req: Request,
@@ -16,6 +17,16 @@ export async function POST(
     return NextResponse.json(
       { error: "Invalid input", details: parsed.error.flatten() },
       { status: 400 }
+    );
+  }
+  const gate = await prisma.sLABreach.findFirst({
+    where: { orderId: parsed.data.orderId, resolvedAt: null, headRejectedAt: null },
+    select: { id: true },
+  });
+  if (gate) {
+    return NextResponse.json(
+      { error: "SLA breach requires Division Head rejection message before proceeding." },
+      { status: 409 }
     );
   }
   const order = await rejectOrder(

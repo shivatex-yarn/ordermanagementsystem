@@ -11,6 +11,91 @@ function addHours(date: Date, h: number): Date {
   return d;
 }
 
+function computeSlaDeadline(start: Date): Date {
+  // Business rule: SLA should not fall on Sunday; push Sunday deadlines to Monday same time.
+  const d = addHours(start, SLA_HOURS);
+  if (d.getDay() !== 0) return d;
+  d.setDate(d.getDate() + 1);
+  return d;
+}
+
+async function getOpenSlaBreach(orderId: number) {
+  return prisma.sLABreach.findFirst({
+    where: { orderId, resolvedAt: null },
+    select: {
+      id: true,
+      divisionId: true,
+      breachedAt: true,
+      headRejectedAt: true,
+      headRejectionMessage: true,
+      headRejectedById: true,
+    },
+  });
+}
+
+async function userIsDivisionHead(userId: number, divisionId: number): Promise<boolean> {
+  const link = await prisma.divisionManager.findFirst({
+    where: { userId, divisionId },
+    select: { id: true },
+  });
+  return Boolean(link);
+}
+
+async function blockedByUnansweredBreach(orderId: number): Promise<boolean> {
+  const breach = await getOpenSlaBreach(orderId);
+  return Boolean(breach && !breach.headRejectedAt);
+}
+
+export async function submitSlaHeadRejection(
+  orderId: number,
+  headUserId: number,
+  message: string,
+  opts?: { bypassHeadCheck?: boolean }
+) {
+  const breach = await prisma.sLABreach.findFirst({
+    where: { orderId, resolvedAt: null },
+    select: { id: true, divisionId: true, headRejectedAt: true },
+  });
+  if (!breach) return null;
+  if (breach.headRejectedAt) return null;
+
+  if (!opts?.bypassHeadCheck) {
+    const isHead = await userIsDivisionHead(headUserId, breach.divisionId);
+    if (!isHead) return null;
+  }
+
+  const now = new Date();
+  await prisma.sLABreach.update({
+    where: { id: breach.id },
+    data: {
+      headRejectionMessage: message.trim(),
+      headRejectedAt: now,
+      headRejectedById: headUserId,
+    },
+  });
+
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: { id: true, orderNumber: true, currentDivisionId: true },
+  });
+  if (order) {
+    await publish({
+      type: "SLABreachHeadRejectionSubmitted",
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      divisionId: order.currentDivisionId,
+      breachId: breach.id,
+      headRejectedById: headUserId,
+      message: message.trim(),
+      headRejectedAt: now.toISOString(),
+      timestamp: now.toISOString(),
+      userId: headUserId,
+    });
+  }
+
+  return { ok: true, breachId: breach.id, headRejectedAt: now.toISOString() };
+}
+
 export async function createOrder(
   createdById: number,
   divisionId: number,
@@ -23,7 +108,7 @@ export async function createOrder(
   }
 ) {
   const orderNumber = `Enq-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-  const slaDeadline = addHours(new Date(), SLA_HOURS);
+  const slaDeadline = computeSlaDeadline(new Date());
   const sampleRequested = Boolean(data.sampleRequested);
   const order = await prisma.order.create({
     data: {
@@ -135,6 +220,7 @@ export async function acceptOrder(orderId: number, acceptedById: number, _reason
   void _reason;
   const order = await prisma.order.findUnique({ where: { id: orderId } });
   if (!order) return null;
+  if (await blockedByUnansweredBreach(orderId)) return null;
   if (order.status !== "PLACED" && order.status !== "TRANSFERRED") return null;
   const updated = await prisma.order.update({
     where: { id: orderId },
@@ -165,13 +251,17 @@ export async function transferOrder(
   orderId: number,
   transferredById: number,
   toDivisionId: number,
-  reason: string
+  reason: string,
+  opts?: { bypassSlaGate?: boolean }
 ) {
+  if (!opts?.bypassSlaGate) {
+    if (await blockedByUnansweredBreach(orderId)) return null;
+  }
   const order = await prisma.order.findUnique({ where: { id: orderId } });
   if (!order) return null;
   if (order.status !== "PLACED" && order.status !== "TRANSFERRED" && order.status !== "IN_PROGRESS")
     return null;
-  const slaDeadline = addHours(new Date(), SLA_HOURS);
+  const slaDeadline = computeSlaDeadline(new Date());
   const [transfer] = await prisma.$transaction([
     prisma.orderTransfer.create({
       data: {
@@ -219,6 +309,7 @@ export async function transferOrder(
 export async function rejectOrder(orderId: number, rejectedById: number, reason: string) {
   const order = await prisma.order.findUnique({ where: { id: orderId } });
   if (!order) return null;
+  if (await blockedByUnansweredBreach(orderId)) return null;
   if (order.status === "REJECTED" || order.status === "COMPLETED" || order.status === "CANCELLED") return null;
   await prisma.$transaction([
     prisma.orderRejection.create({
@@ -294,10 +385,11 @@ export async function cancelOrderByCreator(orderId: number, cancelledById: numbe
 }
 
 export async function receiveOrder(orderId: number, receivedById: number) {
+  if (await blockedByUnansweredBreach(orderId)) return null;
   const order = await prisma.order.findUnique({ where: { id: orderId } });
   if (!order) return null;
   if (order.status !== "TRANSFERRED") return null;
-  const slaDeadline = addHours(new Date(), SLA_HOURS);
+  const slaDeadline = computeSlaDeadline(new Date());
   const updated = await prisma.order.update({
     where: { id: orderId },
     data: { receivedById, slaDeadline },
@@ -320,6 +412,7 @@ export async function receiveOrder(orderId: number, receivedById: number) {
 }
 
 export async function completeOrder(orderId: number, completedById: number) {
+  if (await blockedByUnansweredBreach(orderId)) return null;
   const order = await prisma.order.findUnique({ where: { id: orderId } });
   if (!order) return null;
   if (order.status !== "IN_PROGRESS") return null;

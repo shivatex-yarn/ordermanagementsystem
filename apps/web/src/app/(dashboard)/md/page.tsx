@@ -84,6 +84,9 @@ type Overview = {
     breachedAt: string;
     order: { id: number; orderNumber: string; status: string };
     division: { id: number; name: string };
+    headRejectedAt: string | null;
+    headRejectedBy: { id: number; name: string; email: string } | null;
+    headRejectionMessage: string | null;
   }>;
   pipeline: PipelineRow[];
   transfers: TransferRow[];
@@ -114,6 +117,7 @@ const AUDIT_ACTION_TABS = [
   { value: "OrderCompleted", label: "Completed" },
   { value: "OrderRejected", label: "Rejected" },
   { value: "SLABreachDetected", label: "SLA breach" },
+  { value: "SLABreachHeadRejectionSubmitted", label: "SLA head rejection" },
   { value: "SampleDetailsUpdated", label: "Sample update" },
   { value: "SampleApproved", label: "Sample approved" },
   { value: "SampleShipped", label: "Sample shipped" },
@@ -690,6 +694,14 @@ export default function MdOverviewPage() {
                             {b.order.orderNumber}
                           </Link>
                           <p className="text-xs text-slate-500">{b.division.name}</p>
+                          {b.headRejectedAt ? (
+                            <p className="mt-1 text-xs text-emerald-700">
+                              Head rejection: {new Date(b.headRejectedAt).toLocaleString()}
+                              {b.headRejectedBy?.name ? <> · {b.headRejectedBy.name}</> : null}
+                            </p>
+                          ) : (
+                            <p className="mt-1 text-xs font-medium text-amber-700">Awaiting head rejection message</p>
+                          )}
                         </div>
                         <span className="text-xs text-slate-500">{new Date(b.breachedAt).toLocaleString()}</span>
                       </li>

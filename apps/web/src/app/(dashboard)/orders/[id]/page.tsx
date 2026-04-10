@@ -92,6 +92,8 @@ function auditPayloadSummary(action: string, payload: unknown): string {
       return p.reason ? `Reason: ${String(p.reason)}` : "";
     case "OrderCompleted":
       return p.durationMs != null ? `Elapsed: ${Math.round(Number(p.durationMs) / 1000)}s` : "";
+    case "SLABreachHeadRejectionSubmitted":
+      return p.message ? `Message: ${String(p.message)}` : "";
     default:
       return "";
   }
@@ -112,6 +114,7 @@ function auditActionLabel(action: string): string {
     SampleShipped: "Sample sent / shipped",
     SalesFeedbackRecorded: "Sales / user response",
     SLABreachDetected: "SLA breach",
+    SLABreachHeadRejectionSubmitted: "SLA head rejection submitted",
   };
   return m[action] ?? action;
 }
@@ -355,6 +358,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [newDevWhy, setNewDevWhy] = useState("");
   const [newDevTech, setNewDevTech] = useState("");
   const [newDevRequestList, setNewDevRequestList] = useState("");
+  const [slaHeadRejectionMessage, setSlaHeadRejectionMessage] = useState("");
+  const [slaHeadRejectionError, setSlaHeadRejectionError] = useState("");
 
   const {
     data: order,
@@ -458,6 +463,31 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         queryClient.invalidateQueries({ queryKey: ["orders"] });
         queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       }
+    },
+  });
+
+  const slaHeadRejectionMutation = useMutation({
+    mutationFn: () =>
+      fetch(`/api/orders/${orderId}/sla-head-rejection`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ message: slaHeadRejectionMessage }),
+      }),
+    onSuccess: async (res) => {
+      if (res.ok) {
+        setSlaHeadRejectionMessage("");
+        setSlaHeadRejectionError("");
+        queryClient.invalidateQueries({ queryKey: ["order", orderId] });
+        queryClient.invalidateQueries({ queryKey: ["order-audit", orderId] });
+        queryClient.invalidateQueries({ queryKey: ["sla"] });
+        queryClient.invalidateQueries({ queryKey: ["md-overview"] });
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      setSlaHeadRejectionError(
+        (data as { error?: string }).error || "Failed to submit head rejection message"
+      );
     },
   });
   const receiveMutation = useMutation({
@@ -586,6 +616,16 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   }, [order?.id, order?.customFields, order?.sampleRequested]);
 
   const isEnquirySubmitter = Boolean(order && user && Number(user.id) === order.createdById);
+  const openSlaBreach = (order?.slaBreaches && Array.isArray(order.slaBreaches) && order.slaBreaches.length
+    ? order.slaBreaches[0]
+    : null) as any; // eslint-disable-line @typescript-eslint/no-explicit-any -- wide API payload
+  const isDivisionHead = Boolean(
+    user &&
+      order?.currentDivision?.managers &&
+      Array.isArray(order.currentDivision.managers) &&
+      order.currentDivision.managers.some((m: any) => Number(m.user?.id) === Number(user.id))
+  );
+  const awaitingHeadRejection = Boolean(openSlaBreach && !openSlaBreach.headRejectedAt);
   const canCancel =
     showInteractiveUi &&
     order &&
@@ -772,6 +812,60 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             </div>
           )}
           {order.slaDeadline && <p><span className="text-slate-500">SLA deadline:</span> {new Date(order.slaDeadline).toLocaleString()}</p>}
+          {openSlaBreach ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-3 text-sm">
+              <p className="font-medium text-amber-950">SLA breach recorded</p>
+              <p className="mt-1 text-xs text-amber-900/80">
+                Breached at {new Date(openSlaBreach.breachedAt).toLocaleString()} · Division{" "}
+                {openSlaBreach.division?.name ?? order.currentDivision?.name ?? "—"}
+              </p>
+              {openSlaBreach.headRejectedAt ? (
+                <div className="mt-2 text-xs text-slate-700">
+                  <p>
+                    <span className="text-slate-500">Head rejection submitted:</span>{" "}
+                    <span className="font-mono">{new Date(openSlaBreach.headRejectedAt).toLocaleString()}</span>
+                    {openSlaBreach.headRejectedBy?.name ? (
+                      <>
+                        {" "}
+                        by <span className="font-medium">{openSlaBreach.headRejectedBy.name}</span>
+                      </>
+                    ) : null}
+                  </p>
+                  {openSlaBreach.headRejectionMessage ? (
+                    <p className="mt-1 whitespace-pre-wrap">{openSlaBreach.headRejectionMessage}</p>
+                  ) : null}
+                </div>
+              ) : (
+                <p className="mt-2 text-xs font-medium text-amber-800">
+                  Awaiting Division Head rejection message. Actions are blocked until this is submitted.
+                </p>
+              )}
+
+              {showInteractiveUi && awaitingHeadRejection && isDivisionHead && user?.role === "MANAGER" ? (
+                <div className="mt-3 space-y-2">
+                  <Label className="text-xs uppercase tracking-wide text-amber-900/70">
+                    Division Head rejection message (delay / breach)
+                  </Label>
+                  <textarea
+                    value={slaHeadRejectionMessage}
+                    onChange={(e) => setSlaHeadRejectionMessage(e.target.value)}
+                    className="w-full min-h-[90px] rounded-md border border-amber-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                    placeholder="Explain the reason for the delay / breach and the decision."
+                  />
+                  {slaHeadRejectionError ? (
+                    <p className="text-xs text-red-700">{slaHeadRejectionError}</p>
+                  ) : null}
+                  <Button
+                    type="button"
+                    disabled={slaHeadRejectionMutation.isPending || !slaHeadRejectionMessage.trim()}
+                    onClick={() => slaHeadRejectionMutation.mutate()}
+                  >
+                    Submit rejection message
+                  </Button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           {!isAuditView ? (
             <p>
               <span className="text-slate-500">Transfers:</span> {order.transferCount} ·{" "}

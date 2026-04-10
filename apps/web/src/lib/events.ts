@@ -12,6 +12,7 @@ export type OrderEventType =
   | "OrderCancelled"
   | "OrderReceived"
   | "SLABreachDetected"
+  | "SLABreachHeadRejectionSubmitted"
   | "SampleDetailsUpdated"
   | "SampleDevelopmentUpdated"
   | "SampleApproved"
@@ -77,6 +78,15 @@ export interface SLABreachEvent extends BaseOrderEvent {
   orderId: number;
 }
 
+export interface SLABreachHeadRejectionSubmittedEvent extends BaseOrderEvent {
+  type: "SLABreachHeadRejectionSubmitted";
+  divisionId: number;
+  breachId: number;
+  headRejectedById: number;
+  message: string;
+  headRejectedAt: string;
+}
+
 export interface SampleDetailsUpdatedEvent extends BaseOrderEvent {
   type: "SampleDetailsUpdated";
   divisionId: number;
@@ -115,6 +125,7 @@ export type OrderEvent =
   | OrderCancelledEvent
   | OrderReceivedEvent
   | SLABreachEvent
+  | SLABreachHeadRejectionSubmittedEvent
   | SampleDetailsUpdatedEvent
   | SampleDevelopmentUpdatedEvent
   | SampleApprovedEvent

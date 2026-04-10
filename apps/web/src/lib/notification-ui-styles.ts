@@ -53,6 +53,12 @@ export function notificationCardStyles(type: string): {
         iconWrap: "bg-orange-600 text-white shadow-sm shadow-orange-500/25",
         dot: "bg-orange-500",
       };
+    case "SLABreachHeadRejectionSubmitted":
+      return {
+        shell: "border-amber-200/85 bg-gradient-to-br from-amber-50/85 via-white to-yellow-50/25 ring-1 ring-amber-400/12",
+        iconWrap: "bg-amber-600 text-white shadow-sm shadow-amber-600/20",
+        dot: "bg-amber-500",
+      };
     case "SampleDetailsUpdated":
       return {
         shell: "border-violet-200/85 bg-gradient-to-br from-violet-50/80 via-white to-fuchsia-50/25 ring-1 ring-violet-400/10",

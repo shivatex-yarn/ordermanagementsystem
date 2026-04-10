@@ -193,6 +193,10 @@ export function eventTypeToSummary(type: string, event: OrderEvent): string {
       return `Enquiry ${event.orderNumber} has been completed.`;
     case "SLABreachDetected":
       return `Enquiry ${event.orderNumber} has breached the 48-hour SLA.`;
+    case "SLABreachHeadRejectionSubmitted": {
+      const e = event as Extract<OrderEvent, { type: "SLABreachHeadRejectionSubmitted" }>;
+      return `Division Head submitted a delay/breach rejection for enquiry ${e.orderNumber}.`;
+    }
     case "SampleDetailsUpdated":
       return `Sample details were updated for enquiry ${event.orderNumber}.`;
     case "SampleDevelopmentUpdated": {

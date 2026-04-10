@@ -120,6 +120,7 @@ export async function GET(req: Request) {
       include: {
         order: { select: { id: true, orderNumber: true, status: true } },
         division: { select: { id: true, name: true } },
+        headRejectedBy: { select: { id: true, name: true, email: true } },
       },
       orderBy: { breachedAt: "desc" },
       take: 40,
@@ -146,7 +147,13 @@ export async function GET(req: Request) {
         slaBreaches: {
           where: { resolvedAt: null },
           take: 1,
-          select: { id: true, breachedAt: true },
+          select: {
+            id: true,
+            breachedAt: true,
+            headRejectedAt: true,
+            headRejectedById: true,
+            headRejectionMessage: true,
+          },
         },
         transfers: {
           orderBy: { createdAt: "desc" },
@@ -245,6 +252,9 @@ export async function GET(req: Request) {
       breachedAt: b.breachedAt.toISOString(),
       order: b.order,
       division: b.division,
+      headRejectedAt: b.headRejectedAt?.toISOString() ?? null,
+      headRejectedBy: b.headRejectedBy ? { ...b.headRejectedBy } : null,
+      headRejectionMessage: b.headRejectionMessage ?? null,
     })),
     pipeline,
     transfers: recentTransfers.map((t) => ({
