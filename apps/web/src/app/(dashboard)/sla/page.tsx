@@ -11,6 +11,16 @@ async function fetchSla() {
   return res.json();
 }
 
+type SlaBreachListItem = {
+  id: number;
+  breachedAt: string;
+  headRejectedAt?: string | null;
+  headRejectionMessage?: string | null;
+  headRejectedBy?: { name?: string | null } | null;
+  division?: { name?: string | null } | null;
+  order?: { id?: number | null; orderNumber?: string | null } | null;
+};
+
 export default function SLAPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["sla"],
@@ -35,7 +45,7 @@ export default function SLAPage() {
               <div className="py-4 text-slate-500">No breaches recorded.</div>
             ) : (
               <ul className="space-y-2">
-                {breaches.map((b: any) => (
+                {breaches.map((b: SlaBreachListItem) => (
                   <li key={b.id} className="flex flex-col gap-1 rounded-lg border border-slate-100 bg-white px-3 py-2 text-sm">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span>

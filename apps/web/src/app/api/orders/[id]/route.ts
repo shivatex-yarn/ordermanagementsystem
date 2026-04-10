@@ -22,7 +22,7 @@ const fullInclude = {
   sampleApprovedBy: { select: { id: true, name: true, email: true } },
   slaBreaches: {
     where: { resolvedAt: null },
-    orderBy: { breachedAt: "desc" },
+    orderBy: { breachedAt: Prisma.SortOrder.desc },
     take: 1,
     include: {
       headRejectedBy: { select: { id: true, name: true, email: true } },

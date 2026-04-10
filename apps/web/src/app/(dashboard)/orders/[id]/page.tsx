@@ -80,6 +80,17 @@ type AuditLogRow = {
   user: { name: string; email: string } | null;
 };
 
+/** Shape of SLA breach rows included on the order detail API response */
+type OrderSlaBreachCard = {
+  breachedAt: string;
+  headRejectedAt?: string | null;
+  headRejectionMessage?: string | null;
+  division?: { name?: string | null } | null;
+  headRejectedBy?: { name?: string | null } | null;
+};
+
+type DivisionManagerLike = { user?: { id?: number | null } | null };
+
 function auditPayloadSummary(action: string, payload: unknown): string {
   if (!payload || typeof payload !== "object") return "";
   const p = payload as Record<string, unknown>;
@@ -616,14 +627,15 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   }, [order?.id, order?.customFields, order?.sampleRequested]);
 
   const isEnquirySubmitter = Boolean(order && user && Number(user.id) === order.createdById);
-  const openSlaBreach = (order?.slaBreaches && Array.isArray(order.slaBreaches) && order.slaBreaches.length
-    ? order.slaBreaches[0]
-    : null) as any; // eslint-disable-line @typescript-eslint/no-explicit-any -- wide API payload
+  const openSlaBreach: OrderSlaBreachCard | null =
+    order?.slaBreaches && Array.isArray(order.slaBreaches) && order.slaBreaches.length
+      ? (order.slaBreaches[0] as OrderSlaBreachCard)
+      : null;
   const isDivisionHead = Boolean(
     user &&
       order?.currentDivision?.managers &&
       Array.isArray(order.currentDivision.managers) &&
-      order.currentDivision.managers.some((m: any) => Number(m.user?.id) === Number(user.id))
+      order.currentDivision.managers.some((m: DivisionManagerLike) => Number(m.user?.id) === Number(user.id))
   );
   const awaitingHeadRejection = Boolean(openSlaBreach && !openSlaBreach.headRejectedAt);
   const canCancel =
