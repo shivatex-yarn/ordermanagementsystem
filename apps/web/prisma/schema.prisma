@@ -59,6 +59,7 @@ model User {
   sampleApprovals Order[] @relation("SampleApprovedBy")
   cancelledOrders Order[] @relation("OrderCancelledBy")
   loginSessions   UserLoginSession[]
+  slaBreachesHeadRejected SLABreach[] @relation("SLABreachHeadRejectedBy")
 }
 
 model UserLoginSession {
@@ -238,7 +239,7 @@ model SLABreach {
 
   order    Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   division Division @relation(fields: [divisionId], references: [id])
-  headRejectedBy User? @relation(fields: [headRejectedById], references: [id], onDelete: SetNull)
+  headRejectedBy User? @relation("SLABreachHeadRejectedBy", fields: [headRejectedById], references: [id], onDelete: SetNull)
 
   @@index([orderId])
   @@index([breachedAt])
