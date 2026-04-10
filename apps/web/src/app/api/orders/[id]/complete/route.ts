@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { withRole } from "@/lib/with-auth";
 import { completeOrderSchema } from "@/lib/validation";
 import { completeOrder } from "@/lib/order-engine";
+import { prisma } from "@/lib/db";
 
 export async function POST(
   _req: Request,
@@ -13,6 +14,16 @@ export async function POST(
   const parsed = completeOrderSchema.safeParse({ orderId: id });
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid order id" }, { status: 400 });
+  }
+  const gate = await prisma.sLABreach.findFirst({
+    where: { orderId: parsed.data.orderId, resolvedAt: null, headRejectedAt: null },
+    select: { id: true },
+  });
+  if (gate) {
+    return NextResponse.json(
+      { error: "SLA breach requires Division Head rejection message before proceeding." },
+      { status: 409 }
+    );
   }
   const order = await completeOrder(parsed.data.orderId, Number(auth.payload.sub));
   if (!order) {

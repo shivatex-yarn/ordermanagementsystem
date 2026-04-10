@@ -21,6 +21,7 @@ export async function GET(req: Request) {
       include: {
         order: { select: { id: true, orderNumber: true, status: true } },
         division: { select: { name: true } },
+        headRejectedBy: { select: { id: true, name: true, email: true } },
       },
       orderBy: { breachedAt: "desc" },
       take: 100,

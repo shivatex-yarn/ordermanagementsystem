@@ -39,6 +39,8 @@ export function getNotificationActorId(type: string, metadata: unknown): number 
     case "SampleShipped":
     case "SLABreachDetected":
       return n(m.userId);
+    case "SLABreachHeadRejectionSubmitted":
+      return n(m.headRejectedById) ?? n(m.userId);
     default:
       return n(m.userId);
   }

@@ -35,9 +35,10 @@ export default function SLAPage() {
               <div className="py-4 text-slate-500">No breaches recorded.</div>
             ) : (
               <ul className="space-y-2">
-                {breaches.map((b: { id: number; order: { id?: number; orderNumber: string }; division: { name: string }; breachedAt: string }) => (
-                  <li key={b.id} className="flex items-center justify-between gap-2 text-sm">
-                    <span>
+                {breaches.map((b: any) => (
+                  <li key={b.id} className="flex flex-col gap-1 rounded-lg border border-slate-100 bg-white px-3 py-2 text-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span>
                       {b.order?.id != null ? (
                         <Link href={`/orders/${b.order.id}`} className="font-medium text-indigo-700 hover:underline">
                           {b.order.orderNumber}
@@ -46,8 +47,23 @@ export default function SLAPage() {
                         b.order?.orderNumber
                       )}{" "}
                       — {b.division?.name}
-                    </span>
-                    <Badge variant="destructive">{new Date(b.breachedAt).toLocaleString()}</Badge>
+                      </span>
+                      <Badge variant="destructive">{new Date(b.breachedAt).toLocaleString()}</Badge>
+                    </div>
+                    <div className="text-xs text-slate-600">
+                      {b.headRejectedAt ? (
+                        <span>
+                          Head rejection submitted{" "}
+                          <span className="font-mono">{new Date(b.headRejectedAt).toLocaleString()}</span>
+                          {b.headRejectedBy?.name ? <> by <span className="font-medium">{b.headRejectedBy.name}</span></> : null}
+                          {b.headRejectionMessage ? (
+                            <span className="block mt-1 whitespace-pre-wrap text-slate-700">{b.headRejectionMessage}</span>
+                          ) : null}
+                        </span>
+                      ) : (
+                        <span className="text-amber-700 font-medium">Awaiting Division Head rejection message</span>
+                      )}
+                    </div>
                   </li>
                 ))}
               </ul>

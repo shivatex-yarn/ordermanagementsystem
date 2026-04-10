@@ -47,6 +47,7 @@ const TYPE_ICONS: Record<string, LucideIcon> = {
   SampleApproved: FlaskConical,
   SampleShipped: Truck,
   SalesFeedbackRecorded: MessageSquareQuote,
+  SLABreachHeadRejectionSubmitted: AlertTriangle,
 };
 
 async function fetchNotifications() {

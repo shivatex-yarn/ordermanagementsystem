@@ -6,7 +6,13 @@ import { withAuth } from "@/lib/with-auth";
 
 const fullInclude = {
   createdBy: { select: { id: true, name: true, email: true } },
-  currentDivision: { select: { id: true, name: true } },
+  currentDivision: {
+    select: {
+      id: true,
+      name: true,
+      managers: { include: { user: { select: { id: true, name: true, email: true } } } },
+    },
+  },
   cancelledBy: { select: { id: true, name: true, email: true } },
   previousDivision: { select: { id: true, name: true } },
   acceptedBy: { select: { id: true, name: true, email: true } },
@@ -14,6 +20,15 @@ const fullInclude = {
   receivedBy: { select: { id: true, name: true, email: true } },
   completedBy: { select: { id: true, name: true, email: true } },
   sampleApprovedBy: { select: { id: true, name: true, email: true } },
+  slaBreaches: {
+    where: { resolvedAt: null },
+    orderBy: { breachedAt: "desc" },
+    take: 1,
+    include: {
+      headRejectedBy: { select: { id: true, name: true, email: true } },
+      division: { select: { id: true, name: true } },
+    },
+  },
   transfers: {
     include: {
       fromDivision: { select: { id: true, name: true } },

@@ -169,6 +169,11 @@ export const completeOrderSchema = z.object({
   orderId: z.number().int().positive(),
 });
 
+export const slaHeadRejectionSchema = z.object({
+  orderId: z.number().int().positive(),
+  message: z.string().min(10, "Please enter at least 10 characters").max(20000),
+});
+
 export const paginationSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),

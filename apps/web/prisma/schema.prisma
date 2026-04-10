@@ -231,11 +231,18 @@ model SLABreach {
   breachedAt DateTime @default(now()) @map("breached_at")
   resolvedAt DateTime? @map("resolved_at")
 
+  /** Division head must submit this before work can proceed. */
+  headRejectionMessage String?   @map("head_rejection_message") @db.Text
+  headRejectedAt       DateTime? @map("head_rejected_at")
+  headRejectedById     Int?      @map("head_rejected_by_id")
+
   order    Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   division Division @relation(fields: [divisionId], references: [id])
+  headRejectedBy User? @relation(fields: [headRejectedById], references: [id], onDelete: SetNull)
 
   @@index([orderId])
   @@index([breachedAt])
+  @@index([headRejectedAt])
   @@map("sla_breaches")
 }
 

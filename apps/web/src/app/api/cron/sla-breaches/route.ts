@@ -20,6 +20,11 @@ function authorizeCron(req: Request): boolean {
 
 async function runSlaBreachHandler(): Promise<NextResponse> {
   try {
+    // Extra safety: even if scheduler misfires, never run on Sunday.
+    const now = new Date();
+    if (now.getDay() === 0) {
+      return NextResponse.json({ skipped: true, reason: "Sunday" });
+    }
     const result = await runSlaBreachCheck();
     return NextResponse.json(result);
   } catch (err) {
