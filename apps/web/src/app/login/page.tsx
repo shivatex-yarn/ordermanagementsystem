@@ -44,9 +44,9 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex bg-white">
+    <div className="min-h-screen flex flex-col bg-white md:flex-row">
       {/* Left: Branding */}
-      <div className="hidden lg:flex lg:w-1/2 xl:w-[55%] bg-slate-50 border-r border-slate-100 flex-col justify-between p-12 xl:p-16">
+      <div className="hidden md:flex md:w-[46%] lg:w-1/2 xl:w-[55%] flex-col justify-between border-slate-100 bg-slate-100/80 p-8 md:border-r md:bg-slate-50 lg:p-12 xl:p-16">
         <div>
           <div className="flex items-center gap-2">
             <div className="h-8 w-8 rounded-lg bg-slate-900" />
@@ -56,7 +56,7 @@ export default function LoginPage() {
           </div>
         </div>
         <div>
-          <h2 className="text-3xl xl:text-4xl font-semibold text-slate-900 tracking-tight max-w-md">
+          <h2 className="max-w-md text-2xl font-semibold tracking-tight text-slate-900 md:text-3xl xl:text-4xl">
             Enterprise enquiry workflow with SLA, audit, and full control.
           </h2>
           <p className="mt-4 text-slate-500 max-w-sm text-base">
@@ -67,16 +67,16 @@ export default function LoginPage() {
       </div>
 
       {/* Right: Form */}
-      <div className="w-full lg:w-1/2 xl:w-[45%] flex items-center justify-center p-6 sm:p-10 lg:p-12">
+      <div className="flex w-full flex-1 items-center justify-center p-5 sm:p-8 md:w-[54%] md:p-10 lg:w-1/2 lg:p-12 xl:w-[45%]">
         <div className="w-full max-w-[400px]">
-          <div className="lg:hidden mb-10">
+          <div className="mb-8 md:hidden">
             <div className="flex items-center gap-2">
               <div className="h-8 w-8 rounded-lg bg-slate-900" />
               <span className="text-xl font-semibold tracking-tight text-slate-900">
                 Enquiry Management
               </span>
+            </div>
           </div>
-        </div>
 
           <h1 className="text-2xl sm:text-3xl font-semibold text-slate-900 tracking-tight">
             Welcome back

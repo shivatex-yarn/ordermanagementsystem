@@ -760,7 +760,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       </header>
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-2">
+        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
           <CardTitle>Enquiry details</CardTitle>
           {canCancel && (
             <Button

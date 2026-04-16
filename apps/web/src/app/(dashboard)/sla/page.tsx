@@ -33,7 +33,7 @@ export default function SLAPage() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold tracking-tight">SLA & breaches</h1>
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-6 sm:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>SLA breaches</CardTitle>
