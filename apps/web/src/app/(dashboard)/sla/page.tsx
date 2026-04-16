@@ -23,6 +23,16 @@ async function fetchSla(): Promise<{ breaches: SlaBreachListItem[]; ordersAtRisk
   return res.json();
 }
 
+type SlaBreachListItem = {
+  id: number;
+  breachedAt: string;
+  headRejectedAt?: string | null;
+  headRejectionMessage?: string | null;
+  headRejectedBy?: { name?: string | null } | null;
+  division?: { name?: string | null } | null;
+  order?: { id?: number | null; orderNumber?: string | null } | null;
+};
+
 export default function SLAPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["sla"],
