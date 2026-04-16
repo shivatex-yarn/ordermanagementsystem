@@ -344,7 +344,7 @@ export default function MdOverviewPage() {
       </div>
 
       <header id="summary" className="scroll-mt-24 space-y-2">
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Executive overview</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Executive overview</h1>
         <p className="max-w-3xl text-slate-600">
           Organisation-wide visibility: who owns each enquiry, whether Division Heads have acted, SLA exposure,
           escalations, transfer reasons, and a live audit trail. 48-hour SLA applies while an enquiry is{" "}
@@ -434,7 +434,7 @@ export default function MdOverviewPage() {
                   value={pipelineStatus || "all"}
                   onValueChange={(v) => setPipelineStatus(v === "all" ? "" : v)}
                 >
-                  <SelectTrigger className="w-[200px]">
+                  <SelectTrigger className="w-full min-w-0 sm:w-[200px]">
                     <SelectValue placeholder="Status" />
                   </SelectTrigger>
                   <SelectContent>
@@ -452,7 +452,7 @@ export default function MdOverviewPage() {
                   value={pipelineDivisionId || "all"}
                   onValueChange={(v) => setPipelineDivisionId(v === "all" ? "" : v)}
                 >
-                  <SelectTrigger className="w-[220px]">
+                  <SelectTrigger className="w-full min-w-0 sm:w-[220px]">
                     <SelectValue placeholder="All divisions" />
                   </SelectTrigger>
                   <SelectContent>

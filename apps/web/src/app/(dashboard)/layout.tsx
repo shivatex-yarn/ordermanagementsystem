@@ -14,6 +14,8 @@ import {
   Users,
   ChevronDown,
   LogOut,
+  Menu,
+  X,
 } from "lucide-react";
 import { performLogout } from "@/components/logout-button";
 import { useAuth } from "@/hooks/use-auth";
@@ -48,7 +50,11 @@ export default function DashboardLayout({
   const { user, isLoading } = useAuth();
   /** Avoid hydration mismatch: unread counts differ between SSR and client. */
   const [mounted, setMounted] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [pathname]);
 
   const { data: unreadData } = useQuery({
     queryKey: ["notifications-unread-count"],
@@ -99,23 +105,48 @@ export default function DashboardLayout({
   });
 
   return (
-    <div className="min-h-screen flex bg-white">
-      <aside className="w-64 border-r border-slate-100 bg-slate-50/80 flex flex-col">
-        <div className="p-6 border-b border-slate-100">
+    <div className="flex min-h-screen flex-col overflow-x-hidden bg-white md:flex-row">
+      {sidebarOpen ? (
+        <button
+          type="button"
+          aria-label="Close navigation"
+          className="fixed inset-0 z-30 bg-slate-900/40 backdrop-blur-[1px] md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      ) : null}
+      <aside
+        className={cn(
+          "fixed inset-y-0 left-0 z-40 flex w-64 max-w-[85vw] flex-col border-r border-slate-100 bg-slate-50/80 transition-transform duration-200 ease-out md:static md:z-auto md:max-w-none md:translate-x-0",
+          sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+        )}
+      >
+        <div className="flex items-center justify-between gap-2 border-b border-slate-100 p-4 md:p-6">
           <Link
             href={user.role === "MANAGING_DIRECTOR" ? "/md" : "/dashboard"}
-            className="font-semibold text-lg text-slate-900"
+            className="min-w-0 font-semibold text-lg text-slate-900"
+            onClick={() => setSidebarOpen(false)}
           >
             Dashboard
           </Link>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 shrink-0 md:hidden"
+            aria-label="Close navigation"
+            onClick={() => setSidebarOpen(false)}
+          >
+            <X className="h-5 w-5 text-slate-600" />
+          </Button>
         </div>
-        <nav className="flex-1 p-3 space-y-0.5">
+        <nav className="flex-1 space-y-0.5 overflow-y-auto p-3">
           {filteredNav.map((item) => {
             const Icon = item.icon;
             return (
               <Link
                 key={item.href}
                 href={item.href}
+                onClick={() => setSidebarOpen(false)}
                 className={cn(
                   "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                   pathname === item.href
@@ -123,24 +154,36 @@ export default function DashboardLayout({
                     : "text-slate-600 hover:bg-white/60 hover:text-slate-900"
                 )}
               >
-                <Icon className="h-5 w-5" />
-                {item.label}
+                <Icon className="h-5 w-5 shrink-0" />
+                <span className="min-w-0">{item.label}</span>
               </Link>
             );
           })}
         </nav>
       </aside>
-      <div className="flex min-w-0 flex-1 flex-col bg-white">
-        <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center justify-between gap-3 border-b border-slate-100 bg-white px-4 md:px-8">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-white">
+        <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center justify-between gap-2 border-b border-slate-100 bg-white px-3 sm:gap-3 sm:px-4 md:px-8">
+          <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-9 w-9 shrink-0 md:hidden"
+              aria-label="Open navigation"
+              onClick={() => setSidebarOpen(true)}
+            >
+              <Menu className="h-5 w-5" />
+            </Button>
           <div className="min-w-0 flex-1">
-            <h2 className="text-base font-semibold leading-tight text-slate-900">
+            <h2 className="truncate text-sm font-semibold leading-tight text-slate-900 sm:text-base">
               Welcome back, {user.name}
             </h2>
-            <p className="text-xs text-slate-500">
+            <p className="line-clamp-2 text-xs text-slate-500 sm:line-clamp-none">
               {unreadCount > 0
                 ? `You have ${unreadCount} unread notification${unreadCount === 1 ? "" : "s"}.`
                 : "You’re all caught up."}
             </p>
+          </div>
           </div>
           <div className="flex shrink-0 items-center gap-2 sm:gap-3">
             <div className="hidden text-right sm:block">
@@ -201,7 +244,7 @@ export default function DashboardLayout({
             </DropdownMenu>
           </div>
         </header>
-        <main className="flex-1 overflow-auto p-6 md:p-8">{children}</main>
+        <main className="flex-1 overflow-x-hidden overflow-y-auto p-4 sm:p-6 md:p-8">{children}</main>
       </div>
     </div>
   );

@@ -148,7 +148,7 @@ export default function DashboardPage() {
     return (
       <div className="space-y-8">
         <div className="h-8 w-48 bg-slate-200 rounded animate-pulse" />
-        <div className="grid gap-6 md:grid-cols-3">
+        <div className="grid gap-6 sm:grid-cols-2 md:grid-cols-3">
           {[1, 2, 3].map((i) => (
             <Card key={i} className="animate-pulse">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -191,7 +191,7 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-3">
+      <div className="grid gap-6 sm:grid-cols-2 md:grid-cols-3">
         {metricCards.map((card) => {
           const Icon = card.icon;
           return (
@@ -230,7 +230,7 @@ export default function DashboardPage() {
                   setPage(1);
                 }}
               >
-                <SelectTrigger className="w-[200px]">
+                <SelectTrigger className="w-full min-w-0 sm:w-[200px]">
                   <SelectValue placeholder="Period" />
                 </SelectTrigger>
                 <SelectContent>
@@ -377,7 +377,7 @@ export default function DashboardPage() {
                   <Link
                     key={order.id}
                     href={`/orders/${order.id}`}
-                    className="flex items-center justify-between rounded-lg border border-slate-100 p-4 hover:bg-slate-50 transition-colors"
+                    className="flex flex-col gap-3 rounded-lg border border-slate-100 p-4 transition-colors hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
                   >
                     <div>
                       <p className="font-medium">{formatEnquiryNumber(order.orderNumber)}</p>

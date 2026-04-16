@@ -12,6 +12,8 @@ import {
   UserPlus,
   FileText,
   Home,
+  Menu,
+  X,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
@@ -36,7 +38,11 @@ export default function AdminLayout({
   const { user, isLoading } = useAuth();
   /** Avoid hydration mismatch: auth/session can differ between SSR and client. */
   const [mounted, setMounted] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [pathname]);
 
   useEffect(() => {
     if (isLoading || !mounted) return;
@@ -81,47 +87,73 @@ export default function AdminLayout({
   }
 
   return (
-    <div className="flex min-h-screen bg-slate-50">
-      <aside className="flex w-68 shrink-0 flex-col border-r border-slate-200 bg-white shadow-[1px_0_0_0_rgba(15,23,42,0.06)]">
-        <div className="space-y-4 px-5 pb-5 pt-6">
-          <Link
-            href="/admin/dashboard"
-            className="group block rounded-xl outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-indigo-500/30"
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <p className="text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                  Console
-                </p>
-                <p className="mt-1 text-base font-semibold leading-snug tracking-tight text-slate-900 group-hover:text-slate-700">
-                  Enquiry Management
-                </p>
+    <div className="flex min-h-screen flex-col overflow-x-hidden bg-slate-50 md:flex-row">
+      {sidebarOpen ? (
+        <button
+          type="button"
+          aria-label="Close navigation"
+          className="fixed inset-0 z-30 bg-slate-900/40 backdrop-blur-[1px] md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      ) : null}
+      <aside
+        className={cn(
+          "fixed inset-y-0 left-0 z-40 flex w-70 max-w-[85vw] flex-col border-r border-slate-200 bg-white shadow-[1px_0_0_0_rgba(15,23,42,0.06)] transition-transform duration-200 ease-out md:static md:z-auto md:max-w-none md:w-68 md:shrink-0 md:translate-x-0",
+          sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+        )}
+      >
+        <div className="flex shrink-0 items-start justify-between gap-2 border-b border-slate-100 px-4 pb-4 pt-5 md:border-b-0 md:px-5 md:pb-5 md:pt-6">
+          <div className="min-w-0 flex-1 space-y-4">
+            <Link
+              href="/admin/dashboard"
+              onClick={() => setSidebarOpen(false)}
+              className="group block rounded-xl outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-indigo-500/30"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                    Console
+                  </p>
+                  <p className="mt-1 text-base font-semibold leading-snug tracking-tight text-slate-900 group-hover:text-slate-700">
+                    Enquiry Management
+                  </p>
+                </div>
+                <span className="shrink-0 rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide text-slate-600">
+                  Admin
+                </span>
               </div>
-              <span className="shrink-0 rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide text-slate-600">
-                Admin
-              </span>
-            </div>
-          </Link>
-          {isViewOnly && (
-            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900">
-              View only · Managing Director
-            </p>
-          )}
-          <Button
-            asChild
-            variant="ghost"
-            className="h-10 w-full justify-center gap-2 rounded-lg border border-slate-200 bg-white font-medium text-slate-700 shadow-sm hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
-          >
-            <Link href="/dashboard">
-              <Home className="h-4 w-4 shrink-0 text-slate-600" />
-              Main dashboard
             </Link>
+            {isViewOnly && (
+              <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900">
+                View only · Managing Director
+              </p>
+            )}
+            <Button
+              asChild
+              variant="ghost"
+              className="h-10 w-full justify-center gap-2 rounded-lg border border-slate-200 bg-white font-medium text-slate-700 shadow-sm hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
+            >
+              <Link href="/dashboard" onClick={() => setSidebarOpen(false)}>
+                <Home className="h-4 w-4 shrink-0 text-slate-600" />
+                Main dashboard
+              </Link>
+            </Button>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 shrink-0 md:hidden"
+            aria-label="Close navigation"
+            onClick={() => setSidebarOpen(false)}
+          >
+            <X className="h-5 w-5 text-slate-600" />
           </Button>
         </div>
 
-        <div className="mx-4 h-px bg-linear-to-r from-transparent via-slate-200 to-transparent" />
+        <div className="mx-4 hidden h-px shrink-0 bg-linear-to-r from-transparent via-slate-200 to-transparent md:mx-5 md:block" />
 
-        <nav className="flex flex-1 flex-col gap-1 px-3 py-4">
+        <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-3 py-4">
           <p className="mb-1 px-3 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-slate-400">
             Navigation
           </p>
@@ -132,6 +164,7 @@ export default function AdminLayout({
               <Link
                 key={item.href}
                 href={item.href}
+                onClick={() => setSidebarOpen(false)}
                 className={cn(
                   "group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150",
                   active
@@ -152,7 +185,7 @@ export default function AdminLayout({
           })}
         </nav>
 
-        <div className="mt-auto border-t border-slate-200 bg-white p-3">
+        <div className="mt-auto shrink-0 border-t border-slate-200 bg-white p-3">
           <button
             type="button"
             onClick={handleLogout}
@@ -163,7 +196,27 @@ export default function AdminLayout({
           </button>
         </div>
       </aside>
-      <main className="min-w-0 flex-1 overflow-auto bg-slate-50 p-6 md:p-8">{children}</main>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b border-slate-200 bg-white px-3 sm:px-4 md:hidden">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-9 w-9 shrink-0"
+            aria-label="Open navigation"
+            onClick={() => setSidebarOpen(true)}
+          >
+            <Menu className="h-5 w-5" />
+          </Button>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold text-slate-900">Admin console</p>
+            <p className="truncate text-xs text-slate-500">Enquiry Management</p>
+          </div>
+        </header>
+        <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-slate-50 p-4 sm:p-6 md:p-8">
+          {children}
+        </main>
+      </div>
     </div>
   );
 }

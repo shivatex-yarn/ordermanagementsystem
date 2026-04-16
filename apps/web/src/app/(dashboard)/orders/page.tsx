@@ -77,7 +77,7 @@ export default function OrdersPage() {
                 setPage(1);
               }}
             >
-              <SelectTrigger className="w-[160px]">
+              <SelectTrigger className="w-full min-w-0 sm:w-[160px]">
                 <SelectValue placeholder="Period" />
               </SelectTrigger>
               <SelectContent>
@@ -132,7 +132,7 @@ export default function OrdersPage() {
                   <Link
                     key={order.id}
                     href={`/orders/${order.id}`}
-                    className="flex items-center justify-between rounded-lg border border-slate-100 p-4 hover:bg-slate-50 transition-colors"
+                    className="flex flex-col gap-3 rounded-lg border border-slate-100 p-4 transition-colors hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
                   >
                     <div>
                       <p className="font-medium">{formatEnquiryNumber(order.orderNumber)}</p>
