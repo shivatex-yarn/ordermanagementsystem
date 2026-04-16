@@ -5,7 +5,19 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
-async function fetchSla() {
+type SlaBreachListItem = {
+  id: number;
+  breachedAt: string;
+  headRejectedAt?: string | null;
+  headRejectionMessage?: string | null;
+  headRejectedBy?: { name?: string | null } | null;
+  order?: { id: number; orderNumber: string } | null;
+  division?: { name: string | null } | null;
+};
+
+type OrderAtRisk = { id: number; orderNumber: string; slaDeadline: string };
+
+async function fetchSla(): Promise<{ breaches: SlaBreachListItem[]; ordersAtRisk: OrderAtRisk[] }> {
   const res = await fetch("/api/sla", { credentials: "include" });
   if (!res.ok) throw new Error("Failed to fetch SLA data");
   return res.json();
@@ -91,7 +103,7 @@ export default function SLAPage() {
               <div className="py-4 text-slate-500">No orders past SLA deadline.</div>
             ) : (
               <ul className="space-y-2">
-                {ordersAtRisk.map((o: { id: number; orderNumber: string; slaDeadline: string }) => (
+                {ordersAtRisk.map((o: OrderAtRisk) => (
                   <li key={o.id} className="text-sm">
                     <Link href={`/orders/${o.id}`} className="font-medium text-indigo-700 hover:underline">
                       {o.orderNumber}

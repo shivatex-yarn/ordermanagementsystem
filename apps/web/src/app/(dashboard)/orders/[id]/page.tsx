@@ -80,16 +80,16 @@ type AuditLogRow = {
   user: { name: string; email: string } | null;
 };
 
-/** Shape of SLA breach rows included on the order detail API response */
-type OrderSlaBreachCard = {
+/** Shape of an unresolved SLA breach row from GET /api/orders/[id] (matches Prisma include). */
+type OrderOpenSlaBreach = {
   breachedAt: string;
   headRejectedAt?: string | null;
   headRejectionMessage?: string | null;
-  division?: { name?: string | null } | null;
   headRejectedBy?: { name?: string | null } | null;
+  division?: { name?: string | null } | null;
 };
 
-type DivisionManagerLike = { user?: { id?: number | null } | null };
+type DivisionManagerWithUser = { user?: { id?: number } | null };
 
 function auditPayloadSummary(action: string, payload: unknown): string {
   if (!payload || typeof payload !== "object") return "";
@@ -627,15 +627,15 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   }, [order?.id, order?.customFields, order?.sampleRequested]);
 
   const isEnquirySubmitter = Boolean(order && user && Number(user.id) === order.createdById);
-  const openSlaBreach: OrderSlaBreachCard | null =
+  const openSlaBreach: OrderOpenSlaBreach | null =
     order?.slaBreaches && Array.isArray(order.slaBreaches) && order.slaBreaches.length
-      ? (order.slaBreaches[0] as OrderSlaBreachCard)
+      ? (order.slaBreaches[0] as OrderOpenSlaBreach)
       : null;
   const isDivisionHead = Boolean(
     user &&
       order?.currentDivision?.managers &&
       Array.isArray(order.currentDivision.managers) &&
-      order.currentDivision.managers.some((m: DivisionManagerLike) => Number(m.user?.id) === Number(user.id))
+      order.currentDivision.managers.some((m: DivisionManagerWithUser) => Number(m.user?.id) === Number(user.id))
   );
   const awaitingHeadRejection = Boolean(openSlaBreach && !openSlaBreach.headRejectedAt);
   const canCancel =
