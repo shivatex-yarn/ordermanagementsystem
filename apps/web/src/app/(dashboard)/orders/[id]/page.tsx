@@ -47,31 +47,6 @@ function placedDateClass(order: { status: string; slaDeadline?: string | null; c
   return "font-medium text-indigo-700";
 }
 
-async function fetchOrder(id: number): Promise<any> { // eslint-disable-line @typescript-eslint/no-explicit-any -- wide API payload
-  const res = await fetch(`/api/orders/${id}`, { credentials: "include" });
-  const raw: unknown = await res.json().catch(() => null);
-  if (!res.ok) {
-    const errMsg =
-      raw && typeof raw === "object" && "error" in raw && typeof (raw as { error: unknown }).error === "string"
-        ? (raw as { error: string }).error
-        : "";
-    const msg = errMsg.length
-      ? errMsg
-      : res.status === 403
-        ? "You do not have access to this enquiry."
-        : res.status === 404
-          ? "Enquiry not found."
-          : res.status === 401
-            ? "Session expired — please sign in again."
-            : `Could not load enquiry (${res.status}).`;
-    throw new Error(msg);
-  }
-  if (!raw || typeof raw !== "object") {
-    throw new Error("Invalid response from server.");
-  }
-  return raw;
-}
-
 type AuditLogRow = {
   id: number;
   action: string;
@@ -157,6 +132,31 @@ type OrderDetail = {
   }>;
   slaBreaches?: unknown;
 };
+
+async function fetchOrder(id: number): Promise<OrderDetail> {
+  const res = await fetch(`/api/orders/${id}`, { credentials: "include" });
+  const raw: unknown = await res.json().catch(() => null);
+  if (!res.ok) {
+    const errMsg =
+      raw && typeof raw === "object" && "error" in raw && typeof (raw as { error: unknown }).error === "string"
+        ? (raw as { error: string }).error
+        : "";
+    const msg = errMsg.length
+      ? errMsg
+      : res.status === 403
+        ? "You do not have access to this enquiry."
+        : res.status === 404
+          ? "Enquiry not found."
+          : res.status === 401
+            ? "Session expired — please sign in again."
+            : `Could not load enquiry (${res.status}).`;
+    throw new Error(msg);
+  }
+  if (!raw || typeof raw !== "object") {
+    throw new Error("Invalid response from server.");
+  }
+  return raw as OrderDetail;
+}
 
 function auditPayloadSummary(action: string, payload: unknown): string {
   if (!payload || typeof payload !== "object") return "";
@@ -458,7 +458,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     queryFn: async () => {
       const res = await fetch(`/api/audit?orderId=${orderId}&limit=60`, { credentials: "include" });
       if (!res.ok) throw new Error("Could not load activity log");
-      return res.json() as Promise<{ logs: AuditLogRow[] }>;
+      return (await res.json()) as { logs: AuditLogRow[] };
     },
     enabled: Number.isInteger(orderId),
     staleTime: 60_000,
