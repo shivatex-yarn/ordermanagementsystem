@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { withRole } from "@/lib/with-auth";
 import { runSlaBreachCheck } from "@/lib/sla-breach-job";
 import { parseCreatedAtRangeFromParams } from "@/lib/date-period";
+import { dbUnavailableJson, isDbUnavailableError } from "@/lib/db-errors";
 
 const ALL_ORDER_STATUSES: OrderStatus[] = [
   "PLACED",
@@ -76,110 +77,111 @@ export async function GET(req: Request) {
   const auth = await withRole(["MANAGING_DIRECTOR", "SUPER_ADMIN"]);
   if (auth.response) return auth.response;
 
-  /** Create `sla_breaches` + notify for any overdue orders (same as cron). Keeps UI in sync if cron is misconfigured. */
-  await runSlaBreachCheck().catch((err) => {
-    console.error("[md/overview] SLA breach sync failed:", err);
-  });
+  try {
+    /** Create `sla_breaches` + notify for any overdue orders (same as cron). Keeps UI in sync if cron is misconfigured. */
+    await runSlaBreachCheck().catch((err) => {
+      console.error("[md/overview] SLA breach sync failed:", err);
+    });
 
-  const { searchParams } = new URL(req.url);
-  const pipelineWhere = buildPipelineWhere(searchParams);
+    const { searchParams } = new URL(req.url);
+    const pipelineWhere = buildPipelineWhere(searchParams);
 
-  const now = new Date();
+    const now = new Date();
 
-  const [
-    statusCounts,
-    openBreachesCount,
-    delayedEnquiries,
-    recentBreaches,
-    pipelineOrders,
-    recentTransfers,
-  ] = await Promise.all([
-    prisma.order.groupBy({
-      by: ["status"],
-      _count: { id: true },
-    }),
-    prisma.sLABreach.count({ where: { resolvedAt: null } }),
-    prisma.order.findMany({
-      where: {
-        status: { in: ["PLACED", "TRANSFERRED"] },
-        slaDeadline: { lt: now },
-      },
-      select: {
-        id: true,
-        orderNumber: true,
-        status: true,
-        slaDeadline: true,
-        companyName: true,
-        currentDivision: { select: { id: true, name: true } },
-      },
-      orderBy: { slaDeadline: "asc" },
-      take: 50,
-    }),
-    prisma.sLABreach.findMany({
-      where: { resolvedAt: null },
-      include: {
-        order: { select: { id: true, orderNumber: true, status: true } },
-        division: { select: { id: true, name: true } },
-        headRejectedBy: { select: { id: true, name: true, email: true } },
-      },
-      orderBy: { breachedAt: "desc" },
-      take: 40,
-    }),
-    prisma.order.findMany({
-      take: 100,
-      orderBy: { updatedAt: "desc" },
-      where: pipelineWhere,
-      select: {
-        id: true,
-        orderNumber: true,
-        status: true,
-        companyName: true,
-        description: true,
-        createdAt: true,
-        updatedAt: true,
-        slaDeadline: true,
-        transferCount: true,
-        currentDivision: { select: { id: true, name: true } },
-        createdBy: { select: { id: true, name: true, email: true } },
-        acceptedBy: { select: { id: true, name: true, email: true } },
-        receivedBy: { select: { id: true, name: true, email: true } },
-        completedBy: { select: { id: true, name: true, email: true } },
-        slaBreaches: {
-          where: { resolvedAt: null },
-          take: 1,
-          select: {
-            id: true,
-            breachedAt: true,
-            headRejectedAt: true,
-            headRejectedById: true,
-            headRejectionMessage: true,
+    const [
+      statusCounts,
+      openBreachesCount,
+      delayedEnquiries,
+      recentBreaches,
+      pipelineOrders,
+      recentTransfers,
+    ] = await Promise.all([
+      prisma.order.groupBy({
+        by: ["status"],
+        _count: { id: true },
+      }),
+      prisma.sLABreach.count({ where: { resolvedAt: null } }),
+      prisma.order.findMany({
+        where: {
+          status: { in: ["PLACED", "TRANSFERRED"] },
+          slaDeadline: { lt: now },
+        },
+        select: {
+          id: true,
+          orderNumber: true,
+          status: true,
+          slaDeadline: true,
+          companyName: true,
+          currentDivision: { select: { id: true, name: true } },
+        },
+        orderBy: { slaDeadline: "asc" },
+        take: 50,
+      }),
+      prisma.sLABreach.findMany({
+        where: { resolvedAt: null },
+        include: {
+          order: { select: { id: true, orderNumber: true, status: true } },
+          division: { select: { id: true, name: true } },
+          headRejectedBy: { select: { id: true, name: true, email: true } },
+        },
+        orderBy: { breachedAt: "desc" },
+        take: 40,
+      }),
+      prisma.order.findMany({
+        take: 100,
+        orderBy: { updatedAt: "desc" },
+        where: pipelineWhere,
+        select: {
+          id: true,
+          orderNumber: true,
+          status: true,
+          companyName: true,
+          description: true,
+          createdAt: true,
+          updatedAt: true,
+          slaDeadline: true,
+          transferCount: true,
+          currentDivision: { select: { id: true, name: true } },
+          createdBy: { select: { id: true, name: true, email: true } },
+          acceptedBy: { select: { id: true, name: true, email: true } },
+          receivedBy: { select: { id: true, name: true, email: true } },
+          completedBy: { select: { id: true, name: true, email: true } },
+          slaBreaches: {
+            where: { resolvedAt: null },
+            take: 1,
+            select: {
+              id: true,
+              breachedAt: true,
+              headRejectedAt: true,
+              headRejectedById: true,
+              headRejectionMessage: true,
+            },
+          },
+          transfers: {
+            orderBy: { createdAt: "desc" },
+            take: 2,
+            select: {
+              id: true,
+              createdAt: true,
+              reason: true,
+              fromDivision: { select: { name: true } },
+              toDivision: { select: { name: true } },
+              transferredBy: { select: { name: true, email: true } },
+            },
           },
         },
-        transfers: {
-          orderBy: { createdAt: "desc" },
-          take: 2,
-          select: {
-            id: true,
-            createdAt: true,
-            reason: true,
-            fromDivision: { select: { name: true } },
-            toDivision: { select: { name: true } },
-            transferredBy: { select: { name: true, email: true } },
-          },
+      }),
+      prisma.orderTransfer.findMany({
+        take: 45,
+        orderBy: { createdAt: "desc" },
+        include: {
+          order: { select: { id: true, orderNumber: true, status: true } },
+          fromDivision: { select: { id: true, name: true } },
+          toDivision: { select: { id: true, name: true } },
+          transferredBy: { select: { id: true, name: true, email: true } },
         },
-      },
-    }),
-    prisma.orderTransfer.findMany({
-      take: 45,
-      orderBy: { createdAt: "desc" },
-      include: {
-        order: { select: { id: true, orderNumber: true, status: true } },
-        fromDivision: { select: { id: true, name: true } },
-        toDivision: { select: { id: true, name: true } },
-        transferredBy: { select: { id: true, name: true, email: true } },
-      },
-    }),
-  ]);
+      }),
+    ]);
 
   const divisionIds = [...new Set(pipelineOrders.map((o) => o.currentDivision.id))];
   const managersByDivision = new Map<number, { name: string; email: string }[]>();
@@ -240,31 +242,36 @@ export async function GET(req: Request) {
     };
   });
 
-  return NextResponse.json({
-    statusCounts: Object.fromEntries(statusCounts.map((r) => [r.status, r._count.id])),
-    openBreaches: openBreachesCount,
-    delayedEnquiries: delayedEnquiries.map((o) => ({
-      ...o,
-      slaDeadline: o.slaDeadline?.toISOString() ?? null,
-    })),
-    recentBreaches: recentBreaches.map((b) => ({
-      id: b.id,
-      breachedAt: b.breachedAt.toISOString(),
-      order: b.order,
-      division: b.division,
-      headRejectedAt: b.headRejectedAt?.toISOString() ?? null,
-      headRejectedBy: b.headRejectedBy ? { ...b.headRejectedBy } : null,
-      headRejectionMessage: b.headRejectionMessage ?? null,
-    })),
-    pipeline,
-    transfers: recentTransfers.map((t) => ({
-      id: t.id,
-      createdAt: t.createdAt.toISOString(),
-      reason: t.reason,
-      order: t.order,
-      fromDivision: t.fromDivision,
-      toDivision: t.toDivision,
-      transferredBy: t.transferredBy,
-    })),
-  });
+    return NextResponse.json({
+      statusCounts: Object.fromEntries(statusCounts.map((r) => [r.status, r._count.id])),
+      openBreaches: openBreachesCount,
+      delayedEnquiries: delayedEnquiries.map((o) => ({
+        ...o,
+        slaDeadline: o.slaDeadline?.toISOString() ?? null,
+      })),
+      recentBreaches: recentBreaches.map((b) => ({
+        id: b.id,
+        breachedAt: b.breachedAt.toISOString(),
+        order: b.order,
+        division: b.division,
+        headRejectedAt: b.headRejectedAt?.toISOString() ?? null,
+        headRejectedBy: b.headRejectedBy ? { ...b.headRejectedBy } : null,
+        headRejectionMessage: b.headRejectionMessage ?? null,
+      })),
+      pipeline,
+      transfers: recentTransfers.map((t) => ({
+        id: t.id,
+        createdAt: t.createdAt.toISOString(),
+        reason: t.reason,
+        order: t.order,
+        fromDivision: t.fromDivision,
+        toDivision: t.toDivision,
+        transferredBy: t.transferredBy,
+      })),
+    });
+  } catch (err) {
+    console.error("[md/overview] GET failed:", err);
+    if (isDbUnavailableError(err)) return dbUnavailableJson();
+    return NextResponse.json({ error: "Overview endpoint failed." }, { status: 500 });
+  }
 }

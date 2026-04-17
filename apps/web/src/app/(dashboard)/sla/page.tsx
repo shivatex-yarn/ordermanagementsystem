@@ -14,7 +14,7 @@ async function fetchSla(): Promise<{ breaches: SlaBreachListItem[]; ordersAtRisk
 }
 
 export default function SLAPage() {
-  const { data, isLoading } = useQuery<Awaited<ReturnType<typeof fetchSla>>>({
+  const { data, isLoading, error } = useQuery({
     queryKey: ["sla"],
     queryFn: fetchSla,
   });
@@ -25,6 +25,11 @@ export default function SLAPage() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold tracking-tight">SLA & breaches</h1>
+      {error ? (
+        <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-800">
+          Could not load SLA data. Please retry in a moment.
+        </div>
+      ) : null}
       <div className="grid gap-6 sm:grid-cols-2">
         <Card>
           <CardHeader>
@@ -33,6 +38,8 @@ export default function SLAPage() {
           <CardContent>
             {isLoading ? (
               <div className="py-4 text-slate-500">Loading...</div>
+            ) : error ? (
+              <div className="py-4 text-slate-500">—</div>
             ) : !breaches.length ? (
               <div className="py-4 text-slate-500">No breaches recorded.</div>
             ) : (
@@ -79,6 +86,8 @@ export default function SLAPage() {
           <CardContent>
             {isLoading ? (
               <div className="py-4 text-slate-500">Loading...</div>
+            ) : error ? (
+              <div className="py-4 text-slate-500">—</div>
             ) : !ordersAtRisk.length ? (
               <div className="py-4 text-slate-500">No orders past SLA deadline.</div>
             ) : (
