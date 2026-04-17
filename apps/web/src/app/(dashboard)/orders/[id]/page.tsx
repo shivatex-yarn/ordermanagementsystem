@@ -453,7 +453,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     staleTime: 30_000,
   });
 
-  const order = orderData as OrderResponse | undefined;
+  const order = orderData;
 
   const { data: auditData, isLoading: auditLoading, isError: auditQueryError } = useQuery({
     queryKey: ["order-audit", orderId],
