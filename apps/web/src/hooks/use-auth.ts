@@ -61,7 +61,7 @@ export function useAuth() {
       return false;
     },
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 4000),
-    staleTime: 5 * 60_000,
+    staleTime: 10 * 60_000,
     refetchOnWindowFocus: false,
     // Relative `/api/...` URLs throw in Node during SSR (`Failed to parse URL`). Only fetch in the browser.
     enabled: typeof window !== "undefined",
