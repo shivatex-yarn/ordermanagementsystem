@@ -47,7 +47,23 @@ function placedDateClass(order: { status: string; slaDeadline?: string | null; c
   return "font-medium text-indigo-700";
 }
 
-async function fetchOrder(id: number): Promise<any> { // eslint-disable-line @typescript-eslint/no-explicit-any -- wide API payload
+type OrderResponse = Record<string, unknown> & {
+  id?: number;
+  orderNumber?: string | null;
+  status?: string;
+  createdAt?: string;
+  slaDeadline?: string | null;
+  createdById?: number;
+  customFields?: unknown;
+  sampleRequested?: boolean;
+  sampleDetails?: string | null;
+  sampleQuantity?: string | null;
+  sampleWeight?: string | null;
+  slaBreaches?: unknown;
+  currentDivision?: { managers?: DivisionManagerWithUser[] } | null;
+};
+
+async function fetchOrder(id: number): Promise<unknown> {
   const res = await fetch(`/api/orders/${id}`, { credentials: "include" });
   const raw: unknown = await res.json().catch(() => null);
   if (!res.ok) {
@@ -440,7 +456,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [slaHeadRejectionError, setSlaHeadRejectionError] = useState("");
 
   const {
-    data: order,
+    data: orderData,
     isLoading,
     isError,
     error: orderError,
@@ -452,6 +468,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     retry: 1,
     staleTime: 30_000,
   });
+
+  const order = orderData as OrderResponse | undefined;
 
   const { data: auditData, isLoading: auditLoading, isError: auditQueryError } = useQuery({
     queryKey: ["order-audit", orderId],
@@ -616,19 +634,22 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   });
 
   const isManager = user && ["MANAGER", "SUPER_ADMIN"].includes(user.role);
-  const canAct = order && isManager && ["PLACED", "TRANSFERRED", "IN_PROGRESS"].includes(order.status);
+  const status = order?.status;
+  const hasStatus = typeof status === "string";
+  const canAct = Boolean(order && isManager && hasStatus && ["PLACED", "TRANSFERRED", "IN_PROGRESS"].includes(status));
   /** Division-side reject — not shown to the person who raised the enquiry (they use Cancel enquiry instead). */
   const canRejectEnquiry =
     canAct && order && user && Number(user.id) !== order.createdById;
+  const isClosedStatus = hasStatus && ["REJECTED", "COMPLETED", "CANCELLED"].includes(status);
   const mightManageSample =
     user &&
     order &&
     ["MANAGER", "SUPER_ADMIN", "MANAGING_DIRECTOR"].includes(user.role) &&
-    !["REJECTED", "COMPLETED", "CANCELLED"].includes(order.status);
+    !isClosedStatus;
   const mightSubmitFeedback =
     user &&
     order &&
-    !["REJECTED", "COMPLETED", "CANCELLED"].includes(order.status) &&
+    !isClosedStatus &&
     (order.createdById === user.id ||
       ["SUPER_ADMIN", "MANAGING_DIRECTOR"].includes(user.role));
 
