@@ -5,16 +5,6 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
-type SlaBreachListItem = {
-  id: number;
-  breachedAt: string;
-  headRejectedAt?: string | null;
-  headRejectionMessage?: string | null;
-  headRejectedBy?: { name?: string | null } | null;
-  order?: { id: number; orderNumber: string } | null;
-  division?: { name: string | null } | null;
-};
-
 type OrderAtRisk = { id: number; orderNumber: string; slaDeadline: string };
 
 async function fetchSla(): Promise<{ breaches: SlaBreachListItem[]; ordersAtRisk: OrderAtRisk[] }> {
