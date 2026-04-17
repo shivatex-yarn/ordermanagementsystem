@@ -1,19 +1,18 @@
 "use client";
+
+import dynamic from "next/dynamic";
 import { useQuery } from "@tanstack/react-query";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  Legend,
-} from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
+const AdminDashboardCharts = dynamic(() => import("./admin-dashboard-charts").then((m) => m.AdminDashboardCharts), {
+  ssr: false,
+  loading: () => (
+    <div className="space-y-6">
+      <div className="h-80 animate-pulse rounded-xl border border-slate-100 bg-slate-50" />
+      <div className="h-72 animate-pulse rounded-xl border border-slate-100 bg-slate-50" />
+    </div>
+  ),
+});
 
 const STATUS_COLORS: Record<string, string> = {
   PLACED: "#94a3b8",
@@ -101,69 +100,7 @@ export default function AdminDashboardPage() {
         </Card>
       </div>
 
-      {/* Workflow: where the process stops */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Process flow — Enquiries by stage</CardTitle>
-          <p className="text-sm text-slate-500">
-            At which stage enquiries currently are. Rejected and Completed are terminal stages.
-          </p>
-        </CardHeader>
-        <CardContent>
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={barData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="name" tick={{ fill: "#64748b", fontSize: 12 }} />
-                <YAxis tick={{ fill: "#64748b", fontSize: 12 }} />
-                <Tooltip
-                  contentStyle={{ backgroundColor: "#fff", border: "1px solid #e2e8f0", borderRadius: 8 }}
-                  labelStyle={{ color: "#0f172a" }}
-                />
-                <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                  {barData.map((_: unknown, index: number) => (
-                    <Cell key={index} fill={barData[index]?.fill ?? "#94a3b8"} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Workflow stages breakdown (pie) */}
-      {pieData.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Stage distribution</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={pieData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={90}
-                    paddingAngle={2}
-                    dataKey="value"
-                    nameKey="name"
-                    label={({ name, value }) => `${name}: ${value}`}
-                  >
-                    {pieData.map((entry: { fill: string }, index: number) => (
-                      <Cell key={`cell-${index}`} fill={entry.fill} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      <AdminDashboardCharts barData={barData} pieData={pieData} />
 
     </div>
   );

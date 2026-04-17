@@ -67,8 +67,10 @@ export default function DashboardLayout({
     refetchInterval: 60_000,
   });
   const unreadCount = unreadData?.unreadCount ?? 0;
+  /** Avoid hydration mismatch for notification copy/badge until client mount. */
+  const showUnreadUi = mounted;
 
-  if (!mounted || isLoading) {
+  if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
         <div className="animate-pulse text-slate-500">Loading...</div>
@@ -179,9 +181,13 @@ export default function DashboardLayout({
               Welcome back, {user.name}
             </h2>
             <p className="line-clamp-2 text-xs text-slate-500 sm:line-clamp-none">
-              {unreadCount > 0
-                ? `You have ${unreadCount} unread notification${unreadCount === 1 ? "" : "s"}.`
-                : "You’re all caught up."}
+              {!showUnreadUi ? (
+                <span className="inline-block h-3 w-44 max-w-full animate-pulse rounded bg-slate-200" aria-hidden />
+              ) : unreadCount > 0 ? (
+                `You have ${unreadCount} unread notification${unreadCount === 1 ? "" : "s"}.`
+              ) : (
+                "You’re all caught up."
+              )}
             </p>
           </div>
           </div>
@@ -194,11 +200,11 @@ export default function DashboardLayout({
               href="/notifications"
               className="relative flex h-9 w-9 items-center justify-center rounded-lg text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
               aria-label={
-                unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"
+                showUnreadUi && unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"
               }
             >
               <Bell className="h-5 w-5" />
-              {unreadCount > 0 ? (
+              {showUnreadUi && unreadCount > 0 ? (
                 <span className="absolute -right-0.5 -top-0.5 flex h-[1.125rem] min-w-[1.125rem] items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold leading-none text-white">
                   {unreadCount > 99 ? "99+" : unreadCount}
                 </span>
@@ -225,7 +231,7 @@ export default function DashboardLayout({
                     className="flex w-full cursor-pointer items-center justify-between gap-2"
                   >
                     <span>Notifications</span>
-                    {unreadCount > 0 ? (
+                    {showUnreadUi && unreadCount > 0 ? (
                       <span className="shrink-0 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700">
                         {unreadCount > 99 ? "99+" : unreadCount}
                       </span>

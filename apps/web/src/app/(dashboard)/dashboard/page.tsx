@@ -1,21 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import {
-  PieChart,
-  Pie,
-  Cell,
-  ResponsiveContainer,
-  Legend,
-  Tooltip,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-} from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +21,17 @@ import type { EnquiryPeriodFilter } from "@/lib/date-period";
 import { PERIOD_LABELS } from "@/lib/date-period";
 import { formatEnquiryNumber } from "@/lib/enquiry-display";
 import { downloadEnquiriesExcel, fetchAllOrdersForExport } from "@/lib/enquiry-export";
+import type { DashboardChartDatum } from "./dashboard-charts";
+
+const DashboardCharts = dynamic(() => import("./dashboard-charts").then((m) => m.DashboardCharts), {
+  ssr: false,
+  loading: () => (
+    <div className="grid gap-6 lg:grid-cols-2">
+      <div className="h-72 animate-pulse rounded-xl border border-slate-100 bg-slate-50" />
+      <div className="h-72 animate-pulse rounded-xl border border-slate-100 bg-slate-50" />
+    </div>
+  ),
+});
 
 const STATUS_COLORS: Record<string, string> = {
   PLACED: "#94a3b8",
@@ -81,18 +80,25 @@ async function fetchDashboard(
       : { total: 0, orders: [], statusCounts: {}, page: 1, limit: 5 };
     return { ...pipe, slaBreaches: 0, enquiriesAtRisk: 0 };
   }
+  /** `summary=1` skips SLA sync job + row scans — same numbers as dashboard cards, much faster. */
   const [pipeRes, slaRes] = await Promise.all([
     fetch(ordersUrl, { credentials: "include" }),
-    fetch("/api/sla", { credentials: "include" }),
+    fetch("/api/sla?summary=1", { credentials: "include" }),
   ]);
   const pipe = pipeRes.ok
     ? await pipeRes.json()
     : { total: 0, orders: [], statusCounts: {}, page: 1, limit: 5 };
-  const slaData = slaRes.ok ? await slaRes.json() : { breaches: [], ordersAtRisk: [] };
+  const slaData = slaRes.ok
+    ? await slaRes.json()
+    : { breachCount: 0, atRiskCount: 0 };
+  const slaBreaches =
+    typeof slaData.breachCount === "number" ? slaData.breachCount : (slaData.breaches?.length ?? 0);
+  const enquiriesAtRisk =
+    typeof slaData.atRiskCount === "number" ? slaData.atRiskCount : (slaData.ordersAtRisk?.length ?? 0);
   return {
     ...pipe,
-    slaBreaches: slaData.breaches?.length ?? 0,
-    enquiriesAtRisk: slaData.ordersAtRisk?.length ?? 0,
+    slaBreaches,
+    enquiriesAtRisk,
   };
 }
 
@@ -106,13 +112,13 @@ export default function DashboardPage() {
 
   const useCustomRange = Boolean(dateFrom.trim() && dateTo.trim());
 
-  const { data, isLoading: dashboardLoading } = useQuery({
+  const { data, isLoading: dashboardLoading, isFetching } = useQuery({
     queryKey: ["dashboard", period, page, dateFrom, dateTo, user?.role],
     queryFn: () => fetchDashboard(period, page, dateFrom, dateTo, user?.role ?? "USER"),
-    staleTime: 45_000,
+    staleTime: 60_000,
     enabled: !!user,
+    placeholderData: (prev) => prev,
   });
-  const isLoading = authLoading || dashboardLoading;
 
   const hideDivision = user?.role === "MANAGER";
 
@@ -134,32 +140,66 @@ export default function DashboardPage() {
   };
 
   const statusCounts = data?.statusCounts ?? {};
-  const pieData = Object.entries(statusCounts)
+  const pieData: DashboardChartDatum[] = Object.entries(statusCounts)
     .map(([name, value]) => ({
       name: name.replace(/_/g, " "),
       value: value as number,
       fill: STATUS_COLORS[name] ?? "#94a3b8",
+      count: value as number,
     }))
     .filter((d) => d.value > 0);
 
   const barData = pieData.map((d) => ({ ...d, count: d.value }));
 
-  if (isLoading || !data) {
+  if (authLoading) {
     return (
       <div className="space-y-8">
-        <div className="h-8 w-48 bg-slate-200 rounded animate-pulse" />
+        <div className="h-8 w-48 rounded bg-slate-200 animate-pulse" />
         <div className="grid gap-6 sm:grid-cols-2 md:grid-cols-3">
           {[1, 2, 3].map((i) => (
             <Card key={i} className="animate-pulse">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <div className="h-4 w-32 bg-slate-200 rounded" />
+                <div className="h-4 w-32 rounded bg-slate-200" />
               </CardHeader>
               <CardContent>
-                <div className="h-8 w-16 bg-slate-200 rounded" />
+                <div className="h-8 w-16 rounded bg-slate-200" />
               </CardContent>
             </Card>
           ))}
         </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return null;
+  }
+
+  const dataPending = dashboardLoading || !data;
+
+  if (dataPending) {
+    return (
+      <div className="space-y-8">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+          <p className="mt-1 text-slate-500">
+            Welcome back, {user.name}. Loading your overview…
+            {isFetching ? <span className="ml-2 inline-block h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-indigo-600 align-middle" aria-hidden /> : null}
+          </p>
+        </div>
+        <div className="grid gap-6 sm:grid-cols-2 md:grid-cols-3">
+          {[1, 2, 3].map((i) => (
+            <Card key={i} className="animate-pulse">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <div className="h-4 w-32 rounded bg-slate-200" />
+              </CardHeader>
+              <CardContent>
+                <div className="h-8 w-16 rounded bg-slate-200" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+        <div className="h-40 rounded-xl bg-slate-100 animate-pulse" />
       </div>
     );
   }
@@ -299,59 +339,13 @@ export default function DashboardPage() {
         </CardContent>
       </Card>
 
-      {pieData.length > 0 ? (
-        <div className="grid gap-6 lg:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Outcome mix</CardTitle>
-              <p className="text-sm text-slate-500 font-normal">
-                {useCustomRange
-                  ? `Enquiry counts by status for ${dateFrom} → ${dateTo}.`
-                  : "Enquiry counts by status for the selected period."}
-              </p>
-            </CardHeader>
-            <CardContent className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={88} label>
-                    {pieData.map((entry, i) => (
-                      <Cell key={i} fill={entry.fill} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Outcomes by status</CardTitle>
-            </CardHeader>
-            <CardContent className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={barData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-slate-200" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                  <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-                  <Tooltip />
-                  <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                    {barData.map((entry, i) => (
-                      <Cell key={i} fill={entry.fill} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        </div>
-      ) : (
-        <Card>
-          <CardContent className="py-8 text-center text-slate-500 text-sm">
-            No enquiries in this view to chart.
-          </CardContent>
-        </Card>
-      )}
+      <DashboardCharts
+        pieData={pieData}
+        barData={barData}
+        useCustomRange={useCustomRange}
+        dateFrom={dateFrom}
+        dateTo={dateTo}
+      />
 
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-4">
