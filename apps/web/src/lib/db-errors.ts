@@ -19,6 +19,10 @@ export function isDbUnavailableError(err: unknown): boolean {
   // Prisma connection / database errors are typically P10xx.
   if (code.startsWith("P10")) return true;
 
+  // Prisma "table/column missing" errors usually mean migrations haven't run.
+  // Treat these as DB-unavailable for UX (retry after deploy/migrate).
+  if (code === "P2021" || code === "P2022") return true;
+
   // Be defensive: infra/network errors can surface as plain messages.
   return /P1000|P1001|P1002|P1003|P1008|P1011/i.test(message) ||
     /database|connect|connection|timeout|ECONNRESET|ENOTFOUND|EAI_AGAIN/i.test(message);

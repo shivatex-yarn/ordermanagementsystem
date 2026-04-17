@@ -160,13 +160,33 @@ function buildOverviewQuery(f: PipelineFilters): string {
 
 async function fetchOverview(f: PipelineFilters): Promise<Overview> {
   const res = await fetch(`/api/md/overview${buildOverviewQuery(f)}`, { credentials: "include" });
-  if (!res.ok) throw new Error("Failed to load overview");
+  if (!res.ok) {
+    const data = await safeReadJson(res);
+    const message =
+      typeof data.error === "string" && data.error.trim()
+        ? data.error
+        : res.status === 401
+          ? "Unauthorized"
+          : res.status === 403
+            ? "Forbidden"
+            : res.status === 503
+              ? "Service unavailable"
+              : "Request failed";
+    const code = typeof data.code === "string" ? data.code : undefined;
+    throw new HttpError(message, res.status, code);
+  }
   return res.json();
 }
 
 async function fetchDivisionsForFilter(): Promise<{ id: number; name: string }[]> {
   const res = await fetch("/api/divisions", { credentials: "include" });
-  if (!res.ok) throw new Error("Failed to load divisions");
+  if (!res.ok) {
+    const data = await safeReadJson(res);
+    const message =
+      typeof data.error === "string" && data.error.trim() ? data.error : "Failed to load divisions";
+    const code = typeof data.code === "string" ? data.code : undefined;
+    throw new HttpError(message, res.status, code);
+  }
   const data = await res.json();
   const list = data.divisions as { id: number; name: string }[];
   return list ?? [];
@@ -178,8 +198,34 @@ async function fetchMdAuditFeed(page: number, action: string): Promise<MdAuditFe
   q.set("limit", String(AUDIT_PAGE_SIZE));
   if (action) q.set("action", action);
   const res = await fetch(`/api/audit?${q}`, { credentials: "include" });
-  if (!res.ok) throw new Error("Failed to load activity log");
+  if (!res.ok) {
+    const data = await safeReadJson(res);
+    const message =
+      typeof data.error === "string" && data.error.trim() ? data.error : "Failed to load activity log";
+    const code = typeof data.code === "string" ? data.code : undefined;
+    throw new HttpError(message, res.status, code);
+  }
   return res.json();
+}
+
+class HttpError extends Error {
+  status: number;
+  code?: string;
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.status = status;
+    this.code = code;
+  }
+}
+
+async function safeReadJson(res: Response): Promise<Record<string, unknown>> {
+  const contentType = res.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) return {};
+  try {
+    return (await res.json()) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
 }
 
 const statusVariant: Record<string, "default" | "secondary" | "destructive" | "success" | "warning"> = {
@@ -315,9 +361,19 @@ export default function MdOverviewPage() {
     );
   }
   if (error || !data) {
+    const err = error as unknown as Partial<HttpError>;
+    const status = typeof err.status === "number" ? err.status : 0;
+    const code = typeof err.code === "string" ? err.code : "";
+    const isAccessError = status === 401 || status === 403;
+    const isDbError = status === 503 || code === "DB_UNAVAILABLE";
+
     return (
       <div className="rounded-lg border border-red-100 bg-red-50 text-red-800 px-4 py-3 text-sm">
-        Could not load overview. You may not have access (Managing Director or Super Admin only).
+        {isAccessError
+          ? "Could not load overview. You may not have access (Managing Director or Super Admin only)."
+          : isDbError
+            ? "Could not load overview because the database is unavailable (migrations/connection). Please retry shortly."
+            : "Could not load overview due to a server error. Please retry shortly."}
       </div>
     );
   }
