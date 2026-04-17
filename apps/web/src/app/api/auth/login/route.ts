@@ -6,6 +6,7 @@ import { signToken } from "@/lib/auth";
 import { loginSchema } from "@/lib/validation";
 import { getRateLimitIdentifier, rateLimit } from "@/lib/rate-limit";
 import { Role } from "@prisma/client";
+import { dbUnavailableJson, isDbUnavailableError } from "@/lib/db-errors";
 
 const LOGIN_MAX_PER_MINUTE = 30;
 
@@ -171,6 +172,10 @@ export async function POST(req: Request) {
     return response;
   } catch (err) {
     console.error("[login] unexpected error:", err);
+    if (isDbUnavailableError(err)) {
+      // Keep the status consistent so the client can retry without showing "logged out".
+      return dbUnavailableJson("Database unavailable. Please retry login.");
+    }
     return NextResponse.json(
       { error: "Login failed. Please try again." },
       { status: 500, headers: { "X-RateLimit-Remaining": String(remaining) } }
