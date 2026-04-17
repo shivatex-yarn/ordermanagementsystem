@@ -567,19 +567,22 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   });
 
   const isManager = user && ["MANAGER", "SUPER_ADMIN"].includes(user.role);
-  const canAct = order && isManager && ["PLACED", "TRANSFERRED", "IN_PROGRESS"].includes(order.status);
+  const status = order?.status;
+  const hasStatus = typeof status === "string";
+  const canAct = Boolean(order && isManager && hasStatus && ["PLACED", "TRANSFERRED", "IN_PROGRESS"].includes(status));
   /** Division-side reject — not shown to the person who raised the enquiry (they use Cancel enquiry instead). */
   const canRejectEnquiry =
     canAct && order && user && Number(user.id) !== order.createdById;
+  const isClosedStatus = hasStatus && ["REJECTED", "COMPLETED", "CANCELLED"].includes(status);
   const mightManageSample =
     user &&
     order &&
     ["MANAGER", "SUPER_ADMIN", "MANAGING_DIRECTOR"].includes(user.role) &&
-    !["REJECTED", "COMPLETED", "CANCELLED"].includes(order.status);
+    !isClosedStatus;
   const mightSubmitFeedback =
     user &&
     order &&
-    !["REJECTED", "COMPLETED", "CANCELLED"].includes(order.status) &&
+    !isClosedStatus &&
     (order.createdById === user.id ||
       ["SUPER_ADMIN", "MANAGING_DIRECTOR"].includes(user.role));
 
