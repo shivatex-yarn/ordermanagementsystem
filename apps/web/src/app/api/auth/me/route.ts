@@ -30,21 +30,62 @@ export async function GET() {
       return NextResponse.json({ error: "Invalid session" }, { status: 401 });
     }
 
-    const db = await withTiming("db_user", () =>
-      prisma.user.findUnique({
-        where: { id: userId },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          role: true,
-          divisionId: true,
-          division: { select: { id: true, name: true } },
-        },
-      })
-    );
-    marks.push(db.mark);
-    const user = db.value;
+    let user:
+      | {
+          id: number;
+          name: string;
+          email: string;
+          role: unknown;
+          divisionId: number | null;
+          division: { id: number; name: string } | null;
+        }
+      | null = null;
+    try {
+      const db = await withTiming("db_user", () =>
+        prisma.user.findUnique({
+          where: { id: userId },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true,
+            divisionId: true,
+            division: { select: { id: true, name: true } },
+          },
+        })
+      );
+      marks.push(db.mark);
+      user = db.value;
+    } catch (dbErr) {
+      console.error("[api/auth/me] prisma user lookup failed:", dbErr);
+      const msg =
+        dbErr instanceof Error ? dbErr.message : typeof dbErr === "string" ? dbErr : "";
+      const prismaCode =
+        typeof dbErr === "object" &&
+        dbErr !== null &&
+        "code" in dbErr &&
+        typeof (dbErr as { code?: unknown }).code === "string"
+          ? (dbErr as { code: string }).code
+          : "";
+      const looksLikeDbUnavailable =
+        prismaCode.startsWith("P10") ||
+        /P1000|P1001|P1002|P1003|P1008|P1011/i.test(msg) ||
+        /database|connect|connection|timeout|ECONNRESET|ENOTFOUND|EAI_AGAIN/i.test(msg);
+
+      if (looksLikeDbUnavailable) {
+        const res = NextResponse.json(
+          { error: "Database unavailable. Please retry.", code: "DB_UNAVAILABLE" },
+          { status: 503 }
+        );
+        res.headers.set("Retry-After", "1");
+        res.headers.set("Server-Timing", timingHeaderValue(marks));
+        return res;
+      }
+
+      const res = NextResponse.json({ error: "Failed to load session" }, { status: 500 });
+      res.headers.set("Server-Timing", timingHeaderValue(marks));
+      return res;
+    }
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }

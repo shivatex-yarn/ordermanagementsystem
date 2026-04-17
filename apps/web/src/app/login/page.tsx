@@ -25,15 +25,33 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-        credentials: "include",
-      });
-      const data = await res.json();
+      const doLogin = async () => {
+        const res = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password }),
+          credentials: "include",
+        });
+        const contentType = res.headers.get("content-type") ?? "";
+        const data =
+          contentType.includes("application/json")
+            ? await res.json()
+            : ({} as Record<string, unknown>);
+        return { res, data };
+      };
+
+      let { res, data } = await doLogin();
+      // If DB is temporarily unavailable, do one quick retry so users don't need to click twice.
+      if (res.status === 503) {
+        await new Promise((r) => setTimeout(r, 900));
+        ({ res, data } = await doLogin());
+      }
       if (!res.ok) {
-        setError(data.error || "Login failed");
+        const msg =
+          typeof (data as Record<string, unknown>)?.error === "string"
+            ? String((data as Record<string, unknown>).error)
+            : "Login failed";
+        setError(msg);
         return;
       }
       router.push("/dashboard");

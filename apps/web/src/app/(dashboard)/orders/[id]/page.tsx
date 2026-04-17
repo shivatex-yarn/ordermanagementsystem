@@ -751,10 +751,10 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         </Link>
         <h1
           className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-2xl font-bold tracking-tight text-slate-900"
-          aria-label={`${formatEnquiryNumber(order.orderNumber)}, ${order.currentDivision?.name ?? "—"}, ${new Date(order.createdAt).toLocaleString()}, ${order.status.replace("_", " ")}`}
+          aria-label={`${order.orderNumber ? formatEnquiryNumber(order.orderNumber) : "—"}, ${order.currentDivision?.name ?? "—"}, ${new Date(order.createdAt).toLocaleString()}, ${order.status.replace("_", " ")}`}
         >
-          <span title={formatEnquiryNumber(order.orderNumber)}>
-            {formatEnquiryNumberShort(order.orderNumber)}
+          <span title={order.orderNumber ? formatEnquiryNumber(order.orderNumber) : "—"}>
+            {order.orderNumber ? formatEnquiryNumberShort(order.orderNumber) : "—"}
           </span>
           <span className="font-normal text-slate-400" aria-hidden>
             →
