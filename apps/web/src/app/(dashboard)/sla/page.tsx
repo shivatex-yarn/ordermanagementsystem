@@ -13,16 +13,6 @@ async function fetchSla(): Promise<{ breaches: SlaBreachListItem[]; ordersAtRisk
   return res.json();
 }
 
-type SlaBreachListItem = {
-  id: number;
-  breachedAt: string;
-  headRejectedAt?: string | null;
-  headRejectionMessage?: string | null;
-  headRejectedBy?: { name?: string | null } | null;
-  division?: { name?: string | null } | null;
-  order?: { id?: number | null; orderNumber?: string | null } | null;
-};
-
 export default function SLAPage() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["sla"],
@@ -58,14 +48,14 @@ export default function SLAPage() {
                   <li key={b.id} className="flex flex-col gap-1 rounded-lg border border-slate-100 bg-white px-3 py-2 text-sm">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span>
-                      {b.order?.id != null ? (
-                        <Link href={`/orders/${b.order.id}`} className="font-medium text-indigo-700 hover:underline">
-                          {b.order.orderNumber}
-                        </Link>
-                      ) : (
-                        b.order?.orderNumber
-                      )}{" "}
-                      — {b.division?.name}
+                        {b.order?.id != null ? (
+                          <Link href={`/orders/${b.order.id}`} className="font-medium text-indigo-700 hover:underline">
+                            {b.order.orderNumber ?? "Unknown order"}
+                          </Link>
+                        ) : (
+                          b.order?.orderNumber ?? "Unknown order"
+                        )}{" "}
+                        — {b.division?.name ?? "Unknown division"}
                       </span>
                       <Badge variant="destructive">{new Date(b.breachedAt).toLocaleString()}</Badge>
                     </div>
