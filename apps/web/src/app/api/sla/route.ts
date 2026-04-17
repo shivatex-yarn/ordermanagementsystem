@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { withRole } from "@/lib/with-auth";
 import { runSlaBreachCheck } from "@/lib/sla-breach-job";
+import { dbUnavailableJson, isDbUnavailableError } from "@/lib/db-errors";
 
 export async function GET(req: Request) {
   const auth = await withRole(["SUPER_ADMIN", "MANAGING_DIRECTOR"]);
@@ -44,9 +45,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ breaches, ordersAtRisk });
   } catch (err) {
     console.error("[api/sla] GET failed:", err);
-    return NextResponse.json(
-      { error: "SLA endpoint failed. Check database connectivity and migrations." },
-      { status: 503 }
-    );
+    if (isDbUnavailableError(err)) return dbUnavailableJson();
+    return NextResponse.json({ error: "SLA endpoint failed." }, { status: 500 });
   }
 }

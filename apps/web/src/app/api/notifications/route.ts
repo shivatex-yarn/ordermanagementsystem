@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { withAuth } from "@/lib/with-auth";
 import { enrichNotificationRecords } from "@/lib/notification-enrich";
+import { dbUnavailableJson, isDbUnavailableError } from "@/lib/db-errors";
 
 /** JWT `sub` must be a non-negative integer (0 = offline mock user). */
 function parseUserId(sub: string): number | null {
@@ -35,6 +36,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ notifications });
   } catch (err) {
     console.error("[GET /api/notifications]", err);
+    if (isDbUnavailableError(err)) return dbUnavailableJson();
     return NextResponse.json({ error: "Failed to load notifications" }, { status: 500 });
   }
 }
@@ -60,6 +62,7 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("[PATCH /api/notifications]", err);
+    if (isDbUnavailableError(err)) return dbUnavailableJson();
     return NextResponse.json({ error: "Failed to update notifications" }, { status: 500 });
   }
 }
