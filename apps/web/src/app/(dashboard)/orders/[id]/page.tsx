@@ -91,6 +91,73 @@ type OrderOpenSlaBreach = {
 
 type DivisionManagerWithUser = { user?: { id?: number } | null };
 
+type OrderDetail = {
+  [key: string]: unknown;
+  id: number;
+  orderNumber: string | null;
+  status: string;
+  createdAt: string;
+  createdById: number;
+  currentDivisionId?: number;
+  companyName: string | null;
+  description: string | null;
+  customFields: Record<string, unknown> | null;
+  transferCount: number;
+  rejectionCount?: number;
+  slaDeadline: string | null;
+  sampleRequested: boolean;
+  sampleRequestNotes: string | null;
+  sampleDetails: string | null;
+  sampleQuantity: string | null;
+  sampleWeight: string | null;
+  sampleApprovedAt: string | null | undefined;
+  sampleShippedAt: string | null | undefined;
+  sampleApprovedBy?: { name?: string | null } | null;
+  sampleShippedByCourier?: boolean;
+  courierName?: string | null;
+  trackingId?: string | null;
+  sampleProofUrl?: string | null;
+  salesFeedback?: string | null;
+  salesFeedbackAt?: string | null;
+  cancellationReason?: string | null;
+  cancelledAt?: string | null;
+  completedAt?: string | null;
+  currentDivision?: { id?: number; name?: string | null; managers?: DivisionManagerWithUser[] } | null;
+  createdBy?: { name?: string | null; email?: string | null } | null;
+  acceptedBy?: { name: string; email?: string | null } | null;
+  receivedBy?: { name?: string | null; email?: string | null } | null;
+  completedBy?: { name?: string | null; email?: string | null } | null;
+  rejectedBy?: { name?: string | null; email?: string | null } | null;
+  cancelledBy?: { name?: string | null } | null;
+  rejections?: Array<{
+    id?: number;
+    createdAt: string;
+    reason?: string | null;
+    division?: { name?: string | null } | null;
+    rejectedBy?: { name?: string | null; email?: string | null } | null;
+  }>;
+  transfers?: Array<{
+    id?: number;
+    createdAt: string;
+    reason?: string | null;
+    fromDivision?: { name?: string | null } | null;
+    toDivision?: {
+      name?: string | null;
+      managers?: Array<{ user?: { name?: string | null; email?: string | null } | null }> | null;
+    } | null;
+    transferredBy?: { name?: string | null; email?: string | null } | null;
+  }>;
+  editHistory?: Array<{
+    id: number;
+    fieldName: string;
+    oldValue: string | null;
+    newValue: string | null;
+    user: { name: string };
+    createdAt: string;
+  }>;
+  slaBreaches?: unknown;
+};
+
 function auditPayloadSummary(action: string, payload: unknown): string {
   if (!payload || typeof payload !== "object") return "";
   const p = payload as Record<string, unknown>;
@@ -378,7 +445,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     isError,
     error: orderError,
     refetch: refetchOrder,
-  } = useQuery({
+  } = useQuery<OrderDetail>({
     queryKey: ["order", orderId],
     queryFn: () => fetchOrder(orderId),
     enabled: Number.isInteger(orderId),
@@ -937,77 +1004,58 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                   </li>
                 </ul>
               </div>
-              {order.transfers?.length > 0 && (
+              {(order.transfers?.length ?? 0) > 0 && (
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">
-                    Transfer history ({order.transfers.length})
+                    Transfer history ({order.transfers?.length ?? 0})
                   </p>
                   <ul className="space-y-3 list-none pl-0">
-                    {order.transfers.map(
-                      (t: {
-                        id: number;
-                        fromDivision: { name: string };
-                        toDivision: {
-                          name: string;
-                          managers?: { user: { name: string; email: string } }[];
-                        };
-                        reason: string;
-                        transferredBy: { name: string; email: string };
-                        createdAt: string;
-                      }) => {
-                        const heads =
-                          t.toDivision?.managers?.map((m) => `${m.user.name} (${m.user.email})`).join(", ") ||
-                          "No division heads assigned";
-                        return (
-                          <li key={t.id} className="rounded-lg border border-slate-100 bg-slate-50/60 p-3">
-                            <p className="font-medium text-slate-900">
-                              {t.fromDivision.name} → {t.toDivision.name}
-                            </p>
-                            <p className="mt-1 text-slate-600">
-                              <span className="text-slate-500">Transferred by:</span> {t.transferredBy.name} (
-                              {t.transferredBy.email})
-                            </p>
-                            <p className="text-slate-600">
-                              <span className="text-slate-500">Division responsible (heads):</span> {heads}
-                            </p>
-                            <p className="mt-1 text-slate-500 text-xs">{new Date(t.createdAt).toLocaleString()}</p>
-                            {t.reason?.trim() ? (
-                              <p className="mt-2 text-slate-700 border-t border-slate-100 pt-2">{t.reason}</p>
-                            ) : null}
-                          </li>
-                        );
-                      }
-                    )}
+                    {(order.transfers ?? []).map((t, idx) => {
+                      const heads =
+                        t.toDivision?.managers
+                          ?.map((m) => `${m.user?.name ?? "—"} (${m.user?.email ?? "—"})`)
+                          .join(", ") || "No division heads assigned";
+                      return (
+                        <li key={t.id ?? `${t.createdAt}-${idx}`} className="rounded-lg border border-slate-100 bg-slate-50/60 p-3">
+                          <p className="font-medium text-slate-900">
+                            {t.fromDivision?.name ?? "—"} → {t.toDivision?.name ?? "—"}
+                          </p>
+                          <p className="mt-1 text-slate-600">
+                            <span className="text-slate-500">Transferred by:</span> {t.transferredBy?.name ?? "—"} (
+                            {t.transferredBy?.email ?? "—"})
+                          </p>
+                          <p className="text-slate-600">
+                            <span className="text-slate-500">Division responsible (heads):</span> {heads}
+                          </p>
+                          <p className="mt-1 text-slate-500 text-xs">{new Date(t.createdAt).toLocaleString()}</p>
+                          {t.reason?.trim() ? (
+                            <p className="mt-2 text-slate-700 border-t border-slate-100 pt-2">{t.reason}</p>
+                          ) : null}
+                        </li>
+                      );
+                    })}
                   </ul>
                 </div>
               )}
-              {order.rejections?.length > 0 && (
+              {(order.rejections?.length ?? 0) > 0 && (
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">
-                    Rejection events ({order.rejections.length})
+                    Rejection events ({order.rejections?.length ?? 0})
                   </p>
                   <ul className="space-y-2 list-none pl-0">
-                    {order.rejections.map(
-                      (r: {
-                        id: number;
-                        division: { name: string };
-                        reason: string;
-                        rejectedBy: { name: string; email: string };
-                        createdAt: string;
-                      }) => (
-                        <li key={r.id} className="rounded-lg border border-red-100 bg-red-50/40 p-3">
-                          <p className="text-slate-900">
-                            <span className="text-slate-500">Rejected by:</span> {r.rejectedBy.name} (
-                            {r.rejectedBy.email})
-                          </p>
-                          <p className="text-slate-600">
-                            <span className="text-slate-500">Division:</span> {r.division.name}
-                          </p>
-                          <p className="text-slate-500 text-xs mt-1">{new Date(r.createdAt).toLocaleString()}</p>
-                          <p className="mt-2 text-slate-800">{r.reason}</p>
-                        </li>
-                      )
-                    )}
+                    {(order.rejections ?? []).map((r, idx) => (
+                      <li key={r.id ?? `${r.createdAt}-${idx}`} className="rounded-lg border border-red-100 bg-red-50/40 p-3">
+                        <p className="text-slate-900">
+                          <span className="text-slate-500">Rejected by:</span> {r.rejectedBy?.name ?? "—"} (
+                          {r.rejectedBy?.email ?? "—"})
+                        </p>
+                        <p className="text-slate-600">
+                          <span className="text-slate-500">Division:</span> {r.division?.name ?? "—"}
+                        </p>
+                        <p className="text-slate-500 text-xs mt-1">{new Date(r.createdAt).toLocaleString()}</p>
+                        {r.reason?.trim() ? <p className="mt-2 text-slate-800">{r.reason}</p> : null}
+                      </li>
+                    ))}
                   </ul>
                 </div>
               )}
@@ -1524,12 +1572,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         </Card>
       )}
 
-      {order.editHistory?.length > 0 && (
+      {(order.editHistory?.length ?? 0) > 0 && (
         <Card>
           <CardHeader><CardTitle>Edit history</CardTitle></CardHeader>
           <CardContent>
             <ul className="space-y-2 text-sm">
-              {order.editHistory.map((h: { id: number; fieldName: string; oldValue: string | null; newValue: string | null; user: { name: string }; createdAt: string }) => (
+              {(order.editHistory ?? []).map((h) => (
                 <li key={h.id} className="rounded border border-slate-100 p-2">
                   <span className="font-medium">{h.fieldName}</span>: &quot;{h.oldValue ?? "—"}&quot; → &quot;{h.newValue ?? "—"}&quot;
                   <span className="text-slate-500 ml-2">by {h.user.name} at {new Date(h.createdAt).toLocaleString()}</span>
@@ -1540,14 +1588,15 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         </Card>
       )}
 
-      {!isAuditView && order.transfers?.length > 0 && (
+      {!isAuditView && (order.transfers?.length ?? 0) > 0 && (
         <Card>
           <CardHeader><CardTitle>Transfers</CardTitle></CardHeader>
           <CardContent>
             <ul className="space-y-2">
-              {order.transfers.map((t: { id: number; fromDivision: { name: string }; toDivision: { name: string }; reason: string; transferredBy: { name: string }; createdAt: string }) => (
-                <li key={t.id} className="text-sm">
-                  {t.fromDivision.name} → {t.toDivision.name} by {t.transferredBy.name}: {t.reason} ({new Date(t.createdAt).toLocaleString()})
+              {(order.transfers ?? []).map((t, idx) => (
+                <li key={t.id ?? `${t.createdAt}-${idx}`} className="text-sm">
+                  {t.fromDivision?.name ?? "—"} → {t.toDivision?.name ?? "—"} by {t.transferredBy?.name ?? "—"}:{" "}
+                  {t.reason ?? "—"} ({new Date(t.createdAt).toLocaleString()})
                 </li>
               ))}
             </ul>
@@ -1555,16 +1604,17 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         </Card>
       )}
 
-      {!isAuditView && order.rejections?.length > 0 && (
+      {!isAuditView && (order.rejections?.length ?? 0) > 0 && (
         <Card>
           <CardHeader>
             <CardTitle>{isEnquirySubmitter ? "Division did not proceed" : "Rejections"}</CardTitle>
           </CardHeader>
           <CardContent>
             <ul className="space-y-2">
-              {order.rejections.map((r: { id: number; division: { name: string }; reason: string; rejectedBy: { name: string }; createdAt: string }) => (
-                <li key={r.id} className="text-sm">
-                  {r.division.name}: {r.reason} — {r.rejectedBy.name} ({new Date(r.createdAt).toLocaleString()})
+              {(order.rejections ?? []).map((r, idx) => (
+                <li key={r.id ?? `${r.createdAt}-${idx}`} className="text-sm">
+                  {r.division?.name ?? "—"}: {r.reason ?? "—"} — {r.rejectedBy?.name ?? "—"} (
+                  {new Date(r.createdAt).toLocaleString()})
                 </li>
               ))}
             </ul>
