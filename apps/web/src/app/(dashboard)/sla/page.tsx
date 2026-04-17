@@ -27,14 +27,20 @@ type SlaBreachListItem = {
 
 const PAGE_SIZE = 5;
 
+function listRangeLabel(page: number, pageSize: number, total: number): string {
+  const start = (page - 1) * pageSize + 1;
+  const end = Math.min(page * pageSize, total);
+  return `Showing ${start}–${end} of ${total}`;
+}
+
 export default function SLAPage() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["sla"],
     queryFn: fetchSla,
   });
 
-  const breaches = useMemo(() => data?.breaches ?? [], [data?.breaches]);
-  const ordersAtRisk = useMemo(() => data?.ordersAtRisk ?? [], [data?.ordersAtRisk]);
+  const breaches = useMemo(() => data?.breaches ?? [], [data]);
+  const ordersAtRisk = useMemo(() => data?.ordersAtRisk ?? [], [data]);
 
   const [breachesPage, setBreachesPage] = useState(1);
   const [riskPage, setRiskPage] = useState(1);
@@ -125,10 +131,13 @@ export default function SLAPage() {
                     </li>
                   ))}
                 </ul>
-                <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50/50 px-1 pt-3 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-xs text-slate-500">
-                    Page {breachesPage} of {breachesTotalPages} · {breaches.length} breach
-                    {breaches.length === 1 ? "" : "es"}
+                <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50/50 px-2 pb-1 pt-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm text-slate-600">
+                    <span className="font-medium text-slate-800">{listRangeLabel(breachesPage, PAGE_SIZE, breaches.length)}</span>
+                    <span className="mx-1.5 text-slate-300" aria-hidden>
+                      ·
+                    </span>
+                    Page {breachesPage} of {breachesTotalPages} ({PAGE_SIZE} per page)
                   </p>
                   <div className="flex flex-wrap gap-2">
                     <Button
@@ -180,10 +189,13 @@ export default function SLAPage() {
                     </li>
                   ))}
                 </ul>
-                <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50/50 px-1 pt-3 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-xs text-slate-500">
-                    Page {riskPage} of {riskTotalPages} · {ordersAtRisk.length} order
-                    {ordersAtRisk.length === 1 ? "" : "s"}
+                <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50/50 px-2 pb-1 pt-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm text-slate-600">
+                    <span className="font-medium text-slate-800">{listRangeLabel(riskPage, PAGE_SIZE, ordersAtRisk.length)}</span>
+                    <span className="mx-1.5 text-slate-300" aria-hidden>
+                      ·
+                    </span>
+                    Page {riskPage} of {riskTotalPages} ({PAGE_SIZE} per page)
                   </p>
                   <div className="flex flex-wrap gap-2">
                     <Button
