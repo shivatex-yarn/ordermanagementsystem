@@ -19,9 +19,10 @@ async function handleSlaBreachNotification(
   });
   if (!exists) return;
 
+  /** SLA breach alerts: every active Super Admin + every active Managing Director (in-app + detailed email). */
   const userIds = new Set<number>();
   const superAdmins = await prisma.user.findMany({
-    where: { role: "SUPER_ADMIN" },
+    where: { role: "SUPER_ADMIN", active: true },
     select: { id: true },
   });
   superAdmins.forEach((u) => userIds.add(u.id));

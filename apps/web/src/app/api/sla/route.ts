@@ -1,13 +1,26 @@
 import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { withRole } from "@/lib/with-auth";
+import { withAuth } from "@/lib/with-auth";
 import { runSlaBreachCheck } from "@/lib/sla-breach-job";
 import { dbUnavailableJson, isDbUnavailableError } from "@/lib/db-errors";
 
+const SLA_ROLES = new Set(["SUPER_ADMIN", "MANAGING_DIRECTOR"]);
+
 export async function GET(req: Request) {
-  const auth = await withRole(["SUPER_ADMIN", "MANAGING_DIRECTOR"]);
+  const auth = await withAuth();
   if (auth.response) return auth.response;
+
+  /** Use DB role so this matches `/api/auth/me` and the dashboard (JWT can lag after promotion/demotion). */
+  const userId = Number(auth.payload.sub);
+  let effectiveRole = auth.payload.role;
+  if (Number.isInteger(userId) && userId >= 1) {
+    const row = await prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
+    if (row) effectiveRole = row.role;
+  }
+  if (!SLA_ROLES.has(effectiveRole)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const { searchParams } = new URL(req.url);
   /** Fast path for metrics (dashboard): skip sync job + avoid loading up to 100 breach rows. */

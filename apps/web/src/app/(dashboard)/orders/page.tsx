@@ -19,6 +19,7 @@ import type { EnquiryPeriodFilter } from "@/lib/date-period";
 import { PERIOD_LABELS } from "@/lib/date-period";
 import { formatEnquiryNumber } from "@/lib/enquiry-display";
 import { downloadEnquiriesExcel, fetchAllOrdersForExport } from "@/lib/enquiry-export";
+import { userMayCreateEnquiry } from "@/lib/enquiry-access";
 
 const statusVariant: Record<string, "default" | "secondary" | "destructive" | "success" | "warning"> = {
   PLACED: "secondary",
@@ -46,9 +47,10 @@ export default function OrdersPage() {
     queryKey: ["orders", page, period],
     queryFn: () => fetchOrders(page, period),
     staleTime: 45_000,
+    enabled: Boolean(user),
   });
 
-  const canCreate = user && ["USER", "SUPERVISOR", "SUPER_ADMIN"].includes(user.role);
+  const canCreate = Boolean(user && userMayCreateEnquiry(user.role));
   const hideDivision = user?.role === "MANAGER";
 
   const handleExport = async () => {
@@ -132,10 +134,14 @@ export default function OrdersPage() {
                   <Link
                     key={order.id}
                     href={`/orders/${order.id}`}
-                    className="flex flex-col gap-3 rounded-lg border border-slate-100 p-4 transition-colors hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
+                    className="flex flex-col gap-3 rounded-lg border-2 border-slate-300/70 p-4 shadow-sm transition-colors hover:border-indigo-300/60 hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
                   >
                     <div>
-                      <p className="font-medium">{formatEnquiryNumber(order.orderNumber)}</p>
+                      <p className="inline-flex max-w-full flex-wrap items-center gap-2">
+                        <span className="rounded-md border-2 border-indigo-400/70 bg-indigo-50 px-2 py-0.5 font-mono text-sm font-semibold text-indigo-950 ring-1 ring-indigo-200/70">
+                          {formatEnquiryNumber(order.orderNumber)}
+                        </span>
+                      </p>
                       <p className="text-sm text-slate-500">
                         {order.createdBy?.name ? (
                           <>
@@ -145,11 +151,16 @@ export default function OrdersPage() {
                             </span>
                             <span className="text-slate-500">
                               {" "}
-                              · {new Date(order.createdAt).toLocaleString()}
+                              ·{" "}
+                              <time dateTime={order.createdAt} suppressHydrationWarning>
+                                {new Date(order.createdAt).toLocaleString()}
+                              </time>
                             </span>
                           </>
                         ) : (
-                          new Date(order.createdAt).toLocaleString()
+                          <time dateTime={order.createdAt} suppressHydrationWarning>
+                            {new Date(order.createdAt).toLocaleString()}
+                          </time>
                         )}
                         {!hideDivision ? (
                           <>

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { withAuth } from "@/lib/with-auth";
 import { Prisma, type OrderStatus } from "@prisma/client";
 import { createOrderSchema } from "@/lib/validation";
+import { userMayCreateEnquiry } from "@/lib/enquiry-access";
 import { createOrder } from "@/lib/order-engine";
 import { getRateLimitIdentifierForUser, rateLimit } from "@/lib/rate-limit";
 import { getCreatedAtRange, normalizePeriodParam, parseCreatedAtRangeFromParams } from "@/lib/date-period";
@@ -164,11 +165,19 @@ export async function POST(req: Request) {
       { status: 400 }
     );
   }
-  const canCreate = ["USER", "SUPERVISOR", "SUPER_ADMIN"].includes(auth.payload.role);
-  if (!canCreate) {
-    return NextResponse.json({ error: "Only users and supervisors can create enquiries" }, { status: 403 });
+  if (!userMayCreateEnquiry(auth.payload.role)) {
+    return NextResponse.json(
+      {
+        error:
+          "Only sales users (User or Supervisor role) can create new enquiries. Division managers process enquiries from the list.",
+      },
+      { status: 403 }
+    );
   }
   const userId = Number(auth.payload.sub);
+  if (!Number.isInteger(userId) || userId < 1) {
+    return NextResponse.json({ error: "Invalid session" }, { status: 401 });
+  }
   const mayUseDivision = await userMayRouteEnquiryToDivision(userId, auth.payload.role, parsed.data.divisionId);
   if (!mayUseDivision) {
     return NextResponse.json(

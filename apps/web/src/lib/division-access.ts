@@ -23,6 +23,18 @@ export async function userMayRouteEnquiryToDivision(
   divisionId: number
 ): Promise<boolean> {
   if (role === "SUPER_ADMIN") return true;
+  /**
+   * GET /api/divisions?scope=routing lists every active division for MD (same as super admin),
+   * but MD often has no `user.divisionId` / division_manager rows — so `getRoutableDivisionIdsForUser`
+   * is empty and POST would incorrectly reject. Align POST with that list: any active division.
+   */
+  if (role === "MANAGING_DIRECTOR") {
+    const d = await prisma.division.findFirst({
+      where: { id: divisionId, active: true },
+      select: { id: true },
+    });
+    return d != null;
+  }
   const allowed = await getRoutableDivisionIdsForUser(userId);
   return allowed.includes(divisionId);
 }

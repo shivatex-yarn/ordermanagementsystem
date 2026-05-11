@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   LayoutDashboard,
   Package,
@@ -47,6 +47,7 @@ export default function DashboardLayout({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { user, isLoading } = useAuth();
   /** Avoid hydration mismatch: unread counts differ between SSR and client. */
   const [mounted, setMounted] = useState(false);
@@ -241,7 +242,7 @@ export default function DashboardLayout({
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   className="cursor-pointer text-red-600 focus:text-red-600"
-                  onClick={() => performLogout(router)}
+                  onClick={() => void performLogout(router, queryClient)}
                 >
                   <LogOut className="mr-2 h-4 w-4" />
                   Log out
