@@ -71,6 +71,19 @@ export default function DashboardLayout({
   /** Avoid hydration mismatch for notification copy/badge until client mount. */
   const showUnreadUi = mounted;
 
+  /**
+   * `useAuth()` intentionally does not fetch during SSR (relative `/api/...` URL),
+   * so the server-rendered HTML can differ from the first client render.
+   * Render a stable loading shell until we mount to avoid hydration mismatch.
+   */
+  if (!mounted) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <div className="animate-pulse text-slate-500">Loading...</div>
+      </div>
+    );
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
@@ -92,7 +105,13 @@ export default function DashboardLayout({
     );
   }
 
+  const isAccountsView = user.role === "ACCOUNTS";
+
   const filteredNav = nav.filter((item) => {
+    if (isAccountsView) {
+      // Accounts users: only dashboard, enquiry list, notifications.
+      return item.href === "/dashboard" || item.href === "/orders" || item.href === "/notifications";
+    }
     if (user.role === "MANAGING_DIRECTOR") {
       return item.href === "/md" || item.href === "/notifications";
     }

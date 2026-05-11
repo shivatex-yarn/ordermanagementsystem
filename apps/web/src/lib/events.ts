@@ -36,6 +36,7 @@ export interface OrderAcceptedEvent extends BaseOrderEvent {
   type: "OrderAccepted";
   acceptedById: number;
   divisionId: number;
+  acceptanceReason?: string | null;
 }
 
 export interface OrderTransferredEvent extends BaseOrderEvent {
@@ -43,6 +44,7 @@ export interface OrderTransferredEvent extends BaseOrderEvent {
   fromDivisionId: number;
   toDivisionId: number;
   reason: string;
+  transferDetails?: string | null;
   transferredById: number;
 }
 
@@ -70,6 +72,20 @@ export interface OrderReceivedEvent extends BaseOrderEvent {
   type: "OrderReceived";
   receivedById: number;
   divisionId: number;
+  receiveReason?: string | null;
+}
+
+export interface OrderEnquiryHandoffSubmittedEvent extends BaseOrderEvent {
+  type: "OrderEnquiryHandoffSubmitted";
+  divisionId: number;
+  supervisorId: number;
+  developmentKind: "new" | "existing";
+}
+
+export interface SampleHeadRequestApprovedEvent extends BaseOrderEvent {
+  type: "SampleHeadRequestApproved";
+  divisionId: number;
+  approvedById: number;
 }
 
 export interface SLABreachEvent extends BaseOrderEvent {
@@ -124,6 +140,8 @@ export type OrderEvent =
   | OrderCompletedEvent
   | OrderCancelledEvent
   | OrderReceivedEvent
+  | OrderEnquiryHandoffSubmittedEvent
+  | SampleHeadRequestApprovedEvent
   | SLABreachEvent
   | SLABreachHeadRejectionSubmittedEvent
   | SampleDetailsUpdatedEvent

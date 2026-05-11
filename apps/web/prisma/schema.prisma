@@ -8,6 +8,9 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  // Use a direct (non-pooler) connection for migrations when available.
+  // This reduces intermittent pooler disconnects in development.
+  directUrl = env("DIRECT_DATABASE_URL")
 }
 
 enum Role {
@@ -15,6 +18,7 @@ enum Role {
   MANAGING_DIRECTOR
   MANAGER
   SUPERVISOR
+  ACCOUNTS
   USER
 }
 
@@ -57,6 +61,8 @@ model User {
   multiDivisionRequestsCreated MultiDivisionAccessRequest[] @relation("MultiDivisionRequestUser")
   multiDivisionRequestsApproved MultiDivisionAccessRequest[] @relation("MultiDivisionRequestApprover")
   sampleApprovals Order[] @relation("SampleApprovedBy")
+  headSampleRequestApprovals Order[] @relation("OrderHeadSampleRequestApprovedBy")
+  assignedSupervisedOrders Order[] @relation("OrderAssignedSupervisor")
   cancelledOrders Order[] @relation("OrderCancelledBy")
   loginSessions   UserLoginSession[]
   slaBreachesHeadRejected SLABreach[] @relation("SLABreachHeadRejectedBy")
@@ -158,6 +164,15 @@ model Order {
   completedBy     User?     @relation("OrderCompletedBy", fields: [completedById], references: [id])
   cancelledBy     User?     @relation("OrderCancelledBy", fields: [cancelledById], references: [id])
   sampleApprovedBy  User?     @relation("SampleApprovedBy", fields: [sampleApprovedById], references: [id])
+  assignedSupervisorId Int?  @map("assigned_supervisor_id")
+  assignedSupervisor   User?  @relation("OrderAssignedSupervisor", fields: [assignedSupervisorId], references: [id])
+  headSampleRequestApprovedBy   User?     @relation("OrderHeadSampleRequestApprovedBy", fields: [headSampleRequestApprovedById], references: [id])
+  headSampleRequestApprovedById Int?      @map("head_sample_request_approved_by_id")
+
+  acceptanceReason              String?   @map("acceptance_reason") @db.Text
+  receiveReason                   String?   @map("receive_reason") @db.Text
+  enquiryHandoff                  Json?     @map("enquiry_handoff")
+  headSampleRequestApprovedAt     DateTime? @map("head_sample_request_approved_at")
 
   transfers      OrderTransfer[]
   rejections     OrderRejection[]
@@ -181,6 +196,7 @@ model OrderTransfer {
   fromDivisionId Int      @map("from_division_id")
   toDivisionId   Int      @map("to_division_id")
   reason         String   @db.Text
+  transferDetails String? @map("transfer_details") @db.Text
   transferredById Int     @map("transferred_by_id")
   createdAt      DateTime @default(now())
 

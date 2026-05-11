@@ -116,6 +116,47 @@ export async function sendEnquiryNotificationEmail(
   return sendEmail({ to: toEmail, subject, html, text });
 }
 
+/** Email to the assigned supervisor when the division head completes enquiry handoff. */
+export async function sendSupervisorEnquiryHandoffEmail(
+  toEmail: string,
+  toName: string,
+  payload: {
+    orderNumber: string;
+    companyName: string | null;
+    description: string | null;
+    divisionName: string;
+    acceptanceReason: string | null;
+    developmentKind: "new" | "existing";
+    developmentBody: string;
+    orderUrl: string;
+  }
+): Promise<{ ok: boolean; error?: string }> {
+  const subject = `You have been assigned enquiry ${payload.orderNumber}`;
+  const safeName = escapeHtml(toName);
+  const devLabel = payload.developmentKind === "new" ? "New development" : "Existing development";
+  const inner = `
+        <tr>
+          <td style="height:4px;background:linear-gradient(90deg,#0f766e,#6366f1);font-size:0;line-height:0;">&nbsp;</td>
+        </tr>
+        <tr>
+          <td style="padding:36px 32px 32px;">
+            <p style="margin:0 0 6px;font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:#a1a1aa;">Division assignment</p>
+            <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#18181b;">Hi ${safeName}</h1>
+            <p style="margin:0 0 16px;font-size:14px;color:#52525b;line-height:1.5;">You have been assigned <strong>${escapeHtml(payload.orderNumber)}</strong> in <strong>${escapeHtml(payload.divisionName)}</strong>.</p>
+            <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 20px;font-size:14px;color:#3f3f46;">
+              <tr><td style="padding:6px 0;color:#71717a;width:140px;">Company</td><td style="padding:6px 0;">${escapeHtml(payload.companyName ?? "—")}</td></tr>
+              <tr><td style="padding:6px 0;color:#71717a;vertical-align:top;">Description</td><td style="padding:6px 0;">${escapeHtml(payload.description ?? "—").replace(/\r\n|\n/g, "<br/>")}</td></tr>
+              <tr><td style="padding:6px 0;color:#71717a;vertical-align:top;">Head acceptance</td><td style="padding:6px 0;">${escapeHtml(payload.acceptanceReason ?? "—").replace(/\r\n|\n/g, "<br/>")}</td></tr>
+              <tr><td style="padding:6px 0;color:#71717a;">${escapeHtml(devLabel)}</td><td style="padding:6px 0;">${escapeHtml(payload.developmentBody).replace(/\r\n|\n/g, "<br/>")}</td></tr>
+            </table>
+            <a href="${escapeHtml(payload.orderUrl)}" style="display:inline-block;background:#0f766e;color:#ffffff !important;font-size:14px;font-weight:600;padding:12px 22px;text-decoration:none;border-radius:10px;">Open enquiry</a>
+          </td>
+        </tr>`;
+  const html = emailShell(inner, "Enquiry Management System");
+  const text = `${subject}\n\nCompany: ${payload.companyName ?? "—"}\n\n${payload.description ?? ""}\n\n${devLabel}: ${payload.developmentBody}\n\nOpen: ${payload.orderUrl}`;
+  return sendEmail({ to: toEmail, subject, html, text });
+}
+
 export interface SlaBreachEmailPayload {
   orderNumber: string;
   companyName: string | null;

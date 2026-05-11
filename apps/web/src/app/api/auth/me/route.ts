@@ -41,7 +41,7 @@ export async function GET() {
         }
       | null = null;
     try {
-      const db = await withTiming("db_user", () =>
+      const query = () =>
         prisma.user.findUnique({
           where: { id: userId },
           select: {
@@ -52,12 +52,12 @@ export async function GET() {
             divisionId: true,
             division: { select: { id: true, name: true } },
           },
-        })
-      );
-      marks.push(db.mark);
-      user = db.value;
+        });
+
+      const db1 = await withTiming("db_user", query);
+      marks.push(db1.mark);
+      user = db1.value;
     } catch (dbErr) {
-      console.error("[api/auth/me] prisma user lookup failed:", dbErr);
       const msg =
         dbErr instanceof Error ? dbErr.message : typeof dbErr === "string" ? dbErr : "";
       const prismaCode =
@@ -70,9 +70,37 @@ export async function GET() {
       const looksLikeDbUnavailable =
         prismaCode.startsWith("P10") ||
         /P1000|P1001|P1002|P1003|P1008|P1011/i.test(msg) ||
-        /database|connect|connection|timeout|ECONNRESET|ENOTFOUND|EAI_AGAIN/i.test(msg);
+        /database|connect|connection|timeout|ECONNRESET|ENOTFOUND|EAI_AGAIN|Closed/i.test(msg);
 
       if (looksLikeDbUnavailable) {
+        // One quick retry for flaky pooler disconnects.
+        try {
+          await new Promise((r) => setTimeout(r, 450));
+          const db2 = await withTiming("db_user_retry", () =>
+            prisma.user.findUnique({
+              where: { id: userId },
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                role: true,
+                divisionId: true,
+                division: { select: { id: true, name: true } },
+              },
+            })
+          );
+          marks.push(db2.mark);
+          user = db2.value;
+          if (user) {
+            const payload = { user };
+            const res = NextResponse.json(payload);
+            res.headers.set("Server-Timing", timingHeaderValue(marks));
+            return res;
+          }
+        } catch (retryErr) {
+          console.error("[api/auth/me] prisma user lookup failed (retry):", retryErr);
+        }
+        console.error("[api/auth/me] prisma user lookup failed:", dbErr);
         const res = NextResponse.json(
           { error: "Database unavailable. Please retry.", code: "DB_UNAVAILABLE" },
           { status: 503 }

@@ -21,6 +21,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useState, useMemo, useEffect } from "react";
 import { formatEnquiryNumber, formatEnquiryNumberShort } from "@/lib/enquiry-display";
+import { userMayViewEnquiryExecInsights } from "@/lib/enquiry-access";
 
 const statusVariant: Record<string, "default" | "secondary" | "destructive" | "success" | "warning"> = {
   PLACED: "secondary",
@@ -77,6 +78,7 @@ type OrderDetail = {
   status: string;
   createdAt: string;
   createdById: number;
+  receivedById?: number | null;
   currentDivisionId?: number;
   companyName: string | null;
   description: string | null;
@@ -115,10 +117,18 @@ type OrderDetail = {
     division?: { name?: string | null } | null;
     rejectedBy?: { name?: string | null; email?: string | null } | null;
   }>;
+  acceptanceReason?: string | null;
+  receiveReason?: string | null;
+  assignedSupervisorId?: number | null;
+  enquiryHandoff?: Record<string, unknown> | null;
+  headSampleRequestApprovedAt?: string | null;
+  assignedSupervisor?: { id: number; name: string; email: string } | null;
+  headSampleRequestApprovedBy?: { name?: string | null; email?: string | null } | null;
   transfers?: Array<{
     id?: number;
     createdAt: string;
     reason?: string | null;
+    transferDetails?: string | null;
     fromDivision?: { name?: string | null } | null;
     toDivision?: {
       name?: string | null;
@@ -414,11 +424,19 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const queryClient = useQueryClient();
   const [acceptOpen, setAcceptOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
+  const [receiveOpen, setReceiveOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [acceptReason, setAcceptReason] = useState("");
   const [transferReason, setTransferReason] = useState("");
+  const [transferDetails, setTransferDetails] = useState("");
   const [toDivisionId, setToDivisionId] = useState("");
   const [rejectReason, setRejectReason] = useState("");
+  const [receiveReason, setReceiveReason] = useState("");
+  const [handoffSupervisorId, setHandoffSupervisorId] = useState("");
+  const [handoffDevKind, setHandoffDevKind] = useState<"new" | "existing">("new");
+  const [handoffNewDetails, setHandoffNewDetails] = useState("");
+  const [handoffExistingDetails, setHandoffExistingDetails] = useState("");
+  const [handoffError, setHandoffError] = useState("");
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [cancelError, setCancelError] = useState("");
@@ -468,7 +486,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       if (!res.ok) throw new Error("Could not load activity log");
       return (await res.json()) as { logs: AuditLogRow[] };
     },
-    enabled: Number.isInteger(orderId),
+    enabled: Number.isInteger(orderId) && userMayViewEnquiryExecInsights(user?.role),
     staleTime: 60_000,
   });
 
@@ -488,6 +506,27 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     staleTime: 5 * 60_000,
   });
   const divisions = divisionsData?.divisions ?? [];
+
+  const needsHandoff =
+    Boolean(
+      user &&
+        order &&
+        order.status === "IN_PROGRESS" &&
+        !order.enquiryHandoff &&
+        showInteractiveUi &&
+        (user.role === "MANAGER" || user.role === "SUPER_ADMIN" || user.role === "MANAGING_DIRECTOR")
+    );
+  const { data: supervisorsData } = useQuery({
+    queryKey: ["order-supervisors", orderId],
+    queryFn: async () => {
+      const res = await fetch(`/api/orders/${orderId}/supervisors`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to load supervisors");
+      return res.json() as Promise<{ supervisors: { id: number; name: string; email: string }[] }>;
+    },
+    enabled: Boolean(Number.isInteger(orderId) && needsHandoff),
+    staleTime: 60_000,
+  });
+  const divisionSupervisors = supervisorsData?.supervisors ?? [];
 
   const acceptMutation = useMutation({
     mutationFn: () =>
@@ -518,18 +557,27 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ toDivisionId: Number(toDivisionId), reason: transferReason }),
+        body: JSON.stringify({
+          toDivisionId: Number(toDivisionId),
+          reason: transferReason,
+          transferDetails,
+        }),
       }),
-    onSuccess: (res) => {
+    onSuccess: async (res) => {
       if (res.ok) {
         setTransferOpen(false);
         setTransferReason("");
+        setTransferDetails("");
         setToDivisionId("");
+        setActionError("");
         queryClient.invalidateQueries({ queryKey: ["order", orderId] });
         queryClient.invalidateQueries({ queryKey: ["order-audit", orderId] });
         queryClient.invalidateQueries({ queryKey: ["orders"] });
         queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+        return;
       }
+      const data = await res.json().catch(() => ({}));
+      setActionError((data as { error?: string }).error || "Failed to transfer enquiry");
     },
   });
   const rejectMutation = useMutation({
@@ -540,15 +588,19 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         credentials: "include",
         body: JSON.stringify({ reason: rejectReason }),
       }),
-    onSuccess: (res) => {
+    onSuccess: async (res) => {
       if (res.ok) {
         setRejectOpen(false);
         setRejectReason("");
+        setActionError("");
         queryClient.invalidateQueries({ queryKey: ["order", orderId] });
         queryClient.invalidateQueries({ queryKey: ["order-audit", orderId] });
         queryClient.invalidateQueries({ queryKey: ["orders"] });
         queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+        return;
       }
+      const data = await res.json().catch(() => ({}));
+      setActionError((data as { error?: string }).error || "Failed to reject enquiry");
     },
   });
 
@@ -577,12 +629,57 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     },
   });
   const receiveMutation = useMutation({
-    mutationFn: () => fetch(`/api/orders/${orderId}/receive`, { method: "POST", credentials: "include" }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["order", orderId] });
-      queryClient.invalidateQueries({ queryKey: ["order-audit", orderId] });
-      queryClient.invalidateQueries({ queryKey: ["orders"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    mutationFn: () =>
+      fetch(`/api/orders/${orderId}/receive`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ reason: receiveReason }),
+      }),
+    onSuccess: async (res) => {
+      if (res.ok) {
+        setReceiveOpen(false);
+        setReceiveReason("");
+        setActionError("");
+        queryClient.invalidateQueries({ queryKey: ["order", orderId] });
+        queryClient.invalidateQueries({ queryKey: ["order-audit", orderId] });
+        queryClient.invalidateQueries({ queryKey: ["orders"] });
+        queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      setActionError((data as { error?: string }).error || "Failed to mark enquiry received");
+    },
+  });
+
+  const handoffMutation = useMutation({
+    mutationFn: () =>
+      fetch(`/api/orders/${orderId}/handoff`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          supervisorId: Number(handoffSupervisorId),
+          developmentKind: handoffDevKind,
+          newDevelopmentDetails: handoffDevKind === "new" ? handoffNewDetails : undefined,
+          existingProductDetails: handoffDevKind === "existing" ? handoffExistingDetails : undefined,
+        }),
+      }),
+    onSuccess: async (res) => {
+      if (res.ok) {
+        setHandoffError("");
+        setHandoffSupervisorId("");
+        setHandoffNewDetails("");
+        setHandoffExistingDetails("");
+        queryClient.invalidateQueries({ queryKey: ["order", orderId] });
+        queryClient.invalidateQueries({ queryKey: ["order-audit", orderId] });
+        queryClient.invalidateQueries({ queryKey: ["orders"] });
+        queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+        queryClient.invalidateQueries({ queryKey: ["notifications-unread-count"] });
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      setHandoffError((data as { error?: string }).error || "Could not submit assignment");
     },
   });
   const completeMutation = useMutation({
@@ -636,6 +733,25 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     order &&
     ["MANAGER", "SUPER_ADMIN", "MANAGING_DIRECTOR"].includes(user.role) &&
     !isClosedStatus;
+  const assignedSupervisorMe =
+    Boolean(user && order?.assignedSupervisorId && Number(user.id) === order.assignedSupervisorId);
+  /** After head approves sample request, or legacy rows that already progressed sample workflow. */
+  const legacySampleProgress = Boolean(
+    order?.sampleApprovedAt ||
+      order?.sampleDetails?.trim() ||
+      order?.sampleQuantity?.trim() ||
+      order?.sampleWeight?.trim()
+  );
+  const sampleGateOk = Boolean(
+    !order?.sampleRequested ||
+      order.headSampleRequestApprovedAt ||
+      legacySampleProgress
+  );
+  const isEnquirySubmitter = Boolean(order && user && Number(user.id) === order.createdById);
+  const canSeeSampleDetails =
+    Boolean(user && ["SUPER_ADMIN", "MANAGING_DIRECTOR", "MANAGER"].includes(user.role)) ||
+    assignedSupervisorMe ||
+    (isEnquirySubmitter && Boolean(order?.sampleApprovedAt));
   const mightSubmitFeedback =
     user &&
     order &&
@@ -704,7 +820,6 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     }
   }, [order?.id, order?.customFields, order?.sampleRequested]);
 
-  const isEnquirySubmitter = Boolean(order && user && Number(user.id) === order.createdById);
   const openSlaBreach: OrderOpenSlaBreach | null =
     order?.slaBreaches && Array.isArray(order.slaBreaches) && order.slaBreaches.length
       ? (order.slaBreaches[0] as OrderOpenSlaBreach)
@@ -842,22 +957,88 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       </header>
 
       <Card className="border-2 border-slate-400/50 shadow-md ring-1 ring-slate-200/60">
-        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
+        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
           <CardTitle>Enquiry details</CardTitle>
-          {canCancel && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="shrink-0 text-destructive border-destructive/40 hover:bg-destructive/5"
-              onClick={() => {
-                setCancelReason("");
-                setCancelError("");
-                setCancelOpen(true);
-              }}
-            >
-              Cancel enquiry
-            </Button>
-          )}
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+            {canAct && showInteractiveUi ? (
+              <>
+                {(order.status === "PLACED" || order.status === "TRANSFERRED") && (
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setActionError("");
+                      setAcceptOpen(true);
+                    }}
+                    disabled={acceptMutation.isPending || (order.status === "TRANSFERRED" && !order.receivedById)}
+                  >
+                    Accept
+                  </Button>
+                )}
+                {order.status === "TRANSFERRED" && !order.receivedById && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => {
+                      setReceiveReason("");
+                      setActionError("");
+                      setReceiveOpen(true);
+                    }}
+                  >
+                    Receive
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setActionError("");
+                    setTransferOpen(true);
+                  }}
+                >
+                  Transfer
+                </Button>
+                {canRejectEnquiry ? (
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => {
+                      setActionError("");
+                      setRejectOpen(true);
+                    }}
+                  >
+                    Reject
+                  </Button>
+                ) : null}
+                {order.status === "IN_PROGRESS" ? (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => completeMutation.mutate()}
+                    disabled={completeMutation.isPending}
+                  >
+                    Complete
+                  </Button>
+                ) : null}
+              </>
+            ) : null}
+            {canCancel && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="shrink-0 text-destructive border-destructive/40 hover:bg-destructive/5"
+                onClick={() => {
+                  setCancelReason("");
+                  setCancelError("");
+                  setCancelOpen(true);
+                }}
+              >
+                Cancel enquiry
+              </Button>
+            )}
+          </div>
+          {actionError ? (
+            <p className="px-6 pb-3 pt-0 text-sm text-red-600 sm:px-6">{actionError}</p>
+          ) : null}
         </CardHeader>
         <CardContent className="space-y-0 overflow-hidden rounded-lg border-2 border-slate-300/60 bg-white shadow-inner">
           <div className="flex flex-col gap-1 border-b-2 border-indigo-300/70 bg-gradient-to-r from-indigo-50 to-violet-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
@@ -883,6 +1064,42 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             <span className="min-w-[10rem] shrink-0 text-sm font-medium text-slate-500">Created by</span>
             <span className="text-sm font-semibold text-slate-900">{order.createdBy?.name} ({order.createdBy?.email})</span>
           </p>
+          {order.acceptanceReason?.trim() ? (
+            <p className="flex flex-col gap-0.5 border-t border-slate-200 px-4 py-3 sm:flex-row sm:items-baseline sm:gap-3">
+              <span className="min-w-[10rem] shrink-0 text-sm font-medium text-slate-500">Acceptance reason</span>
+              <span className="text-sm text-slate-800 whitespace-pre-wrap">{order.acceptanceReason}</span>
+            </p>
+          ) : null}
+          {order.receiveReason?.trim() ? (
+            <p className="flex flex-col gap-0.5 border-t border-slate-200 px-4 py-3 sm:flex-row sm:items-baseline sm:gap-3">
+              <span className="min-w-[10rem] shrink-0 text-sm font-medium text-slate-500">Receive reason</span>
+              <span className="text-sm text-slate-800 whitespace-pre-wrap">{order.receiveReason}</span>
+            </p>
+          ) : null}
+          {order.assignedSupervisor ? (
+            <p className="flex flex-col gap-0.5 border-t border-slate-200 px-4 py-3 sm:flex-row sm:items-baseline sm:gap-3">
+              <span className="min-w-[10rem] shrink-0 text-sm font-medium text-slate-500">Assigned supervisor</span>
+              <span className="text-sm font-semibold text-slate-900">
+                {order.assignedSupervisor.name} ({order.assignedSupervisor.email})
+              </span>
+            </p>
+          ) : null}
+          {order.enquiryHandoff && typeof order.enquiryHandoff === "object" ? (
+            <div className="border-t border-slate-200 px-4 py-3 space-y-1 text-sm">
+              <p className="font-medium text-slate-500">Development classification</p>
+              <p className="text-slate-900">
+                {order.enquiryHandoff.developmentKind === "existing" ? "Existing development" : "New development"}
+              </p>
+              {typeof order.enquiryHandoff.newDevelopmentDetails === "string" &&
+              order.enquiryHandoff.newDevelopmentDetails.trim() ? (
+                <p className="text-slate-800 whitespace-pre-wrap">{order.enquiryHandoff.newDevelopmentDetails}</p>
+              ) : null}
+              {typeof order.enquiryHandoff.existingProductDetails === "string" &&
+              order.enquiryHandoff.existingProductDetails.trim() ? (
+                <p className="text-slate-800 whitespace-pre-wrap">{order.enquiryHandoff.existingProductDetails}</p>
+              ) : null}
+            </div>
+          ) : null}
           </div>
           {order.status === "CANCELLED" && order.cancellationReason ? (
             <div className="mx-4 mb-4 mt-3 rounded-lg border border-stone-200 bg-stone-50/90 p-3 text-sm">
@@ -1106,7 +1323,106 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         </CardContent>
       </Card>
 
-      {!isAuditView && (
+      {!isAuditView && needsHandoff ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Assign supervisor &amp; development</CardTitle>
+            <p className="text-sm text-slate-500 font-normal">
+              Choose an ASM / supervisor from this division only, then classify the enquiry as new or existing
+              development. The supervisor receives an email with the enquiry summary.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4 text-sm">
+            {divisionSupervisors.length === 0 ? (
+              <p className="text-amber-800">
+                No active supervisors are linked to this division. Ask an admin to assign SUPERVISOR users to{" "}
+                <span className="font-medium">{order.currentDivision?.name ?? "this division"}</span>.
+              </p>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label>Supervisor (this division only)</Label>
+                  <Select value={handoffSupervisorId} onValueChange={setHandoffSupervisorId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select supervisor" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {divisionSupervisors.map((s) => (
+                        <SelectItem key={s.id} value={String(s.id)}>
+                          {s.name} ({s.email})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Development type</Label>
+                  <div className="flex flex-wrap gap-4">
+                    <label className="flex items-center gap-2 text-slate-800">
+                      <input
+                        type="radio"
+                        name="handoff-dev"
+                        checked={handoffDevKind === "new"}
+                        onChange={() => setHandoffDevKind("new")}
+                      />
+                      New development
+                    </label>
+                    <label className="flex items-center gap-2 text-slate-800">
+                      <input
+                        type="radio"
+                        name="handoff-dev"
+                        checked={handoffDevKind === "existing"}
+                        onChange={() => setHandoffDevKind("existing")}
+                      />
+                      Existing development
+                    </label>
+                  </div>
+                </div>
+                {handoffDevKind === "new" ? (
+                  <div className="space-y-2">
+                    <Label>New development details (min 10 characters)</Label>
+                    <textarea
+                      value={handoffNewDetails}
+                      onChange={(e) => setHandoffNewDetails(e.target.value)}
+                      rows={4}
+                      className="flex min-h-[96px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs"
+                      placeholder="Reason and technical / scope details for new development"
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Label>Existing product / reference details (min 10 characters)</Label>
+                    <textarea
+                      value={handoffExistingDetails}
+                      onChange={(e) => setHandoffExistingDetails(e.target.value)}
+                      rows={4}
+                      className="flex min-h-[96px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs"
+                      placeholder="What was manufactured before (style code, prior enquiry, specs…)"
+                    />
+                  </div>
+                )}
+                {handoffError ? <p className="text-sm text-red-600">{handoffError}</p> : null}
+                <Button
+                  type="button"
+                  disabled={
+                    handoffMutation.isPending ||
+                    !handoffSupervisorId ||
+                    (handoffDevKind === "new" ? handoffNewDetails.trim().length < 10 : handoffExistingDetails.trim().length < 10)
+                  }
+                  onClick={() => {
+                    setHandoffError("");
+                    handoffMutation.mutate();
+                  }}
+                >
+                  {handoffMutation.isPending ? "Submitting…" : "Submit assignment"}
+                </Button>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {!isAuditView && userMayViewEnquiryExecInsights(user?.role) && (
         <>
           <Card>
             <CardHeader>
@@ -1182,7 +1498,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         </>
       )}
 
-      {isAuditView && (
+      {isAuditView && userMayViewEnquiryExecInsights(user?.role) && (
         <Card>
           <CardHeader>
             <CardTitle>Activity timeline</CardTitle>
@@ -1282,7 +1598,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 )}
               </div>
             )}
-            {(order.sampleDetails || order.sampleQuantity) && (
+            {canSeeSampleDetails && (order.sampleDetails || order.sampleQuantity || order.sampleWeight) && (
               <div className="rounded-lg border border-slate-100 bg-slate-50/80 p-3 space-y-1">
                 {order.sampleDetails && (
                   <p>
@@ -1301,9 +1617,25 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 )}
               </div>
             )}
+            {!canSeeSampleDetails && (order.sampleDetails || order.sampleQuantity || order.sampleWeight) ? (
+              <p className="rounded-lg border border-slate-100 bg-slate-50/70 px-3 py-2 text-slate-600">
+                Sample details are pending head approval. They will appear here after the head approves.
+              </p>
+            ) : null}
+            {order.headSampleRequestApprovedAt ? (
+              <p className="text-slate-700">
+                <span className="text-slate-500">Sample request approved by head</span>{" "}
+                {new Date(order.headSampleRequestApprovedAt).toLocaleString()}
+                {order.headSampleRequestApprovedBy?.name ? ` · ${order.headSampleRequestApprovedBy.name}` : ""}
+              </p>
+            ) : order.sampleRequested && !legacySampleProgress ? (
+              <p className="rounded-lg border border-amber-100 bg-amber-50/80 px-3 py-2 text-amber-950">
+                Awaiting division head approval of the sample request before supervisors can enter sample details.
+              </p>
+            ) : null}
             {order.sampleApprovedAt && (
               <p className="text-slate-700">
-                <span className="text-slate-500">Approved</span>{" "}
+                <span className="text-slate-500">Sample workflow approved</span>{" "}
                 {new Date(order.sampleApprovedAt).toLocaleString()}
                 {order.sampleApprovedBy?.name && ` · ${order.sampleApprovedBy.name}`}
               </p>
@@ -1374,69 +1706,40 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             {showInteractiveUi && mightManageSample && (
               <div className="space-y-6 border-t border-slate-100 pt-4">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Division actions</p>
-                {!order.sampleApprovedAt && (
+                {order.sampleRequested &&
+                !order.headSampleRequestApprovedAt &&
+                mightManageSample &&
+                order.enquiryHandoff ? (
+                  <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-4 space-y-2">
+                    <p className="text-sm font-medium text-slate-900">Approve sample request</p>
+                    <p className="text-xs text-slate-600">
+                      Sales requested a sample. Approve so the assigned supervisor can submit sample specifications.
+                    </p>
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={sampleMutation.isPending}
+                      onClick={() => sampleMutation.mutate({ action: "approveSampleRequest" })}
+                    >
+                      Approve sample request
+                    </Button>
+                  </div>
+                ) : null}
+                {order.sampleRequested &&
+                !order.headSampleRequestApprovedAt &&
+                user?.role === "SUPERVISOR" &&
+                assignedSupervisorMe ? (
+                  <p className="text-sm text-slate-600">
+                    The division head must approve the sample request before you can enter sample details.
+                  </p>
+                ) : null}
+                {sampleGateOk && !order.sampleApprovedAt && assignedSupervisorMe && user?.role === "SUPERVISOR" && (
                   <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-3">
                     <p className="text-sm font-medium text-slate-900">Step 1 — Submit sample details</p>
                     <p className="text-xs text-slate-500">
                       Enter details and click Save. Approval is only available after details are saved.
                     </p>
-                    {isManager && (
-                      <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-2">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                          Sample type (manager only)
-                        </p>
-                        <label className="flex items-center gap-2 text-sm text-slate-800">
-                          <input
-                            type="checkbox"
-                            checked={sampleDevType === "new"}
-                            onChange={(e) => setSampleDevType(e.target.checked ? "new" : "existing")}
-                          />
-                          New development (not an existing sample)
-                        </label>
-                        {sampleDevType === "existing" ? (
-                          <div className="space-y-2">
-                            <Label htmlFor="existing-ref">Existing sample reference</Label>
-                            <Input
-                              id="existing-ref"
-                              value={sampleExistingRef}
-                              onChange={(e) => setSampleExistingRef(e.target.value)}
-                              placeholder="Previous sample name/title or brief details"
-                            />
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              disabled={sampleMutation.isPending || !sampleExistingRef.trim()}
-                              onClick={() =>
-                                sampleMutation.mutate({
-                                  action: "setDevelopment",
-                                  developmentType: "existing",
-                                  existingReference: sampleExistingRef.trim(),
-                                })
-                              }
-                            >
-                              Save existing reference
-                            </Button>
-                          </div>
-                        ) : (
-                          <div className="flex flex-wrap items-center gap-2">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              onClick={() => setNewDevOpen(true)}
-                            >
-                              Explain new development…
-                            </Button>
-                            {hasSampleDevelopmentSaved ? (
-                              <span className="text-xs text-emerald-700 font-medium">Saved</span>
-                            ) : (
-                              <span className="text-xs text-slate-500">Not yet submitted</span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )}
+                    {(assignedSupervisorMe || (isManager && sampleGateOk)) && (
                     <div className="space-y-2">
                       <Label htmlFor="sample-details">Sample details</Label>
                       <textarea
@@ -1477,15 +1780,15 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                         Save sample details
                       </Button>
                     </div>
+                    )}
                   </div>
                 )}
-                {!order.sampleApprovedAt && (
+                {sampleGateOk && !order.sampleApprovedAt && mightManageSample && !assignedSupervisorMe && (
                   <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
-                    <p className="text-sm font-medium text-slate-900">Step 2 — Approve sample</p>
+                    <p className="text-sm font-medium text-slate-900">Approve sample details</p>
                     {!canApproveSampleNow ? (
                       <p className="text-sm text-slate-500">
-                        Save sample details in step 1 first (or submit the manager-only sample type / new development
-                        details). At least one of these must be saved before you can approve.
+                        Wait for the supervisor to submit sample details first. Once submitted, you can approve here.
                       </p>
                     ) : (
                       <Button
@@ -1500,7 +1803,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                     )}
                   </div>
                 )}
-                {order.sampleApprovedAt && !order.sampleShippedAt && (
+                {sampleGateOk && order.sampleApprovedAt && !order.sampleShippedAt && (
                   <div className="space-y-2">
                     <Label>Record shipment</Label>
                     <label className="flex items-center gap-2 text-sm text-slate-700">
@@ -1638,7 +1941,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               {(order.transfers ?? []).map((t, idx) => (
                 <li key={t.id ?? `${t.createdAt}-${idx}`} className="text-sm">
                   {t.fromDivision?.name ?? "—"} → {t.toDivision?.name ?? "—"} by {t.transferredBy?.name ?? "—"}:{" "}
-                  {t.reason ?? "—"} ({new Date(t.createdAt).toLocaleString()})
+                  {t.reason ?? "—"}
+                  {t.transferDetails?.trim() ? (
+                    <span className="block text-slate-600 mt-1">Details: {t.transferDetails}</span>
+                  ) : null}{" "}
+                  ({new Date(t.createdAt).toLocaleString()})
                 </li>
               ))}
             </ul>
@@ -1664,35 +1971,17 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         </Card>
       )}
 
-      {canAct && showInteractiveUi && (
-        <Card>
-          <CardHeader><CardTitle>Actions</CardTitle></CardHeader>
-          <CardContent className="flex flex-wrap gap-2">
-            {(order.status === "PLACED" || order.status === "TRANSFERRED") && (
-              <Button onClick={() => setAcceptOpen(true)} disabled={acceptMutation.isPending}>
-                Accept
-              </Button>
-            )}
-            {order.status === "TRANSFERRED" && (
-              <Button onClick={() => receiveMutation.mutate()} disabled={receiveMutation.isPending}>
-                Receive
-              </Button>
-            )}
-            {order.status === "IN_PROGRESS" && (
-              <Button onClick={() => completeMutation.mutate()} disabled={completeMutation.isPending}>
-                Complete
-              </Button>
-            )}
-            <Button variant="outline" onClick={() => setTransferOpen(true)}>Transfer</Button>
-            {canRejectEnquiry && (
-              <Button variant="destructive" onClick={() => setRejectOpen(true)}>Reject</Button>
-            )}
-            {actionError && <p className="w-full text-sm text-red-600">{actionError}</p>}
-          </CardContent>
-        </Card>
-      )}
-
-      <Dialog open={transferOpen} onOpenChange={setTransferOpen}>
+      <Dialog
+        open={transferOpen}
+        onOpenChange={(open) => {
+          setTransferOpen(open);
+          if (!open) {
+            setTransferDetails("");
+            setTransferReason("");
+            setToDivisionId("");
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader><DialogTitle>Transfer enquiry</DialogTitle></DialogHeader>
           <div className="space-y-4 py-4">
@@ -1714,7 +2003,17 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               <textarea
                 value={transferReason}
                 onChange={(e) => setTransferReason(e.target.value)}
-                placeholder="Transfer reason"
+                placeholder="Why this enquiry is being transferred"
+                rows={4}
+                className="flex min-h-[96px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] outline-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Transfer details (min 10 characters)</Label>
+              <textarea
+                value={transferDetails}
+                onChange={(e) => setTransferDetails(e.target.value)}
+                placeholder="Target division contact, context, handover notes"
                 rows={4}
                 className="flex min-h-[96px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] outline-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
               />
@@ -1724,9 +2023,54 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             <Button variant="outline" onClick={() => setTransferOpen(false)}>Cancel</Button>
             <Button
               onClick={() => transferMutation.mutate()}
-              disabled={!toDivisionId || transferReason.length < 10 || transferMutation.isPending}
+              disabled={
+                !toDivisionId ||
+                transferReason.trim().length < 10 ||
+                transferDetails.trim().length < 10 ||
+                transferMutation.isPending
+              }
             >
               Transfer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={receiveOpen}
+        onOpenChange={(open) => {
+          setReceiveOpen(open);
+          if (!open) setReceiveReason("");
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Receive enquiry</DialogTitle>
+            <DialogDescription>
+              Confirm this enquiry has entered your division after transfer. A reason is required.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Reason (min 10 characters)</Label>
+              <textarea
+                value={receiveReason}
+                onChange={(e) => setReceiveReason(e.target.value)}
+                placeholder="Brief notes on receiving this enquiry in your division"
+                rows={4}
+                className="flex min-h-[96px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReceiveOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => receiveMutation.mutate()}
+              disabled={receiveReason.trim().length < 10 || receiveMutation.isPending}
+            >
+              Confirm receive
             </Button>
           </DialogFooter>
         </DialogContent>

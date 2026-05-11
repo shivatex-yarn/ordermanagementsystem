@@ -216,18 +216,21 @@ export async function updateOrderWithEditHistory(
   });
 }
 
-export async function acceptOrder(orderId: number, acceptedById: number, _reason: string) {
-  void _reason;
+export async function acceptOrder(orderId: number, acceptedById: number, acceptanceReason: string) {
+  const trimmedReason = acceptanceReason.trim();
+  if (trimmedReason.length < 10) return null;
   const order = await prisma.order.findUnique({ where: { id: orderId } });
   if (!order) return null;
   if (await blockedByUnansweredBreach(orderId)) return null;
   if (order.status !== "PLACED" && order.status !== "TRANSFERRED") return null;
+  if (order.status === "TRANSFERRED" && !order.receivedById) return null;
   const updated = await prisma.order.update({
     where: { id: orderId },
     data: {
       status: "IN_PROGRESS",
       acceptedById,
       slaDeadline: null,
+      acceptanceReason: trimmedReason,
     },
     include: {
       createdBy: { select: { id: true, name: true, email: true } },
@@ -241,6 +244,7 @@ export async function acceptOrder(orderId: number, acceptedById: number, _reason
     orderNumber: updated.orderNumber,
     acceptedById: updated.acceptedById!,
     divisionId: updated.currentDivisionId,
+    acceptanceReason: trimmedReason,
     timestamp: new Date().toISOString(),
     userId: acceptedById,
   });
@@ -252,6 +256,7 @@ export async function transferOrder(
   transferredById: number,
   toDivisionId: number,
   reason: string,
+  transferDetails: string,
   opts?: { bypassSlaGate?: boolean }
 ) {
   if (!opts?.bypassSlaGate) {
@@ -262,6 +267,8 @@ export async function transferOrder(
   if (order.status !== "PLACED" && order.status !== "TRANSFERRED" && order.status !== "IN_PROGRESS")
     return null;
   const slaDeadline = computeSlaDeadline(new Date());
+  const detailsTrim = transferDetails.trim();
+  if (detailsTrim.length < 10) return null;
   const [transfer] = await prisma.$transaction([
     prisma.orderTransfer.create({
       data: {
@@ -269,6 +276,7 @@ export async function transferOrder(
         fromDivisionId: order.currentDivisionId,
         toDivisionId,
         reason,
+        transferDetails: detailsTrim,
         transferredById,
       },
     }),
@@ -299,6 +307,7 @@ export async function transferOrder(
     fromDivisionId: transfer.fromDivisionId,
     toDivisionId: transfer.toDivisionId,
     reason: transfer.reason,
+    transferDetails: transfer.transferDetails,
     transferredById,
     timestamp: new Date().toISOString(),
     userId: transferredById,
@@ -384,7 +393,9 @@ export async function cancelOrderByCreator(orderId: number, cancelledById: numbe
   return updated;
 }
 
-export async function receiveOrder(orderId: number, receivedById: number) {
+export async function receiveOrder(orderId: number, receivedById: number, receiveReason: string) {
+  const trimmed = receiveReason.trim();
+  if (trimmed.length < 10) return null;
   if (await blockedByUnansweredBreach(orderId)) return null;
   const order = await prisma.order.findUnique({ where: { id: orderId } });
   if (!order) return null;
@@ -392,7 +403,7 @@ export async function receiveOrder(orderId: number, receivedById: number) {
   const slaDeadline = computeSlaDeadline(new Date());
   const updated = await prisma.order.update({
     where: { id: orderId },
-    data: { receivedById, slaDeadline },
+    data: { receivedById, slaDeadline, receiveReason: trimmed },
     include: {
       createdBy: { select: { id: true, name: true, email: true } },
       currentDivision: { select: { id: true, name: true } },
@@ -405,6 +416,7 @@ export async function receiveOrder(orderId: number, receivedById: number) {
     orderNumber: updated.orderNumber,
     receivedById,
     divisionId: updated.currentDivisionId,
+    receiveReason: trimmed,
     timestamp: new Date().toISOString(),
     userId: receivedById,
   });
@@ -642,6 +654,133 @@ export async function recordSalesFeedback(orderId: number, userId: number, sales
     orderNumber: updated.orderNumber,
     submittedById: userId,
     timestamp: new Date().toISOString(),
+    userId,
+  });
+  return updated;
+}
+
+export async function submitEnquiryHandoff(
+  orderId: number,
+  headUserId: number,
+  input: {
+    supervisorId: number;
+    developmentKind: "new" | "existing";
+    newDevelopmentDetails?: string;
+    existingProductDetails?: string;
+  },
+  opts?: { bypassHeadCheck?: boolean }
+) {
+  const order = await prisma.order.findUnique({ where: { id: orderId } });
+  if (!order || order.status !== "IN_PROGRESS") return null;
+  if (order.enquiryHandoff != null) return null;
+
+  if (!opts?.bypassHeadCheck) {
+    const okHead = await userIsDivisionHead(headUserId, order.currentDivisionId);
+    if (!okHead) return null;
+  }
+
+  const supervisor = await prisma.user.findFirst({
+    where: {
+      id: input.supervisorId,
+      role: "SUPERVISOR",
+      divisionId: order.currentDivisionId,
+      active: true,
+    },
+    select: { id: true, name: true, email: true },
+  });
+  if (!supervisor) return null;
+
+  let handoff: Record<string, unknown>;
+  if (input.developmentKind === "new") {
+    const t = input.newDevelopmentDetails?.trim() ?? "";
+    if (t.length < 10) return null;
+    handoff = {
+      developmentKind: "new",
+      newDevelopmentDetails: t,
+      existingProductDetails: null,
+      submittedAt: new Date().toISOString(),
+      submittedById: headUserId,
+    };
+  } else {
+    const t = input.existingProductDetails?.trim() ?? "";
+    if (t.length < 10) return null;
+    handoff = {
+      developmentKind: "existing",
+      newDevelopmentDetails: null,
+      existingProductDetails: t,
+      submittedAt: new Date().toISOString(),
+      submittedById: headUserId,
+    };
+  }
+
+  const updated = await prisma.order.update({
+    where: { id: orderId },
+    data: {
+      assignedSupervisorId: supervisor.id,
+      enquiryHandoff: handoff as object,
+    },
+    include: {
+      createdBy: { select: { id: true, name: true, email: true } },
+      currentDivision: { select: { id: true, name: true } },
+      acceptedBy: { select: { id: true, name: true, email: true } },
+      assignedSupervisor: { select: { id: true, name: true, email: true } },
+    },
+  });
+
+  await publish({
+    type: "OrderEnquiryHandoffSubmitted",
+    orderId: updated.id,
+    orderNumber: updated.orderNumber,
+    divisionId: updated.currentDivisionId,
+    supervisorId: supervisor.id,
+    developmentKind: input.developmentKind,
+    timestamp: new Date().toISOString(),
+    userId: headUserId,
+  });
+
+  return updated;
+}
+
+export async function approveHeadSampleRequest(orderId: number, userId: number) {
+  const order = await prisma.order.findUnique({ where: { id: orderId } });
+  if (!order?.sampleRequested || order.headSampleRequestApprovedAt) return null;
+  if (order.status === "REJECTED" || order.status === "COMPLETED" || order.status === "CANCELLED") return null;
+  const legacySampleStarted =
+    Boolean(order.sampleApprovedAt) ||
+    Boolean(order.sampleDetails?.trim()) ||
+    Boolean(order.sampleQuantity?.trim()) ||
+    Boolean(order.sampleWeight?.trim());
+  /** New workflow: supervisor assignment first; legacy rows may lack enquiry_handoff but already have sample work. */
+  if (!order.enquiryHandoff && !legacySampleStarted) return null;
+
+  const actor = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { role: true },
+  });
+  const isHead = await userIsDivisionHead(userId, order.currentDivisionId);
+  const canApprove =
+    isHead || actor?.role === "SUPER_ADMIN" || actor?.role === "MANAGING_DIRECTOR";
+  if (!canApprove) return null;
+
+  const now = new Date();
+  const updated = await prisma.order.update({
+    where: { id: orderId },
+    data: {
+      headSampleRequestApprovedAt: now,
+      headSampleRequestApprovedById: userId,
+    },
+    include: {
+      createdBy: { select: { id: true, name: true, email: true } },
+      currentDivision: { select: { id: true, name: true } },
+    },
+  });
+  await publish({
+    type: "SampleHeadRequestApproved",
+    orderId: updated.id,
+    orderNumber: updated.orderNumber,
+    divisionId: updated.currentDivisionId,
+    approvedById: userId,
+    timestamp: now.toISOString(),
     userId,
   });
   return updated;

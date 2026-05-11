@@ -3,7 +3,11 @@ import { subscribe } from "@/lib/events";
 import type { OrderEvent } from "@/lib/events";
 import { formatEnquiryNumber } from "@/lib/enquiry-display";
 import { getNotificationShortLabel } from "@/lib/notification-labels";
-import { sendEnquiryNotificationEmail, sendSlaBreachDetailEmail } from "@/lib/email";
+import {
+  sendEnquiryNotificationEmail,
+  sendSlaBreachDetailEmail,
+  sendSupervisorEnquiryHandoffEmail,
+} from "@/lib/email";
 import { postEventToN8n } from "@/lib/n8n-webhook";
 
 const MAX_TRANSFER_REASON_EMAIL = 500;
@@ -138,6 +142,94 @@ async function notificationHandler(event: OrderEvent): Promise<void> {
     return;
   }
 
+  if (event.type === "OrderEnquiryHandoffSubmitted") {
+    const e = event as Extract<OrderEvent, { type: "OrderEnquiryHandoffSubmitted" }>;
+    const order = await prisma.order.findUnique({
+      where: { id: event.orderId },
+      select: {
+        createdById: true,
+        currentDivisionId: true,
+        companyName: true,
+        description: true,
+        acceptanceReason: true,
+        enquiryHandoff: true,
+        orderNumber: true,
+      },
+    });
+    if (!order) return;
+
+    const supervisor = await prisma.user.findUnique({
+      where: { id: e.supervisorId },
+      select: { id: true, name: true, email: true },
+    });
+
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+    const handoff =
+      order.enquiryHandoff && typeof order.enquiryHandoff === "object"
+        ? (order.enquiryHandoff as Record<string, unknown>)
+        : {};
+    const kind = handoff.developmentKind === "existing" ? ("existing" as const) : ("new" as const);
+    const devBody =
+      kind === "new"
+        ? String(handoff.newDevelopmentDetails ?? "")
+        : String(handoff.existingProductDetails ?? "");
+
+    const division = await prisma.division.findUnique({
+      where: { id: order.currentDivisionId },
+      select: { name: true },
+    });
+
+    const userIds = new Set<number>([order.createdById, e.supervisorId]);
+    const managers = await prisma.divisionManager.findMany({
+      where: { divisionId: order.currentDivisionId },
+      select: { userId: true },
+    });
+    managers.forEach((m) => userIds.add(m.userId));
+    const superAdmins = await prisma.user.findMany({
+      where: { role: "SUPER_ADMIN", active: true },
+      select: { id: true },
+    });
+    superAdmins.forEach((u) => userIds.add(u.id));
+
+    const notifyUsers = await prisma.user.findMany({
+      where: { id: { in: [...userIds] } },
+      select: { id: true, name: true, email: true },
+    });
+
+    const title2 = `${formatEnquiryNumber(event.orderNumber)} · ${getNotificationShortLabel(event.type)}`;
+    const body2 = JSON.stringify(event);
+    for (const uid of userIds) {
+      await prisma.notification.create({
+        data: { userId: uid, type: event.type, title: title2, body: body2, metadata: event as object },
+      });
+    }
+
+    if (supervisor?.email) {
+      const res = await sendSupervisorEnquiryHandoffEmail(supervisor.email, supervisor.name, {
+        orderNumber: order.orderNumber,
+        companyName: order.companyName,
+        description: order.description,
+        divisionName: division?.name ?? "Division",
+        acceptanceReason: order.acceptanceReason,
+        developmentKind: kind,
+        developmentBody: devBody,
+        orderUrl: `${appUrl}/orders/${event.orderId}`,
+      });
+      if (!res.ok) {
+        console.error("[email] Supervisor handoff email failed for", supervisor.email, res.error);
+      }
+    }
+
+    const summary = eventTypeToSummary(event.type, event);
+    for (const u of notifyUsers) {
+      if (u.id === e.supervisorId) continue;
+      sendEnquiryNotificationEmail(u.email, u.name, event.orderNumber, event.type, summary).catch((err) =>
+        console.error("[email] Notification email failed for", u.email, err)
+      );
+    }
+    return;
+  }
+
   const order = await prisma.order.findUnique({
     where: { id: event.orderId },
     select: { currentDivisionId: true, createdById: true },
@@ -214,6 +306,10 @@ export function eventTypeToSummary(type: string, event: OrderEvent): string {
     }
     case "SalesFeedbackRecorded":
       return `Sales feedback was submitted for enquiry ${event.orderNumber}.`;
+    case "OrderEnquiryHandoffSubmitted":
+      return `Enquiry ${event.orderNumber} was assigned to a division supervisor with development classification.`;
+    case "SampleHeadRequestApproved":
+      return `Division head approved the sample request for enquiry ${event.orderNumber}.`;
     default:
       return `Enquiry ${event.orderNumber}: ${type}.`;
   }

@@ -20,6 +20,8 @@ const fullInclude = {
   receivedBy: { select: { id: true, name: true, email: true } },
   completedBy: { select: { id: true, name: true, email: true } },
   sampleApprovedBy: { select: { id: true, name: true, email: true } },
+  assignedSupervisor: { select: { id: true, name: true, email: true } },
+  headSampleRequestApprovedBy: { select: { id: true, name: true, email: true } },
   slaBreaches: {
     where: { resolvedAt: null },
     orderBy: { breachedAt: "desc" as const },
@@ -80,6 +82,34 @@ export async function GET(
       );
     }
     const msg = err instanceof Error ? err.message : String(err);
+    if (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === "P1001"
+    ) {
+      // One quick retry for flaky pooler disconnects.
+      try {
+        await new Promise((r) => setTimeout(r, 450));
+        order = await prisma.order.findUnique({
+          where: { id },
+          include: fullInclude,
+        });
+        if (order) {
+          // continue below (permission check + return)
+        } else {
+          return NextResponse.json({ error: "Enquiry not found" }, { status: 404 });
+        }
+      } catch (retryErr) {
+        const retryMsg = retryErr instanceof Error ? retryErr.message : String(retryErr);
+        return NextResponse.json(
+          {
+            error: "Database unavailable. Please retry.",
+            code: "DB_UNAVAILABLE",
+            detail: process.env.NODE_ENV === "development" ? retryMsg : undefined,
+          },
+          { status: 503 }
+        );
+      }
+    }
     if (/column/i.test(msg) && /does not exist/i.test(msg)) {
       return NextResponse.json(
         {

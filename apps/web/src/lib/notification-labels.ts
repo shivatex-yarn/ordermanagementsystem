@@ -14,6 +14,8 @@ export const NOTIFICATION_SHORT_LABELS: Record<string, string> = {
   SampleApproved: "Sample approved",
   SampleShipped: "Sample shipped",
   SalesFeedbackRecorded: "Sales feedback",
+  OrderEnquiryHandoffSubmitted: "Assigned to supervisor",
+  SampleHeadRequestApproved: "Sample request approved",
 };
 
 export function getNotificationShortLabel(type: string): string {

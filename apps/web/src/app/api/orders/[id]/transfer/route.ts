@@ -33,7 +33,8 @@ export async function POST(
     parsed.data.orderId,
     Number(auth.payload.sub),
     parsed.data.toDivisionId,
-    parsed.data.reason
+    parsed.data.reason,
+    parsed.data.transferDetails
   );
   if (!order) {
     return NextResponse.json(

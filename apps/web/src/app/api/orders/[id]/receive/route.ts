@@ -5,15 +5,19 @@ import { receiveOrder } from "@/lib/order-engine";
 import { prisma } from "@/lib/db";
 
 export async function POST(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await withRole(["MANAGER", "SUPER_ADMIN"]);
   if (auth.response) return auth.response;
   const id = Number((await params).id);
-  const parsed = receiveOrderSchema.safeParse({ orderId: id });
+  const body = await req.json().catch(() => ({}));
+  const parsed = receiveOrderSchema.safeParse({ orderId: id, reason: body?.reason });
   if (!parsed.success) {
-    return NextResponse.json({ error: "Invalid order id" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Invalid input", details: parsed.error.flatten() },
+      { status: 400 }
+    );
   }
   const gate = await prisma.sLABreach.findFirst({
     where: { orderId: parsed.data.orderId, resolvedAt: null, headRejectedAt: null },
@@ -25,7 +29,7 @@ export async function POST(
       { status: 409 }
     );
   }
-  const order = await receiveOrder(parsed.data.orderId, Number(auth.payload.sub));
+  const order = await receiveOrder(parsed.data.orderId, Number(auth.payload.sub), parsed.data.reason);
   if (!order) {
     return NextResponse.json(
       { error: "Order not found or not in TRANSFERRED state" },

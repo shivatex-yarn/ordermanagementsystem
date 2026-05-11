@@ -15,16 +15,19 @@ export type EnquiryExportQuery = {
   /** HTML date input values `YYYY-MM-DD`; both required to apply custom range. */
   from?: string;
   to?: string;
+  /** Optional division filter for exports (accounts view). */
+  divisionId?: string;
 };
 
 function exportQueryString(q: EnquiryExportQuery): string {
+  const div = q.divisionId?.trim() ? `&divisionId=${encodeURIComponent(q.divisionId.trim())}` : "";
   if (q.from?.trim() && q.to?.trim()) {
-    return `&from=${encodeURIComponent(q.from.trim())}&to=${encodeURIComponent(q.to.trim())}`;
+    return `${div}&from=${encodeURIComponent(q.from.trim())}&to=${encodeURIComponent(q.to.trim())}`;
   }
   if (q.period) {
-    return `&period=${encodeURIComponent(q.period)}`;
+    return `${div}&period=${encodeURIComponent(q.period)}`;
   }
-  return "";
+  return div;
 }
 
 export async function fetchAllOrdersForExport(q: EnquiryExportQuery): Promise<OrderRow[]> {
