@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +10,7 @@ import { Label } from "@/components/ui/label";
 
 export default function LoginPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   // Dev-only mock credentials so you can test UI without relying on Neon DB connectivity.
   const MOCK_EMAIL = "superadmin@shivatex.in";
   const MOCK_PASSWORD = "shivatex@12345";
@@ -54,6 +56,9 @@ export default function LoginPage() {
         setError(msg);
         return;
       }
+      queryClient.removeQueries({ queryKey: ["auth", "me"] });
+      queryClient.removeQueries({ queryKey: ["dashboard"] });
+      queryClient.removeQueries({ queryKey: ["orders"] });
       router.push("/dashboard");
       router.refresh();
     } finally {

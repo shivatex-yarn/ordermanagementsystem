@@ -16,6 +16,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Plus, X } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
+import { userMayCreateEnquiry } from "@/lib/enquiry-access";
 
 async function fetchDivisionsForRouting() {
   const res = await fetch("/api/divisions?scope=routing", { credentials: "include" });
@@ -31,6 +33,7 @@ type CustomField = { title: string; value: string };
 export default function NewOrderPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { user, isLoading: authLoading } = useAuth();
   const [divisionId, setDivisionId] = useState<number | null>(null);
   const [companyName, setCompanyName] = useState("");
   const [description, setDescription] = useState("");
@@ -43,12 +46,21 @@ export default function NewOrderPage() {
   const { data: divisions = [], isSuccess: divisionsLoaded } = useQuery({
     queryKey: ["order-form-divisions", "routing"],
     queryFn: fetchDivisionsForRouting,
+    /** Avoid SSR/client divergence (Radix Select vs read-only division) and relative `/api` during prerender. */
+    enabled: typeof window !== "undefined",
   });
 
   useEffect(() => {
     if (!divisionsLoaded || divisions.length !== 1) return;
     setDivisionId((prev) => (prev == null ? divisions[0].id : prev));
   }, [divisionsLoaded, divisions]);
+
+  useEffect(() => {
+    if (authLoading || !user) return;
+    if (!userMayCreateEnquiry(user.role)) {
+      router.replace("/orders");
+    }
+  }, [authLoading, user, router]);
 
   const routableDivisionId = divisions.length === 1 ? (divisions[0]?.id ?? null) : divisionId;
 
@@ -107,6 +119,18 @@ export default function NewOrderPage() {
         setError(data.error || "Failed to create enquiry");
         return;
       }
+      const newId = typeof data.id === "number" ? data.id : Number(data.id);
+      if (Number.isInteger(newId)) {
+        try {
+          const detailRes = await fetch(`/api/orders/${newId}`, { credentials: "include" });
+          if (detailRes.ok) {
+            const detail = (await detailRes.json()) as Record<string, unknown>;
+            queryClient.setQueryData(["order", newId], detail);
+          }
+        } catch {
+          /* detail page will refetch */
+        }
+      }
       queryClient.invalidateQueries({ queryKey: ["orders"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       router.push(`/orders/${data.id}`);
@@ -114,6 +138,21 @@ export default function NewOrderPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  if (authLoading || !user) {
+    return (
+      <div className="max-w-2xl space-y-6">
+        <div className="text-slate-500 text-sm">{authLoading ? "Loading…" : "Please sign in."}</div>
+      </div>
+    );
+  }
+  if (!userMayCreateEnquiry(user.role)) {
+    return (
+      <div className="max-w-2xl space-y-6">
+        <div className="text-slate-500 text-sm">Redirecting to enquiries…</div>
+      </div>
+    );
   }
 
   return (
@@ -169,13 +208,19 @@ export default function NewOrderPage() {
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label>Division (required)</Label>
-              {divisionsLoaded && divisions.length === 0 ? (
+              {!divisionsLoaded ? (
+                <div
+                  className="h-10 rounded-lg border-2 border-slate-400/60 bg-slate-50 animate-pulse"
+                  aria-busy
+                  aria-label="Loading division"
+                />
+              ) : divisions.length === 0 ? (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
                   You are not assigned to any division. Ask an administrator to map you to a division before creating
                   an enquiry.
                 </div>
               ) : divisions.length === 1 ? (
-                <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-900">
+                <div className="rounded-lg border-2 border-slate-400/80 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-900 shadow-sm">
                   {divisions[0].name}
                   <span className="ml-2 font-normal text-slate-500">(your division)</span>
                 </div>
@@ -195,7 +240,7 @@ export default function NewOrderPage() {
               )}
             </div>
 
-            <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <div className="space-y-3 rounded-lg border-2 border-slate-400/50 bg-slate-50 p-4 shadow-sm">
               <p className="text-sm font-medium text-slate-800">Sample request</p>
               <div className="flex items-start gap-3">
                 <input
@@ -223,7 +268,7 @@ export default function NewOrderPage() {
                     onChange={(e) => setSampleRequestNotes(e.target.value)}
                     placeholder="e.g. Need 2m swatch, navy blue, deadline Friday"
                     rows={3}
-                    className="flex min-h-[72px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2"
+                    className="flex min-h-[72px] w-full rounded-lg border-2 border-slate-400/80 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-slate-400 focus-visible:outline-none focus-visible:border-indigo-500 focus-visible:ring-2 focus-visible:ring-indigo-500/35 focus-visible:ring-offset-2"
                   />
                 </div>
               )}

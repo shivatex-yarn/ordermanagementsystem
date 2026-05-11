@@ -295,7 +295,7 @@ export default function DashboardPage() {
                     if (v && dateTo) setPeriod("");
                     setPage(1);
                   }}
-                  className="flex h-9 w-full min-w-40 rounded-md border border-slate-200 bg-white px-3 py-1 text-sm shadow-sm sm:w-40"
+                  className="flex h-9 w-full min-w-40 rounded-md border-2 border-slate-400/70 bg-white px-3 py-1 text-sm shadow-sm focus-visible:border-indigo-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 sm:w-40"
                 />
               </div>
               <div className="space-y-2">
@@ -309,7 +309,7 @@ export default function DashboardPage() {
                     if (dateFrom && v) setPeriod("");
                     setPage(1);
                   }}
-                  className="flex h-9 w-full min-w-40 rounded-md border border-slate-200 bg-white px-3 py-1 text-sm shadow-sm sm:w-40"
+                  className="flex h-9 w-full min-w-40 rounded-md border-2 border-slate-400/70 bg-white px-3 py-1 text-sm shadow-sm focus-visible:border-indigo-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 sm:w-40"
                 />
               </div>
               {(dateFrom || dateTo) && (
@@ -384,11 +384,16 @@ export default function DashboardPage() {
                             </span>
                             <span className="text-slate-500">
                               {" "}
-                              · {new Date(order.createdAt).toLocaleString()}
+                              ·{" "}
+                              <time dateTime={order.createdAt} suppressHydrationWarning>
+                                {new Date(order.createdAt).toLocaleString()}
+                              </time>
                             </span>
                           </>
                         ) : (
-                          new Date(order.createdAt).toLocaleString()
+                          <time dateTime={order.createdAt} suppressHydrationWarning>
+                            {new Date(order.createdAt).toLocaleString()}
+                          </time>
                         )}
                         {!hideDivision && order.currentDivision?.name ? (
                           <> · {order.currentDivision.name}</>
