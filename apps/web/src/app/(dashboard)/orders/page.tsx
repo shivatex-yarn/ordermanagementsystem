@@ -41,22 +41,42 @@ export default function OrdersPage() {
   const { user } = useAuth();
   const [page, setPage] = useState(1);
   const [period, setPeriod] = useState<EnquiryPeriodFilter>("");
+  const [divisionId, setDivisionId] = useState("");
   const [exporting, setExporting] = useState(false);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["orders", page, period],
-    queryFn: () => fetchOrders(page, period),
+    queryKey: ["orders", page, period, divisionId],
+    queryFn: async () => {
+      const q = period ? `&period=${encodeURIComponent(period)}` : "";
+      const div = divisionId ? `&divisionId=${encodeURIComponent(divisionId)}` : "";
+      const res = await fetch(`/api/orders?page=${page}&limit=5${q}${div}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch enquiries");
+      return res.json();
+    },
     staleTime: 45_000,
     enabled: Boolean(user),
   });
 
-  const canCreate = Boolean(user && userMayCreateEnquiry(user.role));
+  const isAccountsView = user?.role === "ACCOUNTS";
+  const canCreate = Boolean(user && userMayCreateEnquiry(user.role) && !isAccountsView);
   const hideDivision = user?.role === "MANAGER";
+
+  const { data: divisionsData } = useQuery({
+    queryKey: ["divisions", "orders-filter"],
+    queryFn: async () => {
+      const res = await fetch("/api/divisions", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to load divisions");
+      return res.json() as Promise<{ divisions: { id: number; name: string }[] }>;
+    },
+    enabled: Boolean(user && isAccountsView),
+    staleTime: 5 * 60_000,
+  });
+  const divisions = divisionsData?.divisions ?? [];
 
   const handleExport = async () => {
     setExporting(true);
     try {
-      const rows = await fetchAllOrdersForExport({ period });
+      const rows = await fetchAllOrdersForExport({ period, divisionId: divisionId || undefined });
       const label =
         PERIOD_LABELS.find((p) => p.value === period)?.label?.toLowerCase().replace(/\s+/g, "-") ?? "all";
       downloadEnquiriesExcel(rows, label, hideDivision);
@@ -91,6 +111,30 @@ export default function OrdersPage() {
               </SelectContent>
             </Select>
           </div>
+          {isAccountsView ? (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-slate-600">Division</span>
+              <Select
+                value={divisionId || "all"}
+                onValueChange={(v) => {
+                  setDivisionId(v === "all" ? "" : v);
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger className="w-full min-w-0 sm:w-[200px]">
+                  <SelectValue placeholder="Division" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All divisions</SelectItem>
+                  {divisions.map((d) => (
+                    <SelectItem key={d.id} value={String(d.id)}>
+                      {d.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
           <Button
             type="button"
             variant="outline"

@@ -501,6 +501,7 @@ export default function AdminUsersPage() {
                   <SelectItem value="USER">User</SelectItem>
                   <SelectItem value="SUPERVISOR">Supervisor</SelectItem>
                   <SelectItem value="MANAGER">Division Head (Manager)</SelectItem>
+                  <SelectItem value="ACCOUNTS">Accounts</SelectItem>
                   <SelectItem value="MANAGING_DIRECTOR">Managing Director</SelectItem>
                   <SelectItem value="SUPER_ADMIN">Super Admin</SelectItem>
                 </SelectContent>
@@ -576,6 +577,7 @@ export default function AdminUsersPage() {
                     <SelectItem value="USER">User</SelectItem>
                     <SelectItem value="SUPERVISOR">Supervisor</SelectItem>
                     <SelectItem value="MANAGER">Division Head (Manager)</SelectItem>
+                    <SelectItem value="ACCOUNTS">Accounts</SelectItem>
                     <SelectItem value="MANAGING_DIRECTOR">Managing Director</SelectItem>
                     <SelectItem value="SUPER_ADMIN">Super Admin</SelectItem>
                   </SelectContent>

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import type { Role } from "@prisma/client";
 import {
+  approveHeadSampleRequest,
   approveOrderSample,
   recordSalesFeedback,
   recordSampleShipment,
@@ -34,6 +35,51 @@ export async function canSubmitSalesFeedbackAsync(
   if (role === "SUPER_ADMIN" || role === "MANAGING_DIRECTOR") return true;
   if (order.createdById === userId) return true;
   return false;
+}
+
+export async function userMayRunSampleAction(
+  userId: number,
+  role: Role,
+  order: {
+    currentDivisionId: number;
+    createdById: number;
+    assignedSupervisorId: number | null;
+    headSampleRequestApprovedAt: Date | null;
+    sampleRequested: boolean;
+  },
+  action: string
+): Promise<boolean> {
+  if (action === "salesFeedback") {
+    return canSubmitSalesFeedbackAsync(userId, role, order);
+  }
+  const divOk = await userCanManageSampleForOrder(userId, role, order.currentDivisionId);
+  if (action === "approveSampleRequest") return divOk;
+  if (action === "setDetails") {
+    if (
+      (role === "SUPER_ADMIN" || role === "MANAGING_DIRECTOR") &&
+      order.sampleRequested
+    ) {
+      return true;
+    }
+    if (
+      role === "SUPERVISOR" &&
+      order.assignedSupervisorId === userId &&
+      order.sampleRequested &&
+      order.headSampleRequestApprovedAt != null
+    ) {
+      return true;
+    }
+    return false;
+  }
+  if (action === "setDevelopment") {
+    // Development classification is a head step; supervisors shouldn't submit it.
+    return divOk;
+  }
+  if (action === "approve") {
+    // Only head/super roles approve the submitted sample details.
+    return divOk;
+  }
+  return divOk;
 }
 
 export async function getIntegrationActorUserId(): Promise<number | null> {
@@ -90,6 +136,16 @@ export async function runSampleAction(
       if (!order) {
         return NextResponse.json(
           { error: "Cannot update sample development info (sample not requested or invalid state)" },
+          { status: 400 }
+        );
+      }
+      return NextResponse.json(order);
+    }
+    case "approveSampleRequest": {
+      const order = await approveHeadSampleRequest(orderId, userId);
+      if (!order) {
+        return NextResponse.json(
+          { error: "Cannot approve sample request (not requested, already approved, or not permitted)" },
           { status: 400 }
         );
       }

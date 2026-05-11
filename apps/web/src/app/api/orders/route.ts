@@ -28,6 +28,7 @@ export async function GET(req: Request) {
   const marks: { name: string; durMs: number; desc?: string }[] = [];
   const auth = await withAuth();
   if (auth.response) return auth.response;
+  const isAccountsViewer = auth.payload.role === "ACCOUNTS";
   const rl = await withTiming("ratelimit", () =>
     rateLimit(getRateLimitIdentifierForUser(req, Number(auth.payload.sub)))
   );
@@ -62,8 +63,9 @@ export async function GET(req: Request) {
       where.createdAt = { gte: createdRange.gte, lte: createdRange.lte };
     }
   }
-  if (auth.payload.role === "USER") where.createdById = Number(auth.payload.sub);
-  if (auth.payload.role === "MANAGER" || auth.payload.role === "SUPERVISOR") {
+  if (!isAccountsViewer) {
+    if (auth.payload.role === "USER") where.createdById = Number(auth.payload.sub);
+    if (auth.payload.role === "MANAGER" || auth.payload.role === "SUPERVISOR") {
     const userId = Number(auth.payload.sub);
     const managed = await prisma.divisionManager.findMany({
       where: { userId },
@@ -78,6 +80,7 @@ export async function GET(req: Request) {
     } else {
       // No division mapping → no enquiries.
       where.currentDivisionId = -1;
+    }
     }
   }
   // SUPER_ADMIN and MANAGING_DIRECTOR see all (no extra filter)

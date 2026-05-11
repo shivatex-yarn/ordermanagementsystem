@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { userMayViewEnquiryExecInsights } from "@/lib/enquiry-access";
 import { userCanViewOrder } from "@/lib/order-view-permission";
 import { withAuth } from "@/lib/with-auth";
 
@@ -46,6 +47,9 @@ export async function GET(req: Request) {
     if (!order) return NextResponse.json({ error: "Not found" }, { status: 404 });
     const ok = await userCanViewOrder(auth.payload, order);
     if (!ok) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (!userMayViewEnquiryExecInsights(role)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
     where.orderId = oid;
   } else {
     if (!["SUPER_ADMIN", "MANAGING_DIRECTOR", "MANAGER"].includes(role)) {

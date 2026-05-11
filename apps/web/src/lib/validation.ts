@@ -9,7 +9,7 @@ export const registerSchema = z.object({
   name: z.string().min(1).max(255),
   email: z.string().email(),
   password: z.string().min(8, "Password must be at least 8 characters"),
-  role: z.enum(["USER", "SUPERVISOR", "MANAGER", "MANAGING_DIRECTOR", "SUPER_ADMIN"]).optional(),
+  role: z.enum(["USER", "SUPERVISOR", "MANAGER", "MANAGING_DIRECTOR", "SUPER_ADMIN", "ACCOUNTS"]).optional(),
   divisionId: z.number().int().positive().optional(),
 });
 
@@ -17,7 +17,7 @@ export const adminCreateUserSchema = z.object({
   name: z.string().min(1).max(255),
   email: z.string().email(),
   password: z.string().min(8, "Password must be at least 8 characters"),
-  role: z.enum(["USER", "SUPERVISOR", "MANAGER", "MANAGING_DIRECTOR", "SUPER_ADMIN"]),
+  role: z.enum(["USER", "SUPERVISOR", "MANAGER", "MANAGING_DIRECTOR", "SUPER_ADMIN", "ACCOUNTS"]),
   divisionId: z.number().int().positive().optional(),
   divisionIds: z.array(z.number().int().positive()).optional(),
 });
@@ -26,7 +26,7 @@ export const adminUpdateUserSchema = z.object({
   name: z.string().min(1).max(255).optional(),
   email: z.string().email().optional(),
   password: z.string().min(8).optional(),
-  role: z.enum(["USER", "SUPERVISOR", "MANAGER", "MANAGING_DIRECTOR", "SUPER_ADMIN"]).optional(),
+  role: z.enum(["USER", "SUPERVISOR", "MANAGER", "MANAGING_DIRECTOR", "SUPER_ADMIN", "ACCOUNTS"]).optional(),
   divisionId: z.number().int().positive().nullable().optional(),
   divisionIds: z.array(z.number().int().positive()).optional(),
   active: z.boolean().optional(),
@@ -129,6 +129,7 @@ export const orderSampleActionSchema = z.union([
     action: z.literal("salesFeedback"),
     salesFeedback: z.string().min(1).max(20000),
   }),
+  z.object({ action: z.literal("approveSampleRequest") }),
 ]);
 
 export const updateOrderSchema = z.object({
@@ -154,6 +155,7 @@ export const transferOrderSchema = z.object({
   orderId: z.number().int().positive(),
   toDivisionId: z.number().int().positive(),
   reason: z.string().min(10, "Transfer reason must be at least 10 characters"),
+  transferDetails: z.string().min(10, "Transfer details must be at least 10 characters"),
 });
 
 export const rejectOrderSchema = z.object({
@@ -163,7 +165,38 @@ export const rejectOrderSchema = z.object({
 
 export const receiveOrderSchema = z.object({
   orderId: z.number().int().positive(),
+  reason: z.string().min(10, "Reason for marking received must be at least 10 characters"),
 });
+
+export const enquiryHandoffSchema = z
+  .object({
+    orderId: z.number().int().positive(),
+    supervisorId: z.number().int().positive(),
+    developmentKind: z.enum(["new", "existing"]),
+    newDevelopmentDetails: z.string().max(20000).optional(),
+    existingProductDetails: z.string().max(20000).optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.developmentKind === "new") {
+      const t = data.newDevelopmentDetails?.trim() ?? "";
+      if (t.length < 10) {
+        ctx.addIssue({
+          code: "custom",
+          message: "New development details are required (min 10 characters)",
+          path: ["newDevelopmentDetails"],
+        });
+      }
+    } else {
+      const t = data.existingProductDetails?.trim() ?? "";
+      if (t.length < 10) {
+        ctx.addIssue({
+          code: "custom",
+          message: "Existing product details are required (min 10 characters)",
+          path: ["existingProductDetails"],
+        });
+      }
+    }
+  });
 
 export const completeOrderSchema = z.object({
   orderId: z.number().int().positive(),

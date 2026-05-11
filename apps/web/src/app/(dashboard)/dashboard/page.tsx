@@ -175,6 +175,8 @@ export default function DashboardPage() {
     return null;
   }
 
+  const isAccountsView = user.role === "ACCOUNTS";
+
   const dataPending = dashboardLoading || !data;
 
   if (dataPending) {
@@ -204,16 +206,26 @@ export default function DashboardPage() {
     );
   }
 
-  const metricCards = [
-    { title: "Total enquiries", value: data.total, icon: Package },
-    { title: "SLA breaches", value: data.slaBreaches, icon: AlertTriangle, alert: data.slaBreaches > 0 },
-    {
-      title: "Enquiries at risk",
-      value: data.enquiriesAtRisk,
-      icon: CheckCircle,
-      alert: data.enquiriesAtRisk > 0,
-    },
-  ];
+  const placedCount = Number(statusCounts.PLACED ?? 0);
+  const inProgressCount = Number(statusCounts.IN_PROGRESS ?? 0);
+  const completedCount = Number(statusCounts.COMPLETED ?? 0);
+
+  const metricCards = isAccountsView
+    ? [
+        { title: "Placed", value: placedCount, icon: Package },
+        { title: "In progress", value: inProgressCount, icon: CheckCircle },
+        { title: "Completed", value: completedCount, icon: CheckCircle },
+      ]
+    : [
+        { title: "Total enquiries", value: data.total, icon: Package },
+        { title: "SLA breaches", value: data.slaBreaches, icon: AlertTriangle, alert: data.slaBreaches > 0 },
+        {
+          title: "Enquiries at risk",
+          value: data.enquiriesAtRisk,
+          icon: CheckCircle,
+          alert: data.enquiriesAtRisk > 0,
+        },
+      ];
 
   const pipelineSubtitle =
     user?.role === "USER"
@@ -227,7 +239,7 @@ export default function DashboardPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
         <p className="text-slate-500 mt-1">
-          Welcome back, {user?.name}. Here&apos;s an overview of your enquiries and SLA.
+          Welcome back, {user?.name}. Here&apos;s an overview of your enquiries{isAccountsView ? "." : " and SLA."}
         </p>
       </div>
 
@@ -248,6 +260,7 @@ export default function DashboardPage() {
         })}
       </div>
 
+      {isAccountsView ? null : (
       <Card className="border-slate-200/90 shadow-sm">
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Filters</CardTitle>
@@ -338,19 +351,22 @@ export default function DashboardPage() {
           </div>
         </CardContent>
       </Card>
+      )}
 
-      <DashboardCharts
-        pieData={pieData}
-        barData={barData}
-        useCustomRange={useCustomRange}
-        dateFrom={dateFrom}
-        dateTo={dateTo}
-      />
+      {isAccountsView ? null : (
+        <DashboardCharts
+          pieData={pieData}
+          barData={barData}
+          useCustomRange={useCustomRange}
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+        />
+      )}
 
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-4">
           <div>
-            <CardTitle>Enquiry pipeline</CardTitle>
+            <CardTitle>{isAccountsView ? "Enquiries" : "Enquiry pipeline"}</CardTitle>
             <p className="text-sm text-slate-500 font-normal mt-1">{pipelineSubtitle}</p>
           </div>
         </CardHeader>

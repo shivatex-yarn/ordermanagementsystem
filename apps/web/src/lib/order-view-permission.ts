@@ -13,7 +13,7 @@ export async function userCanViewOrder(payload: JWTPayload, order: OrderViewFiel
   if (Number.isNaN(userId)) return false;
 
   const { role } = payload;
-  if (role === "MANAGING_DIRECTOR" || role === "SUPER_ADMIN") return true;
+  if (role === "MANAGING_DIRECTOR" || role === "SUPER_ADMIN" || role === "ACCOUNTS") return true;
   if (role === "USER") return order.createdById === userId;
   if (role === "MANAGER" || role === "SUPERVISOR") {
     if (order.createdById === userId) return true;
@@ -21,8 +21,19 @@ export async function userCanViewOrder(payload: JWTPayload, order: OrderViewFiel
       where: { userId },
       select: { divisionId: true },
     });
+    /**
+     * `payload.divisionId` may be missing for older sessions/tokens.
+     * Fall back to the DB user's divisionId so division heads/supervisors
+     * don't get incorrectly blocked with 403.
+     */
+    const dbUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { divisionId: true },
+    });
     const accessible = new Set(
-      [payload.divisionId ?? null, ...managed.map((m) => m.divisionId)].filter((v): v is number => typeof v === "number")
+      [payload.divisionId ?? null, dbUser?.divisionId ?? null, ...managed.map((m) => m.divisionId)].filter(
+        (v): v is number => typeof v === "number"
+      )
     );
     return (
       accessible.has(order.currentDivisionId) ||

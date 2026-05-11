@@ -1,11 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { withAuth } from "@/lib/with-auth";
-import {
-  canSubmitSalesFeedbackAsync,
-  runSampleAction,
-  userCanManageSampleForOrder,
-} from "@/lib/order-sample-actions";
+import { runSampleAction, userMayRunSampleAction } from "@/lib/order-sample-actions";
 
 export async function POST(
   req: Request,
@@ -20,7 +16,16 @@ export async function POST(
     }
     const order = await prisma.order.findUnique({
       where: { id },
-      select: { id: true, currentDivisionId: true, createdById: true },
+      select: {
+        id: true,
+        currentDivisionId: true,
+        createdById: true,
+        assignedSupervisorId: true,
+        headSampleRequestApprovedAt: true,
+        sampleRequested: true,
+        sampleApprovedAt: true,
+        status: true,
+      },
     });
     if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
 
@@ -29,17 +34,16 @@ export async function POST(
     }
 
     const body = await req.json().catch(() => ({}));
-    const action = body?.action as string | undefined;
+    const action = typeof body?.action === "string" ? body.action : undefined;
 
     const userId = Number(auth.payload.sub);
 
-    if (action === "salesFeedback") {
-      const ok = await canSubmitSalesFeedbackAsync(userId, auth.payload.role, order);
-      if (!ok) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    } else {
-      const ok = await userCanManageSampleForOrder(userId, auth.payload.role, order.currentDivisionId);
-      if (!ok) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (!action) {
+      return NextResponse.json({ error: "Missing action" }, { status: 400 });
     }
+
+    const ok = await userMayRunSampleAction(userId, auth.payload.role, order, action);
+    if (!ok) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     return await runSampleAction(id, userId, body);
   } catch (err) {
