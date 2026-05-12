@@ -22,6 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useState, useMemo, useEffect } from "react";
 import { formatEnquiryNumber, formatEnquiryNumberShort } from "@/lib/enquiry-display";
 import { userMayViewEnquiryExecInsights } from "@/lib/enquiry-access";
+import { EnquiryTimeline } from "@/components/enquiry-timeline";
 
 const statusVariant: Record<string, "default" | "secondary" | "destructive" | "success" | "warning"> = {
   PLACED: "secondary",
@@ -2237,6 +2238,10 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {order?.id ? (
+        <EnquiryTimeline enquiryId={Number(order.id)} />
+      ) : null}
 
       <Dialog open={newDevViewOpen} onOpenChange={setNewDevViewOpen}>
         <DialogContent>

@@ -9,6 +9,7 @@ import {
   sendSupervisorEnquiryHandoffEmail,
 } from "@/lib/email";
 import { postEventToN8n } from "@/lib/n8n-webhook";
+import { appendTimeline, type TimelineEventType } from "@/lib/timeline";
 
 const MAX_TRANSFER_REASON_EMAIL = 500;
 
@@ -319,12 +320,95 @@ async function n8nWebhookHandler(event: OrderEvent): Promise<void> {
   await postEventToN8n(event);
 }
 
+/**
+ * Translates an internal OrderEvent into a human-readable EnquiryTimelineEvent row.
+ * Drives the Timeline tab + MD recent-activity stream.
+ */
+async function timelineHandler(event: OrderEvent): Promise<void> {
+  const map: Partial<Record<OrderEvent["type"], { type: TimelineEventType; title: string; detail?: string | null }>> = {
+    OrderCreated: { type: "ENQUIRY_CREATED", title: "Enquiry created" },
+    OrderAccepted: {
+      type: "ENQUIRY_APPROVED",
+      title: "Approved by Division Head",
+      detail: (event as Extract<OrderEvent, { type: "OrderAccepted" }>).acceptanceReason ?? null,
+    },
+    OrderRejected: {
+      type: "ENQUIRY_REJECTED",
+      title: "Rejected by Division Head",
+      detail: (event as Extract<OrderEvent, { type: "OrderRejected" }>).reason ?? null,
+    },
+    OrderTransferred: {
+      type: "ENQUIRY_TRANSFERRED",
+      title: "Transferred to another division",
+      detail:
+        (event as Extract<OrderEvent, { type: "OrderTransferred" }>).reason ??
+        (event as Extract<OrderEvent, { type: "OrderTransferred" }>).transferDetails ??
+        null,
+    },
+    OrderReceived: {
+      type: "ENQUIRY_RECEIVED",
+      title: "Received by new division",
+      detail: (event as Extract<OrderEvent, { type: "OrderReceived" }>).receiveReason ?? null,
+    },
+    OrderCompleted: { type: "ENQUIRY_COMPLETED", title: "Enquiry completed" },
+    OrderCancelled: {
+      type: "ENQUIRY_CANCELLED",
+      title: "Enquiry cancelled by submitter",
+      detail: (event as Extract<OrderEvent, { type: "OrderCancelled" }>).reason ?? null,
+    },
+    SampleDetailsUpdated: { type: "SAMPLE_DETAILS_SUBMITTED", title: "Sample details submitted" },
+    SampleDevelopmentUpdated: {
+      type: "PRODUCT_CLASSIFIED",
+      title: "Product classification submitted",
+      detail:
+        (event as Extract<OrderEvent, { type: "SampleDevelopmentUpdated" }>).developmentType === "new"
+          ? "Classified as new product development"
+          : "Classified as existing product reference",
+    },
+    SampleApproved: { type: "SAMPLE_APPROVED", title: "Sample approved (final)" },
+    SampleHeadRequestApproved: { type: "SAMPLE_APPROVED_BY_HEAD", title: "Sample request approved by Division Head" },
+    SampleShipped: {
+      type: "SAMPLE_SHIPPED",
+      title: "Sample shipped",
+      detail:
+        `Courier: ${(event as Extract<OrderEvent, { type: "SampleShipped" }>).courierName} · ` +
+        `Tracking: ${(event as Extract<OrderEvent, { type: "SampleShipped" }>).trackingId}`,
+    },
+    SalesFeedbackRecorded: { type: "CUSTOMER_FEEDBACK", title: "Customer feedback submitted" },
+    SLABreachDetected: { type: "SLA_BREACHED", title: "SLA breach detected (48-hour rule)" },
+    SLABreachHeadRejectionSubmitted: {
+      type: "SLA_HEAD_REJECTION",
+      title: "Division Head submitted SLA-breach rejection",
+      detail: (event as Extract<OrderEvent, { type: "SLABreachHeadRejectionSubmitted" }>).message ?? null,
+    },
+    OrderEnquiryHandoffSubmitted: {
+      type: "HANDOFF_SUBMITTED",
+      title: "Handoff submitted to supervisor",
+    },
+  };
+  const m = map[event.type];
+  if (!m) return;
+  try {
+    await appendTimeline({
+      orderId: event.orderId,
+      type: m.type,
+      title: m.title,
+      detail: m.detail ?? null,
+      actorId: event.userId ?? null,
+      metadata: event as unknown as Record<string, unknown>,
+    });
+  } catch (err) {
+    console.error("[timeline] write failed:", err);
+  }
+}
+
 let registered = false;
 export function registerEventHandlers(): void {
   if (registered) return;
   registered = true;
   subscribe(auditHandler);
   subscribe(notificationHandler);
+  subscribe(timelineHandler);
   // n8n is optional; only post when configured to avoid local ECONNREFUSED noise.
   if (process.env.N8N_WEBHOOK_URL?.trim()) {
     subscribe(n8nWebhookHandler);

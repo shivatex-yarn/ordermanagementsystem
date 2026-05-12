@@ -10,14 +10,16 @@ datasource db {
   url      = env("DATABASE_URL")
   // Use a direct (non-pooler) connection for migrations when available.
   // This reduces intermittent pooler disconnects in development.
-  directUrl = env("DIRECT_DATABASE_URL")
+  directUrl = env("DATABASE_URL")
 }
 
 enum Role {
   SUPER_ADMIN
   MANAGING_DIRECTOR
   MANAGER
+  DIVISION_HEAD
   SUPERVISOR
+  ASM
   ACCOUNTS
   USER
 }
@@ -29,6 +31,20 @@ enum OrderStatus {
   REJECTED
   COMPLETED
   CANCELLED
+}
+
+/// Distinguishes existing vs new product development on an enquiry.
+enum ProductKind {
+  EXISTING
+  NEW
+}
+
+/// Salesperson-set / Division Head adjustable priority for enquiry triage.
+enum EnquiryPriority {
+  LOW
+  NORMAL
+  HIGH
+  CRITICAL
 }
 
 model User {
@@ -66,6 +82,8 @@ model User {
   cancelledOrders Order[] @relation("OrderCancelledBy")
   loginSessions   UserLoginSession[]
   slaBreachesHeadRejected SLABreach[] @relation("SLABreachHeadRejectedBy")
+  timelineEvents          EnquiryTimelineEvent[] @relation("TimelineEventActor")
+  delayReasonsSubmitted   SLADelayReason[]       @relation("SLADelayReasonAuthor")
 }
 
 model UserLoginSession {
@@ -174,12 +192,28 @@ model Order {
   enquiryHandoff                  Json?     @map("enquiry_handoff")
   headSampleRequestApprovedAt     DateTime? @map("head_sample_request_approved_at")
 
+  // Enquiry workflow extensions (Enquiry Management Application spec)
+  /// Existing vs new product development. Set by Division Head during classification.
+  productKind          ProductKind?     @map("product_kind")
+  /// When existing product: reference / SKU / prior enquiry id of the previously developed product.
+  existingProductRef   String?          @map("existing_product_ref") @db.Text
+  /// When new product: requirements, specs, target weight/gsm/color, expected outcome.
+  newProductSpecs      String?          @map("new_product_specs") @db.Text
+  /// Date the salesperson received the physical sample from the lab/factory.
+  sampleReceivedAt     DateTime?        @map("sample_received_at")
+  /// Customer feedback collected by salesperson after sample handover. Visible only to Division Head / MD / Admin / Accounts.
+  customerFeedback     String?          @map("customer_feedback") @db.Text
+  customerFeedbackAt   DateTime?        @map("customer_feedback_at")
+  /// MD- and Division-Head-adjustable priority. Drives MD dashboard sort & visual highlight.
+  priority             EnquiryPriority  @default(NORMAL)
+
   transfers      OrderTransfer[]
   rejections     OrderRejection[]
   auditLogs      AuditLog[]
   slaBreaches    SLABreach[]
   comments       OrderComment[]
   editHistory    OrderEditHistory[]
+  timelineEvents EnquiryTimelineEvent[]
 
   @@index([status])
   @@index([currentDivisionId])
@@ -188,6 +222,8 @@ model Order {
   @@index([createdAt(sort: Desc)])
   @@index([createdById, createdAt(sort: Desc)])
   @@index([currentDivisionId, createdAt(sort: Desc)])
+  @@index([priority, status])
+  @@index([status, slaDeadline])
 }
 
 model OrderTransfer {
@@ -253,14 +289,59 @@ model SLABreach {
   headRejectedAt       DateTime? @map("head_rejected_at")
   headRejectedById     Int?      @map("head_rejected_by_id")
 
+  /** Login-time delay reason: gates Division Head's access to other modules. Free-form delay rationale. */
+  delayReasonText      String?   @map("delay_reason_text") @db.Text
+  delayReasonAt        DateTime? @map("delay_reason_at")
+
   order    Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   division Division @relation(fields: [divisionId], references: [id])
   headRejectedBy User? @relation("SLABreachHeadRejectedBy", fields: [headRejectedById], references: [id], onDelete: SetNull)
+  delayReasons   SLADelayReason[]
 
   @@index([orderId])
   @@index([breachedAt])
   @@index([headRejectedAt])
+  @@index([divisionId, resolvedAt])
   @@map("sla_breaches")
+}
+
+/// Audit row for each delay-reason submission. A division head logging in after a breach must submit one of these
+/// before the application unlocks other screens. We keep one row per submission for forensic accuracy even though
+/// the latest summary is also denormalised onto SLABreach.
+model SLADelayReason {
+  id         Int       @id @default(autoincrement())
+  breachId   Int       @map("breach_id")
+  userId     Int       @map("user_id")
+  reasonText String    @map("reason_text") @db.Text
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  breach SLABreach @relation(fields: [breachId], references: [id], onDelete: Cascade)
+  user   User      @relation("SLADelayReasonAuthor", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([breachId])
+  @@index([userId])
+  @@map("sla_delay_reasons")
+}
+
+/// Unified workflow timeline for every enquiry. Rendered as the Timeline tab on the enquiry detail page and as
+/// the recent activity stream on the MD dashboard. We keep AuditLog for security/forensic logging and use this
+/// for human-readable workflow rendering.
+model EnquiryTimelineEvent {
+  id        Int      @id @default(autoincrement())
+  orderId   Int      @map("order_id")
+  type      String   // ENQUIRY_CREATED / APPROVED / REJECTED / TRANSFERRED / SAMPLE_REQUESTED / SAMPLE_APPROVED ...
+  title     String
+  detail    String?  @db.Text
+  actorId   Int?     @map("actor_id")
+  metadata  Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  actor User? @relation("TimelineEventActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([orderId, createdAt(sort: Desc)])
+  @@index([createdAt(sort: Desc)])
+  @@map("enquiry_timeline_events")
 }
 
 model Notification {

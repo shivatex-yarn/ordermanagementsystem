@@ -1,0 +1,4 @@
+# Root-level npm artifacts (app lives in apps/web; do not add a root workspace
+# without intent — npm will link apps/web as node_modules/<package-name>.)
+/node_modules
+/package-lock.json

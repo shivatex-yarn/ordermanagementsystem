@@ -15,7 +15,7 @@ export async function userCanViewOrder(payload: JWTPayload, order: OrderViewFiel
   const { role } = payload;
   if (role === "MANAGING_DIRECTOR" || role === "SUPER_ADMIN" || role === "ACCOUNTS") return true;
   if (role === "USER") return order.createdById === userId;
-  if (role === "MANAGER" || role === "SUPERVISOR") {
+  if (role === "MANAGER" || role === "SUPERVISOR" || role === "DIVISION_HEAD" || role === "ASM") {
     if (order.createdById === userId) return true;
     const managed = await prisma.divisionManager.findMany({
       where: { userId },

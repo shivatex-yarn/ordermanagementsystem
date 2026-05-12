@@ -16,7 +16,7 @@ export async function middleware(request: NextRequest) {
   if (pathname.startsWith("/api/") && !pathname.includes("/auth/")) {
     return NextResponse.next();
   }
-  if (pathname.startsWith("/dashboard") || pathname.startsWith("/orders") || pathname.startsWith("/divisions") || pathname.startsWith("/audit") || pathname.startsWith("/sla") || pathname.startsWith("/notifications") || pathname.startsWith("/md") || pathname.startsWith("/admin")) {
+  if (pathname.startsWith("/dashboard") || pathname.startsWith("/orders") || pathname.startsWith("/divisions") || pathname.startsWith("/audit") || pathname.startsWith("/sla") || pathname.startsWith("/notifications") || pathname.startsWith("/md") || pathname.startsWith("/admin") || pathname.startsWith("/accounts")) {
     const token = request.cookies.get("oms_token")?.value;
     if (!token) {
       const url = new URL("/login", request.url);
@@ -72,6 +72,15 @@ export async function middleware(request: NextRequest) {
         }
         if (pathname === "/orders") {
           return NextResponse.redirect(new URL("/md", request.url));
+        }
+      }
+      if (role === "ACCOUNTS" && pathname === "/dashboard") {
+        return NextResponse.redirect(new URL("/accounts", request.url));
+      }
+      // /accounts is gated to ACCOUNTS + executives.
+      if (pathname === "/accounts" || pathname.startsWith("/accounts/")) {
+        if (role !== "ACCOUNTS" && role !== "SUPER_ADMIN" && role !== "MANAGING_DIRECTOR") {
+          return NextResponse.redirect(new URL("/dashboard", request.url));
         }
       }
     } catch {

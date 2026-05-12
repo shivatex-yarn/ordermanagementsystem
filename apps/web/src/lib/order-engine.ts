@@ -682,7 +682,7 @@ export async function submitEnquiryHandoff(
   const supervisor = await prisma.user.findFirst({
     where: {
       id: input.supervisorId,
-      role: "SUPERVISOR",
+      role: { in: ["SUPERVISOR", "ASM"] },
       divisionId: order.currentDivisionId,
       active: true,
     },

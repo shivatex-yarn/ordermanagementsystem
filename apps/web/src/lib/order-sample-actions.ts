@@ -17,7 +17,7 @@ export async function userCanManageSampleForOrder(
   currentDivisionId: number
 ): Promise<boolean> {
   if (role === "SUPER_ADMIN" || role === "MANAGING_DIRECTOR") return true;
-  if (role !== "MANAGER") return false;
+  if (role !== "MANAGER" && role !== "DIVISION_HEAD") return false;
   const asManager = await prisma.divisionManager.findFirst({
     where: { userId, divisionId: currentDivisionId },
   });
@@ -62,7 +62,7 @@ export async function userMayRunSampleAction(
       return true;
     }
     if (
-      role === "SUPERVISOR" &&
+      (role === "SUPERVISOR" || role === "ASM") &&
       order.assignedSupervisorId === userId &&
       order.sampleRequested &&
       order.headSampleRequestApprovedAt != null

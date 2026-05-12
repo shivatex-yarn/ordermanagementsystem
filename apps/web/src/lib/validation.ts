@@ -9,7 +9,7 @@ export const registerSchema = z.object({
   name: z.string().min(1).max(255),
   email: z.string().email(),
   password: z.string().min(8, "Password must be at least 8 characters"),
-  role: z.enum(["USER", "SUPERVISOR", "MANAGER", "MANAGING_DIRECTOR", "SUPER_ADMIN", "ACCOUNTS"]).optional(),
+  role: z.enum(["USER", "SUPERVISOR", "ASM", "MANAGER", "DIVISION_HEAD", "MANAGING_DIRECTOR", "SUPER_ADMIN", "ACCOUNTS"]).optional(),
   divisionId: z.number().int().positive().optional(),
 });
 
@@ -17,7 +17,7 @@ export const adminCreateUserSchema = z.object({
   name: z.string().min(1).max(255),
   email: z.string().email(),
   password: z.string().min(8, "Password must be at least 8 characters"),
-  role: z.enum(["USER", "SUPERVISOR", "MANAGER", "MANAGING_DIRECTOR", "SUPER_ADMIN", "ACCOUNTS"]),
+  role: z.enum(["USER", "SUPERVISOR", "ASM", "MANAGER", "DIVISION_HEAD", "MANAGING_DIRECTOR", "SUPER_ADMIN", "ACCOUNTS"]),
   divisionId: z.number().int().positive().optional(),
   divisionIds: z.array(z.number().int().positive()).optional(),
 });
@@ -26,7 +26,7 @@ export const adminUpdateUserSchema = z.object({
   name: z.string().min(1).max(255).optional(),
   email: z.string().email().optional(),
   password: z.string().min(8).optional(),
-  role: z.enum(["USER", "SUPERVISOR", "MANAGER", "MANAGING_DIRECTOR", "SUPER_ADMIN", "ACCOUNTS"]).optional(),
+  role: z.enum(["USER", "SUPERVISOR", "ASM", "MANAGER", "DIVISION_HEAD", "MANAGING_DIRECTOR", "SUPER_ADMIN", "ACCOUNTS"]).optional(),
   divisionId: z.number().int().positive().nullable().optional(),
   divisionIds: z.array(z.number().int().positive()).optional(),
   active: z.boolean().optional(),

@@ -10,7 +10,7 @@ const createSchema = z.object({
 
 /** Division Head (MANAGER): view own multi-division access requests */
 export async function GET() {
-  const auth = await withRole(["MANAGER"]);
+  const auth = await withRole(["MANAGER", "DIVISION_HEAD"]);
   if (auth.response) return auth.response;
   const userId = Number(auth.payload.sub);
   const requests = await prisma.multiDivisionAccessRequest.findMany({
@@ -26,7 +26,7 @@ export async function GET() {
 
 /** Division Head (MANAGER): submit multi-division access request */
 export async function POST(req: Request) {
-  const auth = await withRole(["MANAGER"]);
+  const auth = await withRole(["MANAGER", "DIVISION_HEAD"]);
   if (auth.response) return auth.response;
   const body = await req.json();
   const parsed = createSchema.safeParse(body);

@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { performLogout } from "@/components/logout-button";
 import { useAuth } from "@/hooks/use-auth";
+import { SLAGate } from "@/components/sla-gate";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -33,6 +34,7 @@ import { cn } from "@/lib/utils";
 const nav = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/orders", label: "Enquiries", icon: Package },
+  { href: "/accounts", label: "Accounts", icon: LineChart, accountsOnly: true },
   { href: "/sla", label: "SLA & Breaches", icon: AlertTriangle },
   { href: "/md", label: "Executive overview", icon: LineChart, mdOverviewOnly: true },
   { href: "/notifications", label: "Notifications", icon: Bell },
@@ -109,13 +111,19 @@ export default function DashboardLayout({
 
   const filteredNav = nav.filter((item) => {
     if (isAccountsView) {
-      // Accounts users: only dashboard, enquiry list, notifications.
-      return item.href === "/dashboard" || item.href === "/orders" || item.href === "/notifications";
+      // Accounts users: their dedicated dashboard + enquiry list + notifications.
+      return (
+        item.href === "/accounts" ||
+        item.href === "/orders" ||
+        item.href === "/notifications"
+      );
     }
     if (user.role === "MANAGING_DIRECTOR") {
-      return item.href === "/md" || item.href === "/notifications";
+      // MD lands on /md but should also be able to reach /accounts for commercial rollup.
+      return item.href === "/md" || item.href === "/accounts" || item.href === "/notifications";
     }
-    if ("managerOnly" in item && item.managerOnly && user.role !== "MANAGER") return false;
+    if ("accountsOnly" in item && item.accountsOnly && user.role !== "ACCOUNTS" && user.role !== "SUPER_ADMIN" && user.role !== "MANAGING_DIRECTOR") return false;
+    if ("managerOnly" in item && item.managerOnly && user.role !== "MANAGER" && user.role !== "DIVISION_HEAD") return false;
     if ("superAdminOnly" in item && item.superAdminOnly && user.role !== "SUPER_ADMIN" && user.role !== "MANAGING_DIRECTOR") {
       return false;
     }
@@ -272,6 +280,7 @@ export default function DashboardLayout({
         </header>
         <main className="flex-1 overflow-x-hidden overflow-y-auto p-4 sm:p-6 md:p-8">{children}</main>
       </div>
+      <SLAGate />
     </div>
   );
 }

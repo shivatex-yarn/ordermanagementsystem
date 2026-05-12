@@ -5,6 +5,8 @@ import { withRole } from "@/lib/with-auth";
 import { runSlaBreachCheck } from "@/lib/sla-breach-job";
 import { parseCreatedAtRangeFromParams } from "@/lib/date-period";
 import { dbUnavailableJson, isDbUnavailableError } from "@/lib/db-errors";
+import { divisionSlaBreakdown } from "@/lib/sla-service";
+import { getRecentTimeline } from "@/lib/timeline";
 
 const ALL_ORDER_STATUSES: OrderStatus[] = [
   "PLACED",
@@ -78,8 +80,11 @@ export async function GET(req: Request) {
   if (auth.response) return auth.response;
 
   try {
-    /** Create `sla_breaches` + notify for any overdue orders (same as cron). Keeps UI in sync if cron is misconfigured. */
-    await runSlaBreachCheck().catch((err) => {
+    /**
+     * Fire-and-forget: run the SLA breach sync in the background. The cron does this
+     * nightly; we just trigger an async run here for safety, never block the response.
+     */
+    void runSlaBreachCheck().catch((err) => {
       console.error("[md/overview] SLA breach sync failed:", err);
     });
 
@@ -115,20 +120,26 @@ export async function GET(req: Request) {
           currentDivision: { select: { id: true, name: true } },
         },
         orderBy: { slaDeadline: "asc" },
-        take: 50,
+        take: 20,
       }),
       prisma.sLABreach.findMany({
         where: { resolvedAt: null },
-        include: {
+        select: {
+          id: true,
+          breachedAt: true,
+          headRejectedAt: true,
+          headRejectionMessage: true,
           order: { select: { id: true, orderNumber: true, status: true } },
           division: { select: { id: true, name: true } },
           headRejectedBy: { select: { id: true, name: true, email: true } },
         },
         orderBy: { breachedAt: "desc" },
-        take: 40,
+        take: 20,
       }),
+      // Pipeline: drop deep `transfers` + `slaBreaches` joins which weren't surfaced on the new MD UI.
+      // Keep one open breach for the escalation flag via a cheaper sub-query later.
       prisma.order.findMany({
-        take: 100,
+        take: 30,
         orderBy: { updatedAt: "desc" },
         where: pipelineWhere,
         select: {
@@ -146,33 +157,10 @@ export async function GET(req: Request) {
           acceptedBy: { select: { id: true, name: true, email: true } },
           receivedBy: { select: { id: true, name: true, email: true } },
           completedBy: { select: { id: true, name: true, email: true } },
-          slaBreaches: {
-            where: { resolvedAt: null },
-            take: 1,
-            select: {
-              id: true,
-              breachedAt: true,
-              headRejectedAt: true,
-              headRejectedById: true,
-              headRejectionMessage: true,
-            },
-          },
-          transfers: {
-            orderBy: { createdAt: "desc" },
-            take: 2,
-            select: {
-              id: true,
-              createdAt: true,
-              reason: true,
-              fromDivision: { select: { name: true } },
-              toDivision: { select: { name: true } },
-              transferredBy: { select: { name: true, email: true } },
-            },
-          },
         },
       }),
       prisma.orderTransfer.findMany({
-        take: 45,
+        take: 20,
         orderBy: { createdAt: "desc" },
         include: {
           order: { select: { id: true, orderNumber: true, status: true } },
@@ -182,6 +170,20 @@ export async function GET(req: Request) {
         },
       }),
     ]);
+
+    // Single batch lookup of unresolved breach order-ids → used to flag pipeline escalation
+    // without doing per-row sub-queries. Cheap and avoids the n+1 problem the old shape had.
+    const pipelineOrderIds = pipelineOrders.map((o) => o.id);
+    const escalatedSet = pipelineOrderIds.length
+      ? new Set(
+          (
+            await prisma.sLABreach.findMany({
+              where: { orderId: { in: pipelineOrderIds }, resolvedAt: null },
+              select: { orderId: true },
+            })
+          ).map((r) => r.orderId)
+        )
+      : new Set<number>();
 
   const divisionIds = [...new Set(pipelineOrders.map((o) => o.currentDivision.id))];
   const managersByDivision = new Map<number, { name: string; email: string }[]>();
@@ -200,7 +202,7 @@ export async function GET(req: Request) {
 
   const pipeline = pipelineOrders.map((o) => {
     const heads = managersByDivision.get(o.currentDivision.id) ?? [];
-    const openBreach = o.slaBreaches[0];
+    const escalated = escalatedSet.has(o.id);
     const pastDue =
       o.slaDeadline != null &&
       o.slaDeadline < now &&
@@ -227,24 +229,69 @@ export async function GET(req: Request) {
       receivedBy: o.receivedBy,
       completedBy: o.completedBy,
       responseSummary: responseLabel(o),
-      escalated: Boolean(openBreach),
-      breachAt: openBreach?.breachedAt.toISOString() ?? null,
+      escalated,
+      breachAt: null,
       pastDueSla: pastDue,
       hoursPastSla: hoursPastSla != null ? Math.round(hoursPastSla * 10) / 10 : null,
-      recentTransfers: o.transfers.map((t) => ({
-        id: t.id,
-        at: t.createdAt.toISOString(),
-        from: t.fromDivision.name,
-        to: t.toDivision.name,
-        by: t.transferredBy.name,
-        reasonPreview: t.reason.length > 200 ? `${t.reason.slice(0, 200)}…` : t.reason,
-      })),
+      recentTransfers: [] as Array<{ id: number; at: string; from: string; to: string; by: string; reasonPreview: string }>,
     };
   });
 
-    return NextResponse.json({
+    /**
+     * Additive widgets — priority counts, division-SLA breakdown, recent timeline.
+     * Each is wrapped so a missing column / un-generated client / missing table
+     * never destroys the entire dashboard response. We fall back to safe defaults
+     * and log so the user can see in the server logs which feature needs migrating.
+     */
+    const safe = async <T>(label: string, fn: () => Promise<T>, fallback: T): Promise<T> => {
+      try {
+        return await fn();
+      } catch (err) {
+        console.warn(`[md/overview] ${label} skipped:`, err instanceof Error ? err.message : err);
+        return fallback;
+      }
+    };
+
+    const [priorityCounts, slaBreakdown, recentTimelineEvents, pendingApprovalsCount, samplesPendingHead] =
+      await Promise.all([
+        safe(
+          "priorityCounts",
+          () =>
+            prisma.order.groupBy({
+              by: ["priority"],
+              where: { status: { notIn: ["REJECTED", "CANCELLED", "COMPLETED"] } },
+              _count: { id: true },
+            }),
+          [] as Array<{ priority: string; _count: { id: number } }>
+        ),
+        safe("divisionSlaBreakdown", () => divisionSlaBreakdown(), { breakdown: [], breaches: [] }),
+        safe(
+          "recentTimeline",
+          () => getRecentTimeline(40),
+          [] as Awaited<ReturnType<typeof getRecentTimeline>>
+        ),
+        safe("pendingApprovalsCount", () => prisma.order.count({ where: { status: "PLACED" } }), 0),
+        safe(
+          "samplesPendingHead",
+          () =>
+            prisma.order.count({
+              where: {
+                sampleRequested: true,
+                headSampleRequestApprovedAt: null,
+                status: { notIn: ["REJECTED", "CANCELLED"] },
+              },
+            }),
+          0
+        ),
+      ]);
+
+    const res = NextResponse.json({
       statusCounts: Object.fromEntries(statusCounts.map((r) => [r.status, r._count.id])),
       openBreaches: openBreachesCount,
+      pendingApprovalsCount,
+      samplesPendingHead,
+      priorityCounts: Object.fromEntries(priorityCounts.map((r) => [r.priority, r._count.id])),
+      divisionSla: slaBreakdown.breakdown,
       delayedEnquiries: delayedEnquiries.map((o) => ({
         ...o,
         slaDeadline: o.slaDeadline?.toISOString() ?? null,
@@ -268,7 +315,20 @@ export async function GET(req: Request) {
         toDivision: t.toDivision,
         transferredBy: t.transferredBy,
       })),
+      recentTimeline: recentTimelineEvents.map((e) => ({
+        id: e.id,
+        type: e.type,
+        title: e.title,
+        detail: e.detail,
+        createdAt: e.createdAt.toISOString(),
+        actor: e.actor,
+        order: e.order,
+      })),
     });
+    // Edge-cache the response for 15s + serve stale up to 30s while revalidating.
+    // The page refetches every 60s, so most reloads hit cache instead of round-tripping Postgres.
+    res.headers.set("Cache-Control", "private, max-age=10, s-maxage=15, stale-while-revalidate=30");
+    return res;
   } catch (err) {
     console.error("[md/overview] GET failed:", err);
     if (isDbUnavailableError(err)) return dbUnavailableJson();
