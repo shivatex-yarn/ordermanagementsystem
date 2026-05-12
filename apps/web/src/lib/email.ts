@@ -184,7 +184,7 @@ export async function sendSlaBreachDetailEmail(
         <tr>
           <td style="padding:32px 28px 28px;">
             <p style="margin:0 0 8px;font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:#ea580c;">SLA breach</p>
-            <h1 style="margin:0 0 12px;font-size:24px;font-weight:700;letter-spacing:-0.03em;color:#18181b;line-height:1.2;">48-hour deadline exceeded</h1>
+            <h1 style="margin:0 0 12px;font-size:24px;font-weight:700;letter-spacing:-0.03em;color:#18181b;line-height:1.2;">Response deadline exceeded</h1>
             <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#52525b;">Hi ${escapeHtml(toName)}, this enquiry missed its SLA. Breach recorded for <strong style="color:#18181b;">${escapeHtml(payload.breachDivisionName)}</strong> (owning division when detected).</p>
 
             <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:separate;border-spacing:0;border:1px solid #e4e4e7;border-radius:12px;overflow:hidden;margin:0 0 8px;">

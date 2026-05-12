@@ -119,49 +119,54 @@ export default function OrdersPage() {
           ) : !data?.orders?.length ? (
             <div className="py-8 text-center text-slate-500">No enquiries yet.</div>
           ) : (
-            <div className="space-y-4">
+            <div className="overflow-hidden rounded-xl border border-slate-100 bg-white">
               {data.orders.map(
-                (order: {
-                  id: number;
-                  orderNumber: string;
-                  status: string;
-                  currentDivision: { name: string };
-                  createdAt: string;
-                  createdBy?: { name: string; email: string };
-                }) => (
+                (
+                  order: {
+                    id: number;
+                    orderNumber: string;
+                    status: string;
+                    currentDivision: { name: string };
+                    createdAt: string;
+                    createdBy?: { name: string; email: string };
+                  },
+                  idx: number
+                ) => (
                   <Link
                     key={order.id}
                     href={`/orders/${order.id}`}
-                    className="flex flex-col gap-3 rounded-lg border border-slate-100 p-4 transition-colors hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
+                    className={[
+                      "block px-4 py-4 transition-colors hover:bg-slate-50",
+                      idx !== 0 ? "border-t border-slate-100" : "",
+                    ].join(" ")}
                   >
-                    <div>
-                      <p className="font-medium">{formatEnquiryNumber(order.orderNumber)}</p>
-                      <p className="text-sm text-slate-500">
-                        {order.createdBy?.name ? (
-                          <>
-                            <span className="text-slate-500">Raised by </span>
-                            <span className="inline-block rounded-md bg-indigo-50 px-2 py-0.5 font-semibold text-indigo-950 ring-1 ring-indigo-200/70">
-                              {order.createdBy.name}
-                            </span>
-                            <span className="text-slate-500">
-                              {" "}
-                              · {new Date(order.createdAt).toLocaleString()}
-                            </span>
-                          </>
-                        ) : (
-                          new Date(order.createdAt).toLocaleString()
-                        )}
-                        {!hideDivision ? (
-                          <>
-                            {" "}
-                            · {order.currentDivision?.name}
-                          </>
-                        ) : null}
-                      </p>
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-slate-900">
+                          {formatEnquiryNumber(order.orderNumber)}
+                        </p>
+                        <p className="mt-1 text-sm text-slate-500">
+                          {order.createdBy?.name ? (
+                            <>
+                              <span className="text-slate-500">Raised by </span>
+                              <span className="inline-flex items-center rounded-md bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-950 ring-1 ring-indigo-200/70">
+                                {order.createdBy.name}
+                              </span>
+                              <span className="text-slate-500">
+                                {" "}
+                                · {new Date(order.createdAt).toLocaleString()}
+                              </span>
+                            </>
+                          ) : (
+                            new Date(order.createdAt).toLocaleString()
+                          )}
+                          {!hideDivision ? <> · {order.currentDivision?.name}</> : null}
+                        </p>
+                      </div>
+                      <Badge className="shrink-0" variant={statusVariant[order.status] ?? "secondary"}>
+                        {order.status.replace("_", " ")}
+                      </Badge>
                     </div>
-                    <Badge variant={statusVariant[order.status] ?? "secondary"}>
-                      {order.status.replace("_", " ")}
-                    </Badge>
                   </Link>
                 )
               )}

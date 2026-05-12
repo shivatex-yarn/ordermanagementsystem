@@ -151,6 +151,14 @@ async function notificationHandler(event: OrderEvent): Promise<void> {
     select: { userId: true },
   });
   managers.forEach((m) => userIds.add(m.userId));
+
+  // Supervisors of the current division should be kept in the loop for handoffs and execution steps.
+  const supervisors = await prisma.user.findMany({
+    where: { role: "SUPERVISOR", active: true, divisionId: order.currentDivisionId },
+    select: { id: true },
+  });
+  supervisors.forEach((s) => userIds.add(s.id));
+
   const superAdmins = await prisma.user.findMany({
     where: { role: "SUPER_ADMIN" },
     select: { id: true },
@@ -192,7 +200,7 @@ export function eventTypeToSummary(type: string, event: OrderEvent): string {
     case "OrderCompleted":
       return `Enquiry ${event.orderNumber} has been completed.`;
     case "SLABreachDetected":
-      return `Enquiry ${event.orderNumber} has breached the 48-hour SLA.`;
+      return `Enquiry ${event.orderNumber} has passed its response deadline.`;
     case "SLABreachHeadRejectionSubmitted": {
       const e = event as Extract<OrderEvent, { type: "SLABreachHeadRejectionSubmitted" }>;
       return `Division Head submitted a delay/breach rejection for enquiry ${e.orderNumber}.`;
@@ -213,6 +221,18 @@ export function eventTypeToSummary(type: string, event: OrderEvent): string {
     }
     case "SalesFeedbackRecorded":
       return `Sales feedback was submitted for enquiry ${event.orderNumber}.`;
+    case "ProductClassified": {
+      const e = event as Extract<OrderEvent, { type: "ProductClassified" }>;
+      return e.kind === "NEW"
+        ? `Enquiry ${e.orderNumber} was classified as New Development.`
+        : `Enquiry ${e.orderNumber} was classified as Existing product.`;
+    }
+    case "NewDevelopmentPlanSubmitted":
+      return `New Development planning details were submitted for enquiry ${event.orderNumber}.`;
+    case "PlanningCompleted":
+      return `Planning was marked complete for enquiry ${event.orderNumber}.`;
+    case "SupervisorHandoffSubmitted":
+      return `Enquiry ${event.orderNumber} was handed off to Supervisor.`;
     default:
       return `Enquiry ${event.orderNumber}: ${type}.`;
   }

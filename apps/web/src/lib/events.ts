@@ -11,6 +11,10 @@ export type OrderEventType =
   | "OrderCompleted"
   | "OrderCancelled"
   | "OrderReceived"
+  | "ProductClassified"
+  | "NewDevelopmentPlanSubmitted"
+  | "PlanningCompleted"
+  | "SupervisorHandoffSubmitted"
   | "SLABreachDetected"
   | "SLABreachHeadRejectionSubmitted"
   | "SampleDetailsUpdated"
@@ -36,6 +40,7 @@ export interface OrderAcceptedEvent extends BaseOrderEvent {
   type: "OrderAccepted";
   acceptedById: number;
   divisionId: number;
+  reason: string;
 }
 
 export interface OrderTransferredEvent extends BaseOrderEvent {
@@ -116,6 +121,33 @@ export interface SalesFeedbackRecordedEvent extends BaseOrderEvent {
   submittedById: number;
 }
 
+export interface ProductClassifiedEvent extends BaseOrderEvent {
+  type: "ProductClassified";
+  divisionId: number;
+  kind: "EXISTING" | "NEW";
+  existingProductRef?: string;
+}
+
+export interface NewDevelopmentPlanSubmittedEvent extends BaseOrderEvent {
+  type: "NewDevelopmentPlanSubmitted";
+  divisionId: number;
+  planningStartedAt: string;
+}
+
+export interface PlanningCompletedEvent extends BaseOrderEvent {
+  type: "PlanningCompleted";
+  divisionId: number;
+  planningCompletedAt: string;
+  slaDeadline: string;
+}
+
+export interface SupervisorHandoffSubmittedEvent extends BaseOrderEvent {
+  type: "SupervisorHandoffSubmitted";
+  divisionId: number;
+  remarks: string;
+  kind: "EXISTING" | "NEW";
+}
+
 export type OrderEvent =
   | OrderCreatedEvent
   | OrderAcceptedEvent
@@ -124,6 +156,10 @@ export type OrderEvent =
   | OrderCompletedEvent
   | OrderCancelledEvent
   | OrderReceivedEvent
+  | ProductClassifiedEvent
+  | NewDevelopmentPlanSubmittedEvent
+  | PlanningCompletedEvent
+  | SupervisorHandoffSubmittedEvent
   | SLABreachEvent
   | SLABreachHeadRejectionSubmittedEvent
   | SampleDetailsUpdatedEvent

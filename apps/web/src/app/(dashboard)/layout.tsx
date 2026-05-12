@@ -36,7 +36,7 @@ const nav = [
   { href: "/sla", label: "SLA & Breaches", icon: AlertTriangle },
   { href: "/md", label: "Executive overview", icon: LineChart, mdOverviewOnly: true },
   { href: "/notifications", label: "Notifications", icon: Bell },
-  { href: "/multi-division-access", label: "Multi-division access", icon: Users, managerOnly: true },
+  { href: "/multi-division-access", label: "Multi-division access", icon: Users, salesOrManager: true },
   { href: "/admin", label: "Admin Panel", icon: KeyRound, superAdminOnly: true },
 ];
 
@@ -70,6 +70,16 @@ export default function DashboardLayout({
   /** Avoid hydration mismatch for notification copy/badge until client mount. */
   const showUnreadUi = mounted;
 
+  // Prevent hydration mismatch: `useAuth()` can resolve differently on server vs first client render.
+  // Always render the same initial markup until we've mounted.
+  if (!mounted) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <div className="animate-pulse text-slate-500">Loading...</div>
+      </div>
+    );
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
@@ -100,6 +110,18 @@ export default function DashboardLayout({
       return false;
     }
     if ("mdOverviewOnly" in item && item.mdOverviewOnly && user.role !== "SUPER_ADMIN" && user.role !== "MANAGING_DIRECTOR") {
+      return false;
+    }
+    /**
+     * Multi-division access spec: salespersons (USER/SUPERVISOR) submit the request;
+     * Division Heads (MANAGER) review their members. Super Admin approves. Everyone in
+     * those roles should see the menu item.
+     */
+    if (
+      "salesOrManager" in item &&
+      item.salesOrManager &&
+      !["USER", "SUPERVISOR", "MANAGER", "SUPER_ADMIN"].includes(user.role)
+    ) {
       return false;
     }
     if (item.href === "/sla" && !["SUPER_ADMIN", "MANAGING_DIRECTOR"].includes(user.role)) return false;
@@ -144,6 +166,8 @@ export default function DashboardLayout({
         <nav className="flex-1 space-y-0.5 overflow-y-auto p-3">
           {filteredNav.map((item) => {
             const Icon = item.icon;
+            const showCount =
+              item.href === "/notifications" && showUnreadUi && unreadCount > 0;
             return (
               <Link
                 key={item.href}
@@ -157,10 +181,19 @@ export default function DashboardLayout({
                 )}
               >
                 <Icon className="h-5 w-5 shrink-0" />
-                <span className="min-w-0">{item.label}</span>
+                <span className="min-w-0 flex-1">{item.label}</span>
+                {showCount ? (
+                  <span
+                    className="ml-auto shrink-0 inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-bold leading-none text-white"
+                    aria-label={`${unreadCount} unread`}
+                  >
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                ) : null}
               </Link>
             );
           })}
+
         </nav>
       </aside>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-white">

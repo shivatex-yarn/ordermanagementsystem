@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/select";
 import { Package, AlertTriangle, CheckCircle, Download } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { SidebarRecentEnquiries } from "@/components/sidebar-recent-enquiries";
 import type { EnquiryPeriodFilter } from "@/lib/date-period";
 import { PERIOD_LABELS } from "@/lib/date-period";
 import { formatEnquiryNumber } from "@/lib/enquiry-display";
@@ -347,82 +348,88 @@ export default function DashboardPage() {
         dateTo={dateTo}
       />
 
-      <Card>
-        <CardHeader className="flex flex-row items-start justify-between gap-4">
-          <div>
-            <CardTitle>Enquiry pipeline</CardTitle>
-            <p className="text-sm text-slate-500 font-normal mt-1">{pipelineSubtitle}</p>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {!data.orders?.length ? (
-            <div className="py-8 text-center text-slate-500">No enquiries in this view.</div>
-          ) : (
-            <div className="space-y-4">
-              {data.orders.map(
-                (order: {
-                  id: number;
-                  orderNumber: string;
-                  status: string;
-                  createdAt: string;
-                  createdBy?: { name: string };
-                  currentDivision?: { name: string };
-                }) => (
-                  <Link
-                    key={order.id}
-                    href={`/orders/${order.id}`}
-                    className="flex flex-col gap-3 rounded-lg border border-slate-100 p-4 transition-colors hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
-                  >
-                    <div>
-                      <p className="font-medium">{formatEnquiryNumber(order.orderNumber)}</p>
-                      <p className="text-sm text-slate-500">
-                        {order.createdBy?.name ? (
-                          <>
-                            <span className="text-slate-500">Raised by </span>
-                            <span className="inline-block rounded-md bg-indigo-50 px-2 py-0.5 font-semibold text-indigo-950 ring-1 ring-indigo-200/70">
-                              {order.createdBy.name}
-                            </span>
-                            <span className="text-slate-500">
-                              {" "}
-                              · {new Date(order.createdAt).toLocaleString()}
-                            </span>
-                          </>
-                        ) : (
-                          new Date(order.createdAt).toLocaleString()
-                        )}
-                        {!hideDivision && order.currentDivision?.name ? (
-                          <> · {order.currentDivision.name}</>
-                        ) : null}
-                      </p>
-                    </div>
-                    <Badge variant={statusVariant[order.status] ?? "secondary"}>
-                      {order.status.replace("_", " ")}
-                    </Badge>
-                  </Link>
-                )
-              )}
-              {data.total > data.limit && (
-                <div className="flex justify-center gap-2 pt-2">
-                  <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-                    Previous
-                  </Button>
-                  <span className="text-sm text-slate-600 self-center px-2">
-                    Page {page} of {Math.max(1, Math.ceil(data.total / data.limit))}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={page * data.limit >= data.total}
-                    onClick={() => setPage((p) => p + 1)}
-                  >
-                    Next
-                  </Button>
-                </div>
-              )}
+      <div className="grid gap-6 lg:grid-cols-3 lg:items-start">
+        <Card className="lg:col-span-2">
+          <CardHeader className="flex flex-row items-start justify-between gap-4">
+            <div>
+              <CardTitle>Enquiry pipeline</CardTitle>
+              <p className="text-sm text-slate-500 font-normal mt-1">{pipelineSubtitle}</p>
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </CardHeader>
+          <CardContent>
+            {!data.orders?.length ? (
+              <div className="py-8 text-center text-slate-500">No enquiries in this view.</div>
+            ) : (
+              <div className="space-y-4">
+                {data.orders.map(
+                  (order: {
+                    id: number;
+                    orderNumber: string;
+                    status: string;
+                    createdAt: string;
+                    createdBy?: { name: string };
+                    currentDivision?: { name: string };
+                  }) => (
+                    <Link
+                      key={order.id}
+                      href={`/orders/${order.id}`}
+                      className="flex flex-col gap-3 rounded-lg border border-slate-100 p-4 transition-colors hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
+                    >
+                      <div>
+                        <p className="font-medium">{formatEnquiryNumber(order.orderNumber)}</p>
+                        <p className="text-sm text-slate-500">
+                          {order.createdBy?.name ? (
+                            <>
+                              <span className="text-slate-500">Raised by </span>
+                              <span className="inline-block rounded-md bg-indigo-50 px-2 py-0.5 font-semibold text-indigo-950 ring-1 ring-indigo-200/70">
+                                {order.createdBy.name}
+                              </span>
+                              <span className="text-slate-500">
+                                {" "}
+                                · {new Date(order.createdAt).toLocaleString()}
+                              </span>
+                            </>
+                          ) : (
+                            new Date(order.createdAt).toLocaleString()
+                          )}
+                          {!hideDivision && order.currentDivision?.name ? (
+                            <> · {order.currentDivision.name}</>
+                          ) : null}
+                        </p>
+                      </div>
+                      <Badge variant={statusVariant[order.status] ?? "secondary"}>
+                        {order.status.replace("_", " ")}
+                      </Badge>
+                    </Link>
+                  )
+                )}
+                {data.total > data.limit && (
+                  <div className="flex justify-center gap-2 pt-2">
+                    <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+                      Previous
+                    </Button>
+                    <span className="text-sm text-slate-600 self-center px-2">
+                      Page {page} of {Math.max(1, Math.ceil(data.total / data.limit))}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={page * data.limit >= data.total}
+                      onClick={() => setPage((p) => p + 1)}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <div className="lg:sticky lg:top-20">
+          <SidebarRecentEnquiries />
+        </div>
+      </div>
     </div>
   );
 }

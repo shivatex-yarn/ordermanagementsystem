@@ -37,6 +37,19 @@ export const divisionUpdateSchema = z.object({
   active: z.boolean().optional(),
 });
 
+/**
+ * GST certificate stored inline as JSON. Reasonable size limits enforced
+ * server-side to keep request bodies + DB rows manageable.
+ */
+const gstCertificateSchema = z
+  .object({
+    filename: z.string().min(1).max(255),
+    mimeType: z.string().min(1).max(120),
+    base64: z.string().min(1).max(7_000_000), // ~5 MB base64 ≈ 3.5 MB binary
+    size: z.number().int().nonnegative().max(5_000_000),
+  })
+  .strict();
+
 export const createOrderSchema = z.object({
   companyName: z.string().min(1, "Company name is required").max(500),
   description: z.string().min(1, "Product description is required").max(10000),
@@ -44,6 +57,42 @@ export const createOrderSchema = z.object({
   customFields: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
   sampleRequested: z.boolean().optional(),
   sampleRequestNotes: z.string().max(10000).optional(),
+
+  // ─── Mandatory customer information (Phase 2 spec) ────────────────────────────
+  customerId:       z.string().min(1, "Customer ID is required").max(120),
+  customerName:     z.string().min(1, "Customer name is required").max(255),
+  customerPhone:    z
+    .string()
+    .min(7, "Phone number looks too short")
+    .max(40)
+    .regex(/^[+\-\d\s()]+$/, "Phone may only contain digits, spaces, +, -, ()"),
+  customerGstNumber: z
+    .string()
+    .min(15, "GST number must be 15 characters")
+    .max(15, "GST number must be 15 characters")
+    // Accept any 15-char alphanumeric GST number to avoid blocking enquiry creation
+    // for customers whose GSTIN isn't in the canonical format (or for test data).
+    .regex(/^[0-9A-Z]{15}$/, "GST number must be 15 characters (letters and digits only)"),
+  customerGstCertificate: gstCertificateSchema,
+  customerOrderDate: z.coerce.date({ errorMap: () => ({ message: "Customer order date is required" }) }),
+});
+
+/** Division Head submits this when classifying as Existing Product. */
+export const classifyExistingProductSchema = z.object({
+  existingProductRef:    z.string().min(5, "Provide the existing product reference (min 5 chars)").max(2000),
+  existingSampleInfo:    z.string().max(5000).optional().default(""),
+  existingInternalRemarks: z.string().max(5000).optional().default(""),
+});
+
+/** Division Head opens this popup automatically when classifying as New Development. */
+export const newDevelopmentPlanSchema = z.object({
+  newDevDescription:        z.string().min(20, "Describe the new development (min 20 chars)").max(20000),
+  newDevResources:          z.string().min(10, "List resource / material needs (min 10 chars)").max(20000),
+  newDevRandD:              z.string().min(10, "List R&D requirements (min 10 chars)").max(20000),
+  newDevTimeline:           z.string().min(1, "Estimated development timeline is required").max(255),
+  newDevNotes:              z.string().max(20000).optional().default(""),
+  newDevCompletionDuration: z.string().min(1, "Expected completion duration is required").max(120),
+  newDevWhyNeeded:          z.string().min(20, "Explain why this is needed (min 20 chars)").max(20000),
 });
 
 const setSampleDetailsBody = z
@@ -160,6 +209,32 @@ export const rejectOrderSchema = z.object({
   orderId: z.number().int().positive(),
   reason: z.string().min(10, "Rejection reason must be at least 10 characters"),
 });
+
+export const supervisorHandoffSchema = z.object({
+  orderId: z.number().int().positive(),
+  remarks: z.string().min(10, "Remarks must be at least 10 characters").max(20000),
+});
+
+/** Supervisor: save sample details and record dispatch (courier optional). */
+export const supervisorSampleDispatchSchema = z
+  .object({
+    sampleDetails: z.string().min(10, "Sample details must be at least 10 characters").max(20000),
+    sampleQuantity: z.string().max(500).optional().default(""),
+    sampleWeight: z.string().max(500).optional().default(""),
+    sentByCourier: z.boolean(),
+    courierName: z.string().max(255).optional().default(""),
+    trackingId: z.string().max(500).optional().default(""),
+  })
+  .superRefine((d, ctx) => {
+    if (d.sentByCourier) {
+      if (!d.courierName.trim()) {
+        ctx.addIssue({ code: "custom", message: "Courier name is required when sending by courier", path: ["courierName"] });
+      }
+      if (!d.trackingId.trim()) {
+        ctx.addIssue({ code: "custom", message: "Tracking / AWB is required when sending by courier", path: ["trackingId"] });
+      }
+    }
+  });
 
 export const receiveOrderSchema = z.object({
   orderId: z.number().int().positive(),

@@ -8,9 +8,13 @@ const createSchema = z.object({
   divisionIds: z.array(z.number().int().positive()).min(1).max(20),
 });
 
-/** Division Head (MANAGER): view own multi-division access requests */
+/**
+ * Salespersons (USER / SUPERVISOR) and Division Heads (MANAGER) can view their own
+ * multi-division access requests. Per spec, salespersons submit requests for divisions
+ * beyond their default assigned one; Super Admin approves.
+ */
 export async function GET() {
-  const auth = await withRole(["MANAGER"]);
+  const auth = await withRole(["USER", "SUPERVISOR", "MANAGER"]);
   if (auth.response) return auth.response;
   const userId = Number(auth.payload.sub);
   const requests = await prisma.multiDivisionAccessRequest.findMany({
@@ -24,9 +28,12 @@ export async function GET() {
   return NextResponse.json({ requests });
 }
 
-/** Division Head (MANAGER): submit multi-division access request */
+/**
+ * Salespersons (USER / SUPERVISOR) and Division Heads (MANAGER) submit multi-division
+ * access requests. The request is sent to the Super Admin for approval.
+ */
 export async function POST(req: Request) {
-  const auth = await withRole(["MANAGER"]);
+  const auth = await withRole(["USER", "SUPERVISOR", "MANAGER"]);
   if (auth.response) return auth.response;
   const body = await req.json();
   const parsed = createSchema.safeParse(body);

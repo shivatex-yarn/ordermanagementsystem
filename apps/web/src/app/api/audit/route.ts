@@ -67,7 +67,7 @@ export async function GET(req: Request) {
       skip: (page - 1) * limit,
       take: limit,
       include: {
-        user: { select: { id: true, name: true, email: true } },
+        user: { select: { id: true, name: true, email: true, role: true } },
         order: { select: { id: true, orderNumber: true } },
       },
     }),
@@ -81,7 +81,7 @@ export async function GET(req: Request) {
     createdAt: l.createdAt.toISOString(),
     payload: l.payload,
     payloadPreview: payloadSnippet(l.payload),
-    user: l.user ? { name: l.user.name, email: l.user.email } : null,
+    user: l.user ? { name: l.user.name, email: l.user.email, role: l.user.role } : null,
     orderNumber: l.order.orderNumber,
   }));
 

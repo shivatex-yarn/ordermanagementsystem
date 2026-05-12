@@ -8,6 +8,9 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  // Direct (non-pooler) URL for migrations + introspection.
+  // Required by Neon — `prisma migrate deploy` needs a non-pgbouncer connection.
+  directUrl = env("DIRECT_DATABASE_URL")
 }
 
 enum Role {
@@ -25,6 +28,11 @@ enum OrderStatus {
   REJECTED
   COMPLETED
   CANCELLED
+}
+
+enum ProductKind {
+  EXISTING
+  NEW
 }
 
 model User {
@@ -148,6 +156,52 @@ model Order {
   sampleProofUrl      String?   @map("sample_proof_url")
   salesFeedback       String?   @map("sales_feedback") @db.Text
   salesFeedbackAt     DateTime? @map("sales_feedback_at")
+
+  // ─── Customer information (Phase 2 spec — mandatory at enquiry creation) ────────
+  customerId          String?   @map("customer_id")
+  customerName        String?   @map("customer_name")
+  customerPhone       String?   @map("customer_phone")
+  customerGstNumber   String?   @map("customer_gst_number")
+  /// GST certificate stored inline as JSON: { filename, mimeType, base64, size, uploadedAt }.
+  /// Per user request — kept inside the DB, no external object storage required.
+  customerGstCert     Json?     @map("customer_gst_cert")
+  customerOrderDate   DateTime? @map("customer_order_date")
+
+  // ─── New Development planning (mandatory popup fields submitted by Division Head) ──
+  newDevDescription        String?   @map("new_dev_description") @db.Text
+  newDevResources          String?   @map("new_dev_resources") @db.Text
+  newDevRandD              String?   @map("new_dev_rand_d") @db.Text
+  newDevTimeline           String?   @map("new_dev_timeline")
+  newDevNotes              String?   @map("new_dev_notes") @db.Text
+  newDevCompletionDuration String?   @map("new_dev_completion_duration")
+  newDevWhyNeeded          String?   @map("new_dev_why_needed") @db.Text
+  /// Set when Division Head opens the New Development workflow. SLA paused between
+  /// this moment and `planningCompletedAt`. The duration is the "planning duration"
+  /// visible only to MD + Super Admin.
+  planningStartedAt   DateTime? @map("planning_started_at")
+  /// Set when Division Head clicks "Mark planning complete". From this moment the
+  /// 48-hour SLA clock starts; `slaDeadline` is recomputed accordingly.
+  planningCompletedAt DateTime? @map("planning_completed_at")
+
+  // ─── Sample dispatch details (Supervisor/ASM submission) ────────────────────────
+  sampleType                 String?   @map("sample_type")
+  sampleDispatchMethod       String?   @map("sample_dispatch_method")
+  sampleDispatchDate         DateTime? @map("sample_dispatch_date")
+  sampleExpectedDeliveryDate DateTime? @map("sample_expected_delivery_date")
+  sampleInternalRemarks      String?   @map("sample_internal_remarks") @db.Text
+
+  // ─── Final customer response captured by Salesperson ────────────────────────────
+  sampleReceivedAt          DateTime? @map("sample_received_at")
+  customerFeedback          String?   @map("customer_feedback") @db.Text
+  customerFeedbackAt        DateTime? @map("customer_feedback_at")
+  customerResponseStatus    String?   @map("customer_response_status")
+  customerAdditionalRemarks String?   @map("customer_additional_remarks") @db.Text
+
+  // ─── Product classification ─────────────────────────────────────────────────────
+  productKind         ProductKind?   @map("product_kind")
+  existingProductRef  String?   @map("existing_product_ref") @db.Text
+  existingSampleInfo  String?   @map("existing_sample_info") @db.Text
+  existingInternalRemarks String? @map("existing_internal_remarks") @db.Text
 
   createdBy       User      @relation("OrderCreatedBy", fields: [createdById], references: [id])
   currentDivision Division  @relation("CurrentDivision", fields: [currentDivisionId], references: [id])

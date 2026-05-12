@@ -105,6 +105,15 @@ export async function createOrder(
     customFields?: Record<string, unknown>;
     sampleRequested?: boolean;
     sampleRequestNotes?: string | null;
+    /** Phase 2 — mandatory customer info captured at enquiry creation. */
+    customer: {
+      id: string;
+      name: string;
+      phone: string;
+      gstNumber: string;
+      gstCertificate: { filename: string; mimeType: string; base64: string; size: number };
+      orderDate: Date;
+    };
   }
 ) {
   const orderNumber = `Enq-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -123,6 +132,19 @@ export async function createOrder(
       createdById,
       currentDivisionId: divisionId,
       slaDeadline,
+      // Customer info (Phase 2 spec — all required at creation time)
+      customerId:        data.customer.id.trim(),
+      customerName:      data.customer.name.trim(),
+      customerPhone:     data.customer.phone.trim(),
+      customerGstNumber: data.customer.gstNumber.trim().toUpperCase(),
+      customerGstCert:   {
+        filename: data.customer.gstCertificate.filename,
+        mimeType: data.customer.gstCertificate.mimeType,
+        base64:   data.customer.gstCertificate.base64,
+        size:     data.customer.gstCertificate.size,
+        uploadedAt: new Date().toISOString(),
+      } as object,
+      customerOrderDate: data.customer.orderDate,
     },
     include: {
       createdBy: { select: { id: true, name: true, email: true } },
@@ -217,7 +239,7 @@ export async function updateOrderWithEditHistory(
 }
 
 export async function acceptOrder(orderId: number, acceptedById: number, _reason: string) {
-  void _reason;
+  const reason = _reason.trim();
   const order = await prisma.order.findUnique({ where: { id: orderId } });
   if (!order) return null;
   if (await blockedByUnansweredBreach(orderId)) return null;
@@ -241,6 +263,7 @@ export async function acceptOrder(orderId: number, acceptedById: number, _reason
     orderNumber: updated.orderNumber,
     acceptedById: updated.acceptedById!,
     divisionId: updated.currentDivisionId,
+    reason,
     timestamp: new Date().toISOString(),
     userId: acceptedById,
   });
@@ -579,6 +602,94 @@ export async function approveOrderSample(orderId: number, userId: number) {
     timestamp: new Date().toISOString(),
     userId,
   });
+  return updated;
+}
+
+/**
+ * Supervisor (division): in one step save sample details, approve sample if not yet approved,
+ * and record dispatch. Head and salesperson read from the same Order fields.
+ */
+export async function submitSupervisorSampleDispatch(
+  orderId: number,
+  userId: number,
+  input: {
+    sampleDetails: string;
+    sampleQuantity?: string;
+    sampleWeight?: string;
+    sentByCourier: boolean;
+    courierName?: string | null;
+    trackingId?: string | null;
+  }
+) {
+  const order = await prisma.order.findUnique({ where: { id: orderId } });
+  if (!order?.sampleRequested) return null;
+  if (order.sampleShippedAt) return null;
+  if (order.status === "REJECTED" || order.status === "COMPLETED" || order.status === "CANCELLED") return null;
+  if (order.status !== "IN_PROGRESS") return null;
+
+  const sentByCourier = input.sentByCourier !== false;
+  const courierName = input.courierName?.trim() || null;
+  const trackingId = input.trackingId?.trim() || null;
+  if (sentByCourier && (!courierName || !trackingId)) return null;
+
+  const sampleDetails = input.sampleDetails.trim();
+  const sampleQuantity = input.sampleQuantity?.trim() || null;
+  const sampleWeight = input.sampleWeight?.trim() || null;
+
+  const wasApproved = Boolean(order.sampleApprovedAt);
+  const now = new Date();
+
+  const updated = await prisma.order.update({
+    where: { id: orderId },
+    data: {
+      sampleDetails,
+      sampleQuantity,
+      sampleWeight,
+      ...(!wasApproved ? { sampleApprovedAt: now, sampleApprovedById: userId } : {}),
+      sampleShippedAt: now,
+      sampleShippedByCourier: sentByCourier,
+      courierName: sentByCourier ? courierName : null,
+      trackingId: sentByCourier ? trackingId : null,
+    },
+    include: {
+      createdBy: { select: { id: true, name: true, email: true } },
+      currentDivision: { select: { id: true, name: true } },
+      sampleApprovedBy: { select: { id: true, name: true, email: true } },
+    },
+  });
+
+  await publish({
+    type: "SampleDetailsUpdated",
+    orderId: updated.id,
+    orderNumber: updated.orderNumber,
+    divisionId: updated.currentDivisionId,
+    timestamp: now.toISOString(),
+    userId,
+  });
+
+  if (!wasApproved) {
+    await publish({
+      type: "SampleApproved",
+      orderId: updated.id,
+      orderNumber: updated.orderNumber,
+      divisionId: updated.currentDivisionId,
+      approvedById: userId,
+      timestamp: now.toISOString(),
+      userId,
+    });
+  }
+
+  await publish({
+    type: "SampleShipped",
+    orderId: updated.id,
+    orderNumber: updated.orderNumber,
+    divisionId: updated.currentDivisionId,
+    courierName: updated.courierName ?? "",
+    trackingId: updated.trackingId ?? "",
+    timestamp: now.toISOString(),
+    userId,
+  });
+
   return updated;
 }
 

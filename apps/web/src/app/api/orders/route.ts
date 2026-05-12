@@ -62,21 +62,45 @@ export async function GET(req: Request) {
     }
   }
   if (auth.payload.role === "USER") where.createdById = Number(auth.payload.sub);
-  if (auth.payload.role === "MANAGER" || auth.payload.role === "SUPERVISOR") {
+  if (["MANAGER", "SUPERVISOR", "DIVISION_HEAD", "ASM"].includes(auth.payload.role)) {
     const userId = Number(auth.payload.sub);
-    const managed = await prisma.divisionManager.findMany({
-      where: { userId },
-      select: { divisionId: true },
-    });
-    const accessibleDivisionIds = Array.from(
-      new Set([auth.payload.divisionId ?? null, ...managed.map((m) => m.divisionId)].filter((v): v is number => typeof v === "number"))
-    );
-    if (accessibleDivisionIds.length > 0) {
-      // Only list enquiries for divisions the manager/supervisor is mapped to.
-      where.currentDivisionId = { in: accessibleDivisionIds };
-    } else {
-      // No division mapping → no enquiries.
-      where.currentDivisionId = -1;
+    try {
+      const [managed, dbUser] = await Promise.all([
+        prisma.divisionManager.findMany({ where: { userId }, select: { divisionId: true } }),
+        // Fall back to user's primary divisionId — covers division heads / supervisors / ASMs
+        // who were assigned a division but never explicitly added to division_managers.
+        prisma.user.findUnique({ where: { id: userId }, select: { divisionId: true } }),
+      ]);
+      const accessibleDivisionIds = Array.from(
+        new Set(
+          [
+            auth.payload.divisionId ?? null,
+            dbUser?.divisionId ?? null,
+            ...managed.map((m) => m.divisionId),
+          ].filter((v): v is number => typeof v === "number")
+        )
+      );
+      if (accessibleDivisionIds.length > 0) {
+        where.currentDivisionId = { in: accessibleDivisionIds };
+      } else {
+        where.currentDivisionId = -1;
+      }
+    } catch (err) {
+      // P1001: DB temporarily unreachable (Neon can briefly pause / network hiccups).
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P1001") {
+        return NextResponse.json(
+          { error: "Database temporarily unavailable. Please try again in a few seconds.", code: "DB_UNAVAILABLE" },
+          { status: 503 }
+        );
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      if (/Can't reach database server/i.test(msg)) {
+        return NextResponse.json(
+          { error: "Database temporarily unavailable. Please try again in a few seconds.", code: "DB_UNAVAILABLE" },
+          { status: 503 }
+        );
+      }
+      throw err;
     }
   }
   // SUPER_ADMIN and MANAGING_DIRECTOR see all (no extra filter)
@@ -182,6 +206,14 @@ export async function POST(req: Request) {
     customFields: parsed.data.customFields,
     sampleRequested: parsed.data.sampleRequested,
     sampleRequestNotes: parsed.data.sampleRequestNotes,
+    customer: {
+      id:         parsed.data.customerId,
+      name:       parsed.data.customerName,
+      phone:      parsed.data.customerPhone,
+      gstNumber:  parsed.data.customerGstNumber,
+      gstCertificate: parsed.data.customerGstCertificate,
+      orderDate:  parsed.data.customerOrderDate,
+    },
   });
   return NextResponse.json(order, { status: 201 });
 }

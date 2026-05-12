@@ -41,7 +41,13 @@ export default function MultiDivisionAccessPage() {
   const [reason, setReason] = useState("");
   const [submitError, setSubmitError] = useState("");
 
-  const isManager = user?.role === "MANAGER";
+  /**
+   * Per spec: Salespersons (USER/SUPERVISOR) submit multi-division access requests
+   * for divisions beyond their default assignment. Division Heads (MANAGER) can also
+   * submit. Super Admin approves.
+   */
+  const canRequestAccess = user ? ["USER", "SUPERVISOR", "MANAGER"].includes(user.role) : false;
+  const isManager = canRequestAccess;
 
   const { data: divisionsData, isLoading: divisionsLoading } = useQuery({
     queryKey: ["divisions", "all-active"],
@@ -106,14 +112,15 @@ export default function MultiDivisionAccessPage() {
     return null;
   }
 
-  if (!isManager) {
+  if (!canRequestAccess) {
     return (
       <Card>
         <CardHeader>
           <CardTitle>Multi-division access</CardTitle>
         </CardHeader>
         <CardContent className="text-sm text-slate-600">
-          This page is only available to Division Heads (Managers).
+          This page is only available to salespersons and Division Heads who need access to
+          divisions beyond their default assignment.
         </CardContent>
       </Card>
     );

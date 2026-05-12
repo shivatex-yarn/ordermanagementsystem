@@ -7,20 +7,21 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/use-auth";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useState, useMemo, useEffect } from "react";
 import { formatEnquiryNumber, formatEnquiryNumberShort } from "@/lib/enquiry-display";
+import { NewDevelopmentModal } from "@/components/new-development-modal";
+import { ArrowRightLeft, Check, CircleDot, Download, Eye, FileText, X } from "lucide-react";
 
 const statusVariant: Record<string, "default" | "secondary" | "destructive" | "success" | "warning"> = {
   PLACED: "secondary",
@@ -52,7 +53,7 @@ type AuditLogRow = {
   action: string;
   createdAt: string;
   payload: unknown;
-  user: { name: string; email: string } | null;
+  user: { name: string; email: string; role?: string | null } | null;
 };
 
 /** Shape of an unresolved SLA breach row from GET /api/orders/[id] (matches Prisma include). */
@@ -82,6 +83,25 @@ type OrderDetail = {
   slaDeadline: string | null;
   sampleRequested: boolean;
   sampleRequestNotes: string | null;
+  customerId?: string | null;
+  customerName?: string | null;
+  customerPhone?: string | null;
+  customerGstNumber?: string | null;
+  customerGstCert?: unknown;
+  customerOrderDate?: string | null;
+  productKind?: string | null;
+  existingProductRef?: string | null;
+  existingSampleInfo?: string | null;
+  existingInternalRemarks?: string | null;
+  planningStartedAt?: string | null;
+  planningCompletedAt?: string | null;
+  newDevDescription?: string | null;
+  newDevResources?: string | null;
+  newDevRandD?: string | null;
+  newDevTimeline?: string | null;
+  newDevNotes?: string | null;
+  newDevCompletionDuration?: string | null;
+  newDevWhyNeeded?: string | null;
   sampleDetails: string | null;
   sampleQuantity: string | null;
   sampleWeight: string | null;
@@ -158,16 +178,29 @@ async function fetchOrder(id: number): Promise<OrderDetail> {
   return raw as OrderDetail;
 }
 
-function auditPayloadSummary(action: string, payload: unknown): string {
+type AuditUiOpts = { hideSlaTimingCopy?: boolean };
+
+function auditPayloadSummary(action: string, payload: unknown, opts?: AuditUiOpts): string {
   if (!payload || typeof payload !== "object") return "";
   const p = payload as Record<string, unknown>;
   switch (action) {
+    case "OrderAccepted":
+      return p.reason ? `Remarks: ${String(p.reason)}` : "";
     case "OrderTransferred":
       return p.reason ? `Reason: ${String(p.reason)}` : "";
     case "OrderRejected":
       return p.reason ? `Reason: ${String(p.reason)}` : "";
     case "OrderCancelled":
       return p.reason ? `Reason: ${String(p.reason)}` : "";
+    case "ProductClassified":
+      return p.kind ? `Kind: ${String(p.kind)}` : "";
+    case "NewDevelopmentPlanSubmitted":
+      return "Planning popup submitted";
+    case "PlanningCompleted":
+      if (opts?.hideSlaTimingCopy) return "";
+      return p.slaDeadline ? `SLA starts: ${new Date(String(p.slaDeadline)).toLocaleString()}` : "";
+    case "SupervisorHandoffSubmitted":
+      return p.remarks ? `Remarks: ${String(p.remarks)}` : "";
     case "OrderCompleted":
       return p.durationMs != null ? `Elapsed: ${Math.round(Number(p.durationMs) / 1000)}s` : "";
     case "SLABreachHeadRejectionSubmitted":
@@ -177,7 +210,25 @@ function auditPayloadSummary(action: string, payload: unknown): string {
   }
 }
 
-function auditActionLabel(action: string): string {
+function auditActionLabel(action: string, opts?: AuditUiOpts): string {
+  function prettify(raw: string): string {
+    // Handle SCREAMING_SNAKE_CASE → "Screaming snake case"
+    const withSpaces = raw
+      .replace(/_/g, " ")
+      .replace(/([a-z])([A-Z])/g, "$1 $2")
+      .trim();
+    if (!withSpaces) return raw;
+    // Title-case words but keep common acronyms.
+    return withSpaces
+      .split(/\s+/)
+      .map((w) => {
+        const upper = w.toUpperCase();
+        if (["SLA", "GST", "R&D", "RND", "MD", "ASM"].includes(upper)) return upper === "RND" ? "R&D" : upper;
+        return w.slice(0, 1).toUpperCase() + w.slice(1).toLowerCase();
+      })
+      .join(" ");
+  }
+
   const m: Record<string, string> = {
     OrderCreated: "Enquiry placed",
     OrderAccepted: "Accepted by division",
@@ -185,6 +236,10 @@ function auditActionLabel(action: string): string {
     OrderRejected: "Rejected",
     OrderCancelled: "Cancelled by submitter",
     OrderReceived: "Received in new division",
+    ProductClassified: "Product classified",
+    NewDevelopmentPlanSubmitted: "New development plan submitted",
+    PlanningCompleted: "Planning completed (SLA started)",
+    SupervisorHandoffSubmitted: "Submitted to supervisor",
     OrderCompleted: "Completed",
     SampleDetailsUpdated: "Sample details updated",
     SampleDevelopmentUpdated: "Sample type / development details",
@@ -193,212 +248,34 @@ function auditActionLabel(action: string): string {
     SalesFeedbackRecorded: "Sales / user response",
     SLABreachDetected: "SLA breach",
     SLABreachHeadRejectionSubmitted: "SLA head rejection submitted",
+
+    // Legacy / older action codes that may exist in existing audit logs.
+    ORDERENQUIRYHANDOFFSUBMITTED: "Submitted to supervisor",
+    SAMPLEHEADREQUESTAPPROVED: "Sample request approved by Division Head",
   };
-  return m[action] ?? action;
+  if (opts?.hideSlaTimingCopy) {
+    m.PlanningCompleted = "Planning completed";
+    m.SLABreachDetected = "Response deadline passed";
+    m.SLABreachHeadRejectionSubmitted = "Division head response recorded";
+  }
+  return m[action] ?? prettify(action);
 }
 
-/** Card + label styling per event type for the detailed timeline. */
-function auditTimelineStyles(action: string): {
-  card: string;
-  label: string;
-  time: string;
-  user: string;
-  extra: string;
-} {
-  const base =
-    "relative overflow-hidden rounded-2xl border p-4 text-sm shadow-sm transition-[box-shadow,transform] duration-200 hover:shadow-md";
-  switch (action) {
-    case "OrderCreated":
-      return {
-        card: `${base} border-slate-200/90 bg-gradient-to-br from-slate-50 via-white to-violet-50/30 ring-1 ring-slate-500/5`,
-        label:
-          "inline-flex items-center rounded-full bg-slate-800 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-white shadow-sm",
-        time: "font-mono text-xs font-medium text-slate-600 tabular-nums",
-        user: "mt-2 text-slate-700",
-        extra: "mt-2 border-t border-slate-100/80 pt-2 text-slate-600",
-      };
-    case "OrderAccepted":
-      return {
-        card: `${base} border-emerald-200/80 bg-gradient-to-br from-emerald-50/90 via-white to-teal-50/50 ring-1 ring-emerald-500/10`,
-        label:
-          "inline-flex items-center rounded-full bg-emerald-600 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-white shadow-sm shadow-emerald-600/25",
-        time: "font-mono text-xs font-medium text-emerald-900/70 tabular-nums",
-        user: "mt-2 text-emerald-950/80",
-        extra: "mt-2 border-t border-emerald-100/80 pt-2 text-emerald-900/75",
-      };
-    case "OrderTransferred":
-      return {
-        card: `${base} border-amber-200/80 bg-gradient-to-br from-amber-50/90 via-white to-orange-50/40 ring-1 ring-amber-400/15`,
-        label:
-          "inline-flex items-center rounded-full bg-amber-500 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-white shadow-sm shadow-amber-500/30",
-        time: "font-mono text-xs font-medium text-amber-900/70 tabular-nums",
-        user: "mt-2 text-amber-950/80",
-        extra: "mt-2 border-t border-amber-100/80 pt-2 text-amber-950/75",
-      };
-    case "OrderRejected":
-      return {
-        card: `${base} border-rose-200/80 bg-gradient-to-br from-rose-50/90 via-white to-red-50/40 ring-1 ring-rose-500/15`,
-        label:
-          "inline-flex items-center rounded-full bg-rose-600 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-white shadow-sm shadow-rose-600/25",
-        time: "font-mono text-xs font-medium text-rose-900/70 tabular-nums",
-        user: "mt-2 text-rose-950/85",
-        extra: "mt-2 border-t border-rose-100/80 pt-2 text-rose-900/80",
-      };
-    case "OrderCancelled":
-      return {
-        card: `${base} border-stone-200/80 bg-gradient-to-br from-stone-50/90 via-white to-neutral-50/30 ring-1 ring-stone-400/12`,
-        label:
-          "inline-flex items-center rounded-full bg-stone-700 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-white shadow-sm shadow-stone-900/15",
-        time: "font-mono text-xs font-medium text-stone-700 tabular-nums",
-        user: "mt-2 text-stone-800",
-        extra: "mt-2 border-t border-stone-100/80 pt-2 text-stone-800",
-      };
-    case "OrderReceived":
-      return {
-        card: `${base} border-sky-200/80 bg-gradient-to-br from-sky-50/90 via-white to-blue-50/40 ring-1 ring-sky-400/15`,
-        label:
-          "inline-flex items-center rounded-full bg-sky-600 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-white shadow-sm shadow-sky-600/20",
-        time: "font-mono text-xs font-medium text-sky-900/70 tabular-nums",
-        user: "mt-2 text-sky-950/80",
-        extra: "mt-2 border-t border-sky-100/80 pt-2 text-sky-900/75",
-      };
-    case "OrderCompleted":
-      return {
-        card: `${base} border-green-200/80 bg-gradient-to-br from-green-50/90 via-white to-emerald-50/30 ring-1 ring-green-500/12`,
-        label:
-          "inline-flex items-center rounded-full bg-green-600 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-white shadow-sm shadow-green-600/25",
-        time: "font-mono text-xs font-medium text-green-900/70 tabular-nums",
-        user: "mt-2 text-green-950/80",
-        extra: "mt-2 border-t border-green-100/80 pt-2 text-green-900/75",
-      };
-    case "SampleDetailsUpdated":
-      return {
-        card: `${base} border-violet-200/80 bg-gradient-to-br from-violet-50/80 via-white to-fuchsia-50/30 ring-1 ring-violet-400/12`,
-        label:
-          "inline-flex items-center rounded-full bg-violet-600 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-white shadow-sm shadow-violet-600/20",
-        time: "font-mono text-xs font-medium text-violet-900/70 tabular-nums",
-        user: "mt-2 text-violet-950/80",
-        extra: "mt-2 border-t border-violet-100/80 pt-2 text-violet-900/75",
-      };
-    case "SampleApproved":
-      return {
-        card: `${base} border-cyan-200/80 bg-gradient-to-br from-cyan-50/90 via-white to-teal-50/35 ring-1 ring-cyan-400/15`,
-        label:
-          "inline-flex items-center rounded-full bg-cyan-600 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-white shadow-sm shadow-cyan-600/20",
-        time: "font-mono text-xs font-medium text-cyan-900/70 tabular-nums",
-        user: "mt-2 text-cyan-950/80",
-        extra: "mt-2 border-t border-cyan-100/80 pt-2 text-cyan-900/75",
-      };
-    case "SampleShipped":
-      return {
-        card: `${base} border-indigo-200/80 bg-gradient-to-br from-indigo-50/85 via-white to-blue-50/35 ring-1 ring-indigo-400/12`,
-        label:
-          "inline-flex items-center rounded-full bg-indigo-600 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-white shadow-sm shadow-indigo-600/20",
-        time: "font-mono text-xs font-medium text-indigo-900/70 tabular-nums",
-        user: "mt-2 text-indigo-950/80",
-        extra: "mt-2 border-t border-indigo-100/80 pt-2 text-indigo-900/75",
-      };
-    case "SalesFeedbackRecorded":
-      return {
-        card: `${base} border-fuchsia-200/75 bg-gradient-to-br from-fuchsia-50/85 via-white to-pink-50/30 ring-1 ring-fuchsia-400/12`,
-        label:
-          "inline-flex items-center rounded-full bg-fuchsia-600 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-white shadow-sm shadow-fuchsia-600/20",
-        time: "font-mono text-xs font-medium text-fuchsia-900/70 tabular-nums",
-        user: "mt-2 text-fuchsia-950/80",
-        extra: "mt-2 border-t border-fuchsia-100/80 pt-2 text-fuchsia-900/75",
-      };
-    case "SLABreachDetected":
-      return {
-        card: `${base} border-orange-300/80 bg-gradient-to-br from-orange-50/95 via-white to-amber-50/40 ring-1 ring-orange-500/20`,
-        label:
-          "inline-flex items-center rounded-full bg-orange-600 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-white shadow-sm shadow-orange-500/25",
-        time: "font-mono text-xs font-medium text-orange-900/75 tabular-nums",
-        user: "mt-2 text-orange-950/85",
-        extra: "mt-2 border-t border-orange-100/90 pt-2 text-orange-950/80",
-      };
-    default:
-      return {
-        card: `${base} border-slate-200/80 bg-gradient-to-br from-slate-50/80 via-white to-slate-100/30 ring-1 ring-slate-400/10`,
-        label:
-          "inline-flex items-center rounded-full bg-slate-600 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-white shadow-sm",
-        time: "font-mono text-xs font-medium text-slate-600 tabular-nums",
-        user: "mt-2 text-slate-700",
-        extra: "mt-2 border-t border-slate-100 pt-2 text-slate-600",
-      };
+function formatCustomFieldValue(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
   }
 }
 
-function EnquiryPipelineStrip({
-  order,
-}: {
-  order: {
-    status: string;
-    acceptedBy?: { name: string } | null;
-    transferCount: number;
-    sampleRequested: boolean;
-    sampleApprovedAt: string | null | undefined;
-    sampleShippedAt: string | null | undefined;
-  };
-}) {
-  const steps: { label: string; done: boolean }[] = [
-    { label: "Placed", done: true },
-    {
-      label: "Accepted / in progress",
-      done:
-        Boolean(order.acceptedBy) ||
-        ["IN_PROGRESS", "COMPLETED", "REJECTED", "TRANSFERRED"].includes(order.status),
-    },
-  ];
-  if (order.transferCount > 0) {
-    steps.push({ label: `Transfer recorded (${order.transferCount})`, done: true });
-  }
-  if (order.sampleRequested) {
-    const done = Boolean(order.sampleShippedAt);
-    steps.push({
-      label: order.sampleShippedAt
-        ? "Sample sent"
-        : order.sampleApprovedAt
-          ? "Sample approved (awaiting ship)"
-          : "Sample workflow",
-      done,
-    });
-  }
-  steps.push({
-    label: "Completed",
-    done: order.status === "COMPLETED",
-  });
-  steps.push({
-    label: "Rejected",
-    done: order.status === "REJECTED",
-  });
-  if (order.status === "CANCELLED") {
-    steps.push({ label: "Cancelled by submitter", done: true });
-  }
-  return (
-    <div className="flex flex-wrap gap-2">
-      {steps.map((s) => {
-        const doneClass =
-          s.label === "Rejected" && s.done
-            ? "bg-rose-50 text-rose-900 border-rose-200"
-            : s.done
-              ? "bg-emerald-50 text-emerald-900 border-emerald-200"
-              : "bg-slate-50 text-slate-500 border-slate-100";
-        return (
-          <span key={s.label} className={`rounded-full px-3 py-1 text-xs font-medium border ${doneClass}`}>
-            {s.label}
-          </span>
-        );
-      })}
-    </div>
-  );
-}
+// (Detailed timeline styles removed; timeline now renders as a compact "Workflow timeline" list.)
 
-function sampleProofUrlKind(url: string): "image" | "pdf" | "other" {
-  const path = url.split("?")[0].toLowerCase();
-  if (/\.(png|jpe?g|gif|webp)$/i.test(path)) return "image";
-  if (/\.pdf$/i.test(path)) return "pdf";
-  return "other";
-}
+// Enquiry pipeline strip removed per UI requirement.
+
+// sample proof preview helpers removed (sample workflow UI removed).
 
 export default function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -407,7 +284,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const isAuditView = searchParams.get("from") === "audit";
   const showInteractiveUi = !isAuditView;
   const { user } = useAuth();
+  /** Division Head / Supervisor / ASM: do not surface SLA duration or “48-hour” style wording on this page. */
+  const hideSlaTimingCopy =
+    user?.role === "MANAGER" || user?.role === "SUPERVISOR" || user?.role === "ASM";
   const queryClient = useQueryClient();
+  const [gstPreviewOpen, setGstPreviewOpen] = useState(false);
   const [acceptOpen, setAcceptOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
@@ -419,25 +300,26 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [cancelReason, setCancelReason] = useState("");
   const [cancelError, setCancelError] = useState("");
   const [actionError, setActionError] = useState("");
-  const [sampleDetails, setSampleDetails] = useState("");
-  const [sampleQuantity, setSampleQuantity] = useState("");
-  const [sampleWeight, setSampleWeight] = useState("");
-  const [sentByCourier, setSentByCourier] = useState(true);
-  const [courierName, setCourierName] = useState("");
-  const [trackingId, setTrackingId] = useState("");
-  const [sampleProofFile, setSampleProofFile] = useState<File | null>(null);
-  const [salesFeedback, setSalesFeedback] = useState("");
-  const [sampleError, setSampleError] = useState("");
-  const [approveSampleOpen, setApproveSampleOpen] = useState(false);
-  const [sampleDevType, setSampleDevType] = useState<"existing" | "new">("existing");
-  const [sampleExistingRef, setSampleExistingRef] = useState("");
-  const [newDevOpen, setNewDevOpen] = useState(false);
-  const [newDevViewOpen, setNewDevViewOpen] = useState(false);
-  const [newDevWhy, setNewDevWhy] = useState("");
-  const [newDevTech, setNewDevTech] = useState("");
-  const [newDevRequestList, setNewDevRequestList] = useState("");
+  // Sample workflow UI removed.
+  // Sample "new development details" dialogs removed (sample workflow UI removed).
   const [slaHeadRejectionMessage, setSlaHeadRejectionMessage] = useState("");
   const [slaHeadRejectionError, setSlaHeadRejectionError] = useState("");
+
+  // Phase 2: division workflow
+  const [productKindDraft, setProductKindDraft] = useState<"EXISTING" | "NEW">("EXISTING");
+  const [existingProductRef, setExistingProductRef] = useState("");
+  const [existingSampleInfo, setExistingSampleInfo] = useState("");
+  const [existingInternalRemarks, setExistingInternalRemarks] = useState("");
+  const [handoffRemarks, setHandoffRemarks] = useState("");
+  const [handoffError, setHandoffError] = useState("");
+  const [planningOpen, setPlanningOpen] = useState(false);
+  const [supSampleDetails, setSupSampleDetails] = useState("");
+  const [supSampleQty, setSupSampleQty] = useState("");
+  const [supSampleWeight, setSupSampleWeight] = useState("");
+  const [supByCourier, setSupByCourier] = useState(true);
+  const [supCourierName, setSupCourierName] = useState("");
+  const [supTrackingId, setSupTrackingId] = useState("");
+  const [supSampleError, setSupSampleError] = useState("");
 
   const {
     data: orderData,
@@ -466,10 +348,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     staleTime: 60_000,
   });
 
-  const auditLogsAsc = useMemo(
-    () => (auditData?.logs ? [...auditData.logs].reverse() : []),
-    [auditData]
-  );
+  const auditLogsAsc = useMemo(() => (auditData?.logs ? [...auditData.logs].reverse() : []), [auditData]);
+  const auditLogsDesc = useMemo(() => (auditData?.logs ? [...auditData.logs] : []), [auditData]);
 
   const { data: divisionsData } = useQuery({
     queryKey: ["divisions"],
@@ -544,6 +424,79 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       }
     },
+  });
+
+  const classifyMutation = useMutation({
+    mutationFn: async (body: Record<string, unknown>) => {
+      const res = await fetch(`/api/orders/${orderId}/classify-product`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as { error?: string }).error || "Classification failed");
+      return data as { requiresPlanningPopup?: boolean };
+    },
+    onSuccess: (data) => {
+      setActionError("");
+      queryClient.invalidateQueries({ queryKey: ["order", orderId] });
+      queryClient.invalidateQueries({ queryKey: ["order-audit", orderId] });
+      if (data?.requiresPlanningPopup) setPlanningOpen(true);
+    },
+    onError: (err: Error) => setActionError(err.message),
+  });
+
+  const handoffMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/orders/${orderId}/submit-to-supervisor`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ remarks: handoffRemarks }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as { error?: string }).error || "Handoff failed");
+      return data;
+    },
+    onSuccess: () => {
+      setHandoffError("");
+      setHandoffRemarks("");
+      queryClient.invalidateQueries({ queryKey: ["order", orderId] });
+      queryClient.invalidateQueries({ queryKey: ["order-audit", orderId] });
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["notifications-unread-count"] });
+    },
+    onError: (err: Error) => setHandoffError(err.message),
+  });
+
+  const supervisorSampleMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/orders/${orderId}/supervisor-sample-dispatch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          sampleDetails: supSampleDetails.trim(),
+          sampleQuantity: supSampleQty.trim(),
+          sampleWeight: supSampleWeight.trim(),
+          sentByCourier: supByCourier,
+          courierName: supCourierName.trim(),
+          trackingId: supTrackingId.trim(),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as { error?: string }).error || "Could not save sample dispatch");
+      return data;
+    },
+    onSuccess: () => {
+      setSupSampleError("");
+      queryClient.invalidateQueries({ queryKey: ["order", orderId] });
+      queryClient.invalidateQueries({ queryKey: ["order-audit", orderId] });
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["notifications-unread-count"] });
+    },
+    onError: (err: Error) => setSupSampleError(err.message),
   });
 
   const slaHeadRejectionMutation = useMutation({
@@ -624,60 +577,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   /** Division-side reject — not shown to the person who raised the enquiry (they use Cancel enquiry instead). */
   const canRejectEnquiry =
     canAct && order && user && Number(user.id) !== order.createdById;
-  const isClosedStatus = hasStatus && ["REJECTED", "COMPLETED", "CANCELLED"].includes(status);
-  const mightManageSample =
-    user &&
-    order &&
-    ["MANAGER", "SUPER_ADMIN", "MANAGING_DIRECTOR"].includes(user.role) &&
-    !isClosedStatus;
-  const mightSubmitFeedback =
-    user &&
-    order &&
-    !isClosedStatus &&
-    (order.createdById === user.id ||
-      ["SUPER_ADMIN", "MANAGING_DIRECTOR"].includes(user.role));
-
-  const sampleMutation = useMutation({
-    mutationFn: async (body: Record<string, unknown>) => {
-      const res = await fetch(`/api/orders/${orderId}/sample`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(body),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error((data as { error?: string }).error || "Sample action failed");
-      return data;
-    },
-    onSuccess: (_data, variables) => {
-      setSampleError("");
-      const action = (variables as { action?: string }).action;
-      if (action === "ship") {
-        setSentByCourier(true);
-        setCourierName("");
-        setTrackingId("");
-        setSampleProofFile(null);
-      } else if (action === "salesFeedback") {
-        setSalesFeedback("");
-      } else if (action === "approve") {
-        setApproveSampleOpen(false);
-      } else if (action === "setDevelopment") {
-        setNewDevOpen(false);
-      }
-      queryClient.invalidateQueries({ queryKey: ["order", orderId] });
-      queryClient.invalidateQueries({ queryKey: ["order-audit", orderId] });
-      queryClient.invalidateQueries({ queryKey: ["orders"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-    },
-    onError: (err: Error) => setSampleError(err.message),
-  });
-
-  useEffect(() => {
-    if (!order?.sampleRequested) return;
-    setSampleDetails(order.sampleDetails ?? "");
-    setSampleQuantity(order.sampleQuantity ?? "");
-    setSampleWeight(order.sampleWeight ?? "");
-  }, [order?.id, order?.sampleDetails, order?.sampleQuantity, order?.sampleWeight, order?.sampleRequested]);
+  // const isClosedStatus = hasStatus && ["REJECTED", "COMPLETED", "CANCELLED"].includes(status);
+  // Sample workflow actions removed.
 
   useEffect(() => {
     if (!order?.sampleRequested) return;
@@ -685,18 +586,52 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     if (!cf || typeof cf !== "object") return;
     const sd = (cf as Record<string, unknown>).sampleDevelopment;
     if (!sd || typeof sd !== "object") return;
-    const sdr = sd as Record<string, unknown>;
-    const t = sdr.type;
-    if (t === "existing") {
-      setSampleDevType("existing");
-      if (typeof sdr.existingReference === "string") setSampleExistingRef(sdr.existingReference);
-    } else if (t === "new") {
-      setSampleDevType("new");
-      if (typeof sdr.whyNewDevelopment === "string") setNewDevWhy(sdr.whyNewDevelopment);
-      if (typeof sdr.technicalDetails === "string") setNewDevTech(sdr.technicalDetails);
-      if (typeof sdr.requestedDetailsToSubmit === "string") setNewDevRequestList(sdr.requestedDetailsToSubmit);
-    }
+    // sample development parsing removed (UI removed)
   }, [order?.id, order?.customFields, order?.sampleRequested]);
+
+  useEffect(() => {
+    if (!order) return;
+    if (typeof order.productKind === "string" && (order.productKind === "EXISTING" || order.productKind === "NEW")) {
+      setProductKindDraft(order.productKind);
+    }
+    if (typeof order.existingProductRef === "string") setExistingProductRef(order.existingProductRef);
+    if (typeof order.existingSampleInfo === "string") setExistingSampleInfo(order.existingSampleInfo);
+    if (typeof order.existingInternalRemarks === "string") setExistingInternalRemarks(order.existingInternalRemarks);
+  }, [order, order?.id, order?.productKind, order?.existingProductRef, order?.existingSampleInfo, order?.existingInternalRemarks]);
+
+  type GstCert = { filename?: string; mimeType?: string; base64?: string; size?: number; uploadedAt?: string };
+  const gstCert: GstCert | null = useMemo(() => {
+    const raw = order?.customerGstCert;
+    if (!raw || typeof raw !== "object") return null;
+    const r = raw as Record<string, unknown>;
+    if (typeof r.base64 !== "string" || typeof r.mimeType !== "string") return null;
+    return {
+      filename: typeof r.filename === "string" ? r.filename : "gst-certificate",
+      mimeType: r.mimeType,
+      base64: r.base64,
+      size: typeof r.size === "number" ? r.size : undefined,
+      uploadedAt: typeof r.uploadedAt === "string" ? r.uploadedAt : undefined,
+    };
+  }, [order?.customerGstCert]);
+
+  const gstObjectUrl = useMemo(() => {
+    if (!gstCert?.base64 || !gstCert.mimeType) return null;
+    try {
+      const bin = atob(gstCert.base64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      const blob = new Blob([bytes], { type: gstCert.mimeType });
+      return URL.createObjectURL(blob);
+    } catch {
+      return null;
+    }
+  }, [gstCert?.base64, gstCert?.mimeType]);
+
+  useEffect(() => {
+    return () => {
+      if (gstObjectUrl) URL.revokeObjectURL(gstObjectUrl);
+    };
+  }, [gstObjectUrl]);
 
   const isEnquirySubmitter = Boolean(order && user && Number(user.id) === order.createdById);
   const openSlaBreach: OrderOpenSlaBreach | null =
@@ -717,45 +652,66 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     user &&
     Number(user.id) === order.createdById;
 
-  const hasSampleDetailsSaved =
-    Boolean(order?.sampleDetails?.trim()) ||
-    Boolean(order?.sampleQuantity?.trim()) ||
-    Boolean(order?.sampleWeight?.trim());
+  const canRunDivisionWorkflow =
+    showInteractiveUi &&
+    order &&
+    user &&
+    ["MANAGER", "SUPER_ADMIN", "MANAGING_DIRECTOR"].includes(user.role) &&
+    order.status === "IN_PROGRESS";
 
-  const sampleDevelopment = useMemo(() => {
-    const cf = order?.customFields;
-    if (!cf || typeof cf !== "object") return null;
-    const sd = (cf as Record<string, unknown>).sampleDevelopment;
-    if (!sd || typeof sd !== "object") return null;
-    return sd as Record<string, unknown>;
+  const productKind = order?.productKind === "EXISTING" || order?.productKind === "NEW" ? order.productKind : null;
+  const planningDone = Boolean(order?.planningCompletedAt);
+  const canHandoff =
+    canRunDivisionWorkflow &&
+    Boolean(productKind) &&
+    (productKind === "EXISTING"
+      ? Boolean(order?.existingProductRef?.trim())
+      : Boolean(productKind === "NEW" && planningDone));
+
+  const supervisorHandoffPayload = useMemo(() => {
+    if (!order?.customFields || typeof order.customFields !== "object") return null;
+    const raw = (order.customFields as Record<string, unknown>).supervisorHandoff;
+    if (!raw || typeof raw !== "object") return null;
+    return raw as Record<string, unknown>;
   }, [order?.customFields]);
 
-  const sampleDevelopmentUpdatedAtLabel = useMemo(() => {
-    if (!sampleDevelopment) return "";
-    const raw = sampleDevelopment.updatedAt;
-    if (typeof raw !== "string" || !raw.trim()) return "";
-    const d = new Date(raw);
-    if (Number.isNaN(d.getTime())) return "";
-    return d.toLocaleString();
-  }, [sampleDevelopment]);
+  const otherCustomFieldEntries = useMemo(() => {
+    if (!order?.customFields || typeof order.customFields !== "object") return [];
+    return Object.entries(order.customFields as Record<string, unknown>).filter(
+      ([k]) => k !== "supervisorHandoff" && k !== "sampleDevelopment"
+    );
+  }, [order?.customFields]);
 
-  const hasSampleDevelopmentSaved = useMemo(() => {
-    if (!sampleDevelopment) return false;
-    if (sampleDevelopment.type === "existing") {
-      return typeof sampleDevelopment.existingReference === "string" && sampleDevelopment.existingReference.trim().length > 0;
-    }
-    if (sampleDevelopment.type === "new") {
-      return (
-        typeof sampleDevelopment.whyNewDevelopment === "string" &&
-        sampleDevelopment.whyNewDevelopment.trim().length > 0 &&
-        typeof sampleDevelopment.technicalDetails === "string" &&
-        sampleDevelopment.technicalDetails.trim().length > 0
-      );
-    }
-    return false;
-  }, [sampleDevelopment]);
+  const sampleDevelopmentRaw = useMemo(() => {
+    if (!order?.customFields || typeof order.customFields !== "object") return null;
+    const sd = (order.customFields as Record<string, unknown>).sampleDevelopment;
+    return sd && typeof sd === "object" ? sd : null;
+  }, [order?.customFields]);
 
-  const canApproveSampleNow = hasSampleDetailsSaved || hasSampleDevelopmentSaved;
+  const canSupervisorSubmitSample =
+    showInteractiveUi &&
+    !!order &&
+    user?.role === "SUPERVISOR" &&
+    typeof user.divisionId === "number" &&
+    Number(user.divisionId) === Number(order.currentDivision?.id) &&
+    order.sampleRequested &&
+    order.status === "IN_PROGRESS" &&
+    !order.sampleShippedAt;
+
+  useEffect(() => {
+    if (!order?.id || order.sampleShippedAt) return;
+    setSupSampleDetails(order.sampleDetails?.trim() ?? "");
+    setSupSampleQty(order.sampleQuantity?.trim() ?? "");
+    setSupSampleWeight(order.sampleWeight?.trim() ?? "");
+    setSupByCourier(order.sampleShippedByCourier !== false);
+    setSupCourierName(order.courierName?.trim() ?? "");
+    setSupTrackingId(order.trackingId?.trim() ?? "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only reset form for a new order id / shipped gate
+  }, [order?.id, order?.sampleShippedAt]);
+
+  // sampleDevelopment removed (sample workflow UI removed).
+
+  // sampleDevelopmentUpdatedAtLabel removed (sample workflow UI removed).
 
   const backHref = isAuditView ? "/md#audit" : "/orders";
   const backLabel = isAuditView ? "← Activity log" : "← Enquiries";
@@ -804,7 +760,10 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-2xl font-bold tracking-tight text-slate-900"
           aria-label={`${order.orderNumber ? formatEnquiryNumber(order.orderNumber) : "—"}, ${order.currentDivision?.name ?? "—"}, ${new Date(order.createdAt).toLocaleString()}, ${order.status.replace("_", " ")}`}
         >
-          <span title={order.orderNumber ? formatEnquiryNumber(order.orderNumber) : "—"}>
+          <span
+            title={order.orderNumber ? formatEnquiryNumber(order.orderNumber) : "—"}
+            className="inline-flex items-center rounded-xl border border-slate-200 bg-slate-900 px-3 py-1 text-base font-extrabold tracking-tight text-white shadow-sm shadow-slate-900/15"
+          >
             {order.orderNumber ? formatEnquiryNumberShort(order.orderNumber) : "—"}
           </span>
           <span className="font-normal text-slate-400" aria-hidden>
@@ -831,25 +790,163 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         </h1>
       </header>
 
-      <Card>
+      <Card className="border-slate-200/80 bg-gradient-to-b from-slate-50/70 via-white to-white shadow-sm ring-1 ring-slate-900/5">
         <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
-          <CardTitle>Enquiry details</CardTitle>
-          {canCancel && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="shrink-0 text-destructive border-destructive/40 hover:bg-destructive/5"
-              onClick={() => {
-                setCancelReason("");
-                setCancelError("");
-                setCancelOpen(true);
-              }}
-            >
-              Cancel enquiry
-            </Button>
-          )}
+          <CardTitle className="text-slate-900">Enquiry details</CardTitle>
+          <div className="flex flex-wrap items-center gap-2">
+            {canAct && showInteractiveUi && (
+              <>
+                {(order.status === "PLACED" || order.status === "TRANSFERRED") && (
+                  <Button onClick={() => setAcceptOpen(true)} disabled={acceptMutation.isPending}>
+                    Accept
+                  </Button>
+                )}
+                {order.status === "TRANSFERRED" && (
+                  <Button onClick={() => receiveMutation.mutate()} disabled={receiveMutation.isPending}>
+                    Receive
+                  </Button>
+                )}
+                {order.status === "IN_PROGRESS" && (
+                  <Button onClick={() => completeMutation.mutate()} disabled={completeMutation.isPending}>
+                    Complete
+                  </Button>
+                )}
+                <Button variant="outline" onClick={() => setTransferOpen(true)}>
+                  Transfer
+                </Button>
+                {canRejectEnquiry && (
+                  <Button variant="destructive" onClick={() => setRejectOpen(true)}>
+                    Reject
+                  </Button>
+                )}
+              </>
+            )}
+            {canCancel && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="shrink-0 text-destructive border-destructive/40 hover:bg-destructive/5"
+                onClick={() => {
+                  setCancelReason("");
+                  setCancelError("");
+                  setCancelOpen(true);
+                }}
+              >
+                Cancel enquiry
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
+          {actionError && canAct && showInteractiveUi && (
+            <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {actionError}
+            </p>
+          )}
+          {(order.customerId || order.customerName || order.customerGstNumber || gstCert) && (
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm ring-1 ring-slate-900/5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <p className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                    <FileText className="h-4 w-4 text-slate-500" />
+                    Customer &amp; GST
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Customer identifiers and GST certificate attached to this enquiry.
+                  </p>
+                </div>
+
+                {gstCert && gstObjectUrl ? (
+                  <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                    <Button asChild size="sm" variant="outline">
+                      <a href={gstObjectUrl} target="_blank" rel="noreferrer">
+                        <Eye className="mr-2 h-4 w-4" />
+                        Open
+                      </a>
+                    </Button>
+                    <Button asChild size="sm" variant="outline">
+                      <a href={gstObjectUrl} download={gstCert.filename ?? "gst-certificate"}>
+                        <Download className="mr-2 h-4 w-4" />
+                        Download
+                      </a>
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="text-slate-600 hover:text-slate-900"
+                      onClick={() => setGstPreviewOpen((v) => !v)}
+                    >
+                      {gstPreviewOpen ? "Hide preview" : "Preview"}
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+
+              <dl className="mt-4 grid grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
+                <div className="rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2">
+                  <dt className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Customer ID</dt>
+                  <dd className="mt-0.5 font-mono text-slate-900">{order.customerId ?? "—"}</dd>
+                </div>
+                <div className="rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2">
+                  <dt className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Customer name</dt>
+                  <dd className="mt-0.5 text-slate-900">{order.customerName ?? "—"}</dd>
+                </div>
+                <div className="rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2">
+                  <dt className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Phone</dt>
+                  <dd className="mt-0.5 text-slate-900">{order.customerPhone ?? "—"}</dd>
+                </div>
+                <div className="rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2">
+                  <dt className="text-[11px] font-medium uppercase tracking-wide text-slate-500">GST number</dt>
+                  <dd className="mt-0.5 font-mono text-slate-900">{order.customerGstNumber ?? "—"}</dd>
+                </div>
+                <div className="rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2 sm:col-span-2">
+                  <dt className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Order date</dt>
+                  <dd className="mt-0.5 text-slate-900">
+                    {order.customerOrderDate ? new Date(order.customerOrderDate).toLocaleDateString() : "—"}
+                  </dd>
+                </div>
+              </dl>
+
+              {gstCert && gstObjectUrl ? (
+                <div className="mt-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2">
+                    <p className="text-xs text-slate-600">
+                      <span className="font-medium text-slate-900">{gstCert.filename ?? "GST certificate"}</span>
+                      {gstCert.mimeType ? <span className="text-slate-400"> · {gstCert.mimeType}</span> : null}
+                      {gstCert.size ? <span className="text-slate-400"> · {(gstCert.size / 1024).toFixed(1)} KB</span> : null}
+                    </p>
+                    {!gstPreviewOpen ? (
+                      <p className="text-[11px] text-slate-500">Preview is hidden</p>
+                    ) : null}
+                  </div>
+
+                  {gstPreviewOpen ? (
+                    <div className="mt-3 overflow-hidden rounded-lg border border-slate-200 bg-white">
+                      {gstCert.mimeType?.startsWith("image/") ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- inline DB attachment preview
+                        <img
+                          src={gstObjectUrl}
+                          alt="GST certificate"
+                          className="max-h-[40rem] w-full object-contain"
+                        />
+                      ) : gstCert.mimeType === "application/pdf" ? (
+                        <iframe
+                          title="GST certificate"
+                          src={gstObjectUrl}
+                          className="h-[40rem] w-full bg-white"
+                        />
+                      ) : (
+                        <p className="p-4 text-sm text-slate-600">Preview is not available for this file type.</p>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              ) : gstCert ? (
+                <p className="mt-3 text-xs text-amber-700">GST attachment present but could not be previewed.</p>
+              ) : null}
+            </div>
+          )}
           <p>
             <span className="text-slate-500">Company name:</span>{" "}
             {order.companyName?.trim() ? order.companyName : "—"}
@@ -885,20 +982,198 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               <span className="text-slate-500">Sample request notes:</span> {order.sampleRequestNotes}
             </p>
           ) : null}
-          {order.customFields && typeof order.customFields === "object" && Object.keys(order.customFields).length > 0 && (
+
+          {supervisorHandoffPayload ? (
+            <div className="rounded-lg border border-indigo-100 bg-indigo-50/50 p-3 text-sm">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-indigo-700">
+                Division head → supervisor
+              </p>
+              <p className="mt-2 text-slate-800">
+                <span className="text-slate-500">Remarks:</span>{" "}
+                {typeof supervisorHandoffPayload.remarks === "string" ? supervisorHandoffPayload.remarks : "—"}
+              </p>
+              <p className="mt-1 text-xs text-slate-600">
+                {typeof supervisorHandoffPayload.submittedAt === "string" ? (
+                  <>Submitted {new Date(String(supervisorHandoffPayload.submittedAt)).toLocaleString()}</>
+                ) : null}
+                {typeof supervisorHandoffPayload.kind === "string" ? (
+                  <> · Product kind: {String(supervisorHandoffPayload.kind)}</>
+                ) : null}
+              </p>
+            </div>
+          ) : null}
+
+          {order.sampleRequested &&
+          (order.sampleDetails?.trim() ||
+            order.sampleQuantity?.trim() ||
+            order.sampleWeight?.trim() ||
+            order.sampleShippedAt) ? (
+            <div className="rounded-lg border border-emerald-100 bg-emerald-50/40 p-3 text-sm space-y-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-800">Sample fulfilment</p>
+              {order.sampleDetails?.trim() ? (
+                <p>
+                  <span className="text-slate-500">Sample details:</span>{" "}
+                  <span className="whitespace-pre-wrap text-slate-900">{order.sampleDetails}</span>
+                </p>
+              ) : null}
+              {order.sampleQuantity?.trim() ? (
+                <p>
+                  <span className="text-slate-500">Quantity:</span> {order.sampleQuantity}
+                </p>
+              ) : null}
+              {order.sampleWeight?.trim() ? (
+                <p>
+                  <span className="text-slate-500">Weight:</span> {order.sampleWeight}
+                </p>
+              ) : null}
+              {order.sampleShippedAt ? (
+                <>
+                  <p>
+                    <span className="text-slate-500">Dispatched:</span>{" "}
+                    {new Date(order.sampleShippedAt).toLocaleString()}
+                  </p>
+                  <p>
+                    <span className="text-slate-500">By courier:</span>{" "}
+                    {order.sampleShippedByCourier === false ? "No (hand delivered / other)" : "Yes"}
+                  </p>
+                  {order.sampleShippedByCourier !== false && (order.courierName || order.trackingId) ? (
+                    <p>
+                      <span className="text-slate-500">Courier:</span> {order.courierName ?? "—"} ·{" "}
+                      <span className="text-slate-500">Tracking:</span> {order.trackingId ?? "—"}
+                    </p>
+                  ) : null}
+                </>
+              ) : (
+                <p className="text-xs text-amber-800">Dispatch not recorded yet.</p>
+              )}
+            </div>
+          ) : null}
+
+          {canSupervisorSubmitSample ? (
+            <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-3 ring-1 ring-slate-900/5">
+              <p className="text-sm font-semibold text-slate-900">Record sample dispatch</p>
+              <p className="text-xs text-slate-500">
+                Enter how the sample was prepared and sent. Division head and the salesperson who raised the enquiry
+                will see this here and in the activity log.
+              </p>
+              <div className="space-y-2">
+                <Label htmlFor="supSampleDetails">Sample details (required, min 10 characters)</Label>
+                <textarea
+                  id="supSampleDetails"
+                  rows={4}
+                  value={supSampleDetails}
+                  onChange={(e) => setSupSampleDetails(e.target.value)}
+                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm"
+                  placeholder="Fabric / colour / size, batch notes, packaging, etc."
+                />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="supQty">Quantity (optional)</Label>
+                  <Input
+                    id="supQty"
+                    value={supSampleQty}
+                    onChange={(e) => setSupSampleQty(e.target.value)}
+                    placeholder="e.g. 2 metres"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="supWt">Weight (optional)</Label>
+                  <Input
+                    id="supWt"
+                    value={supSampleWeight}
+                    onChange={(e) => setSupSampleWeight(e.target.value)}
+                    placeholder="e.g. 250 g"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  id="supByCourier"
+                  type="checkbox"
+                  checked={supByCourier}
+                  onChange={(e) => setSupByCourier(e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300"
+                />
+                <Label htmlFor="supByCourier" className="text-sm font-normal cursor-pointer">
+                  Sent by courier (uncheck if hand-delivered or non-courier dispatch)
+                </Label>
+              </div>
+              {supByCourier ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="supCourier">Courier name</Label>
+                    <Input
+                      id="supCourier"
+                      value={supCourierName}
+                      onChange={(e) => setSupCourierName(e.target.value)}
+                      placeholder="e.g. BlueDart"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="supTrack">Tracking / AWB</Label>
+                    <Input
+                      id="supTrack"
+                      value={supTrackingId}
+                      onChange={(e) => setSupTrackingId(e.target.value)}
+                      placeholder="Waybill number"
+                    />
+                  </div>
+                </div>
+              ) : null}
+              {supSampleError ? <p className="text-xs text-red-700">{supSampleError}</p> : null}
+              <Button
+                type="button"
+                size="sm"
+                disabled={
+                  supervisorSampleMutation.isPending ||
+                  supSampleDetails.trim().length < 10 ||
+                  (supByCourier && (!supCourierName.trim() || !supTrackingId.trim()))
+                }
+                onClick={() => {
+                  setSupSampleError("");
+                  supervisorSampleMutation.mutate();
+                }}
+              >
+                {supervisorSampleMutation.isPending ? "Saving…" : "Save & record dispatch"}
+              </Button>
+            </div>
+          ) : null}
+
+          {order.customFields &&
+          typeof order.customFields === "object" &&
+          (otherCustomFieldEntries.length > 0 || sampleDevelopmentRaw) ? (
             <div>
               <span className="text-slate-500">Custom fields:</span>
-              <ul className="mt-1 list-inside list-disc text-sm">
-                {Object.entries(order.customFields as Record<string, unknown>).map(([k, v]) => (
-                  <li key={k}><span className="font-medium">{k}:</span> {String(v)}</li>
+              <ul className="mt-1 list-inside list-disc text-sm space-y-1">
+                {sampleDevelopmentRaw ? (
+                  <li key="sampleDevelopment" className="list-none -ml-4 sm:-ml-6">
+                    <span className="font-medium">sampleDevelopment:</span>
+                    <pre className="mt-1 max-h-40 overflow-auto rounded border border-slate-100 bg-slate-50 p-2 text-xs">
+                      {formatCustomFieldValue(sampleDevelopmentRaw)}
+                    </pre>
+                  </li>
+                ) : null}
+                {otherCustomFieldEntries.map(([k, v]) => (
+                  <li key={k}>
+                    <span className="font-medium">{k}:</span>{" "}
+                    <span className="whitespace-pre-wrap break-words">{formatCustomFieldValue(v)}</span>
+                  </li>
                 ))}
               </ul>
             </div>
+          ) : null}
+          {order.slaDeadline && (
+            <p>
+              <span className="text-slate-500">{hideSlaTimingCopy ? "Due by:" : "SLA deadline:"}</span>{" "}
+              {new Date(order.slaDeadline).toLocaleString()}
+            </p>
           )}
-          {order.slaDeadline && <p><span className="text-slate-500">SLA deadline:</span> {new Date(order.slaDeadline).toLocaleString()}</p>}
           {openSlaBreach ? (
             <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-3 text-sm">
-              <p className="font-medium text-amber-950">SLA breach recorded</p>
+              <p className="font-medium text-amber-950">
+                {hideSlaTimingCopy ? "Response deadline passed" : "SLA breach recorded"}
+              </p>
               <p className="mt-1 text-xs text-amber-900/80">
                 Breached at {new Date(openSlaBreach.breachedAt).toLocaleString()} · Division{" "}
                 {openSlaBreach.division?.name ?? order.currentDivision?.name ?? "—"}
@@ -1069,81 +1344,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         </CardContent>
       </Card>
 
-      {!isAuditView && (
-        <>
-          <Card>
-            <CardHeader>
-              <CardTitle>Enquiry pipeline</CardTitle>
-              <p className="text-sm text-slate-500 font-normal">Stages for this enquiry at a glance.</p>
-            </CardHeader>
-            <CardContent>
-              <EnquiryPipelineStrip order={order} />
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Detailed timestamps</CardTitle>
-              <p className="text-sm text-slate-500 font-normal">
-                Placed, accept, transfer, rejection, sample, and responses — from the activity log (oldest first).
-              </p>
-            </CardHeader>
-            <CardContent>
-              {auditQueryError ? (
-                <p className="text-sm text-red-600">Could not load activity log.</p>
-              ) : auditLoading && auditLogsAsc.length === 0 ? (
-                <p className="text-sm text-slate-500">Loading activity…</p>
-              ) : auditLogsAsc.length ? (
-                <div className="relative">
-                  <div
-                    className="pointer-events-none absolute left-[7px] top-3 bottom-3 w-px bg-linear-to-b from-slate-300/90 via-slate-200/60 to-transparent sm:left-[9px]"
-                    aria-hidden
-                  />
-                  <ul className="relative space-y-4">
-                    {(
-                      auditLogsAsc as {
-                        id: number;
-                        action: string;
-                        createdAt: string;
-                        payload: unknown;
-                        user: { name: string; email: string } | null;
-                      }[]
-                    ).map((log) => {
-                      const extra = auditPayloadSummary(log.action, log.payload);
-                      const st = auditTimelineStyles(log.action);
-                      return (
-                        <li key={log.id} className="relative flex gap-3 sm:gap-4">
-                          <span
-                            className="relative z-10 mt-[18px] h-2.5 w-2.5 shrink-0 rounded-full border-2 border-white bg-slate-400 shadow ring-1 ring-slate-200/80"
-                            aria-hidden
-                          />
-                          <div className={`min-w-0 flex-1 ${st.card}`}>
-                            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3">
-                              <span className={st.time}>{new Date(log.createdAt).toLocaleString()}</span>
-                              <span className={st.label}>{auditActionLabel(log.action)}</span>
-                            </div>
-                            {log.user ? (
-                              <p className={st.user}>
-                                <span className="font-medium">{log.user.name}</span>
-                                <span className="opacity-50"> · </span>
-                                {log.user.email}
-                              </p>
-                            ) : (
-                              <p className="mt-2 text-xs font-medium text-slate-400">System</p>
-                            )}
-                            {extra ? <p className={st.extra}>{extra}</p> : null}
-                          </div>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              ) : (
-                <p className="text-sm text-slate-500">No logged events yet.</p>
-              )}
-            </CardContent>
-          </Card>
-        </>
-      )}
+      {/* Enquiry pipeline removed per UI requirement. */}
 
       {isAuditView && (
         <Card>
@@ -1163,7 +1364,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             ) : (
               <ul className="space-y-3">
                 {auditLogsAsc.map((log) => {
-                  const extra = auditPayloadSummary(log.action, log.payload);
+                  const extra = auditPayloadSummary(log.action, log.payload, { hideSlaTimingCopy });
                   return (
                     <li
                       key={log.id}
@@ -1174,7 +1375,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                           {new Date(log.createdAt).toLocaleString()}
                         </span>
                         <Badge variant="secondary" className="text-[10px]">
-                          {log.action}
+                          {hideSlaTimingCopy ? auditActionLabel(log.action, { hideSlaTimingCopy }) : log.action}
                         </Badge>
                       </div>
                       {log.user ? (
@@ -1201,381 +1402,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         </Card>
       )}
 
-      {order.sampleRequested && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Sample workflow</CardTitle>
-            <p className="text-sm text-slate-500 font-normal">
-              First submit and save sample details. After they are saved, approve the sample in a separate step.
-              Shipment requires courier and tracking ID. Sales can add feedback anytime before rejection.
-            </p>
-          </CardHeader>
-          <CardContent className="space-y-4 text-sm">
-            {sampleDevelopment && (
-              <div className="rounded-lg border border-slate-100 bg-slate-50/80 p-3 space-y-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="font-medium text-slate-900">Sample type</p>
-                  {sampleDevelopmentUpdatedAtLabel ? (
-                    <span className="text-xs text-slate-500">Updated: {sampleDevelopmentUpdatedAtLabel}</span>
-                  ) : null}
-                </div>
-
-                {sampleDevelopment.type === "existing" ? (
-                  <div className="space-y-2">
-                    {typeof sampleDevelopment.existingReference === "string" ? (
-                      <p className="text-slate-700">
-                        <span className="text-slate-500">Existing sample (previous):</span>{" "}
-                        {sampleDevelopment.existingReference}
-                      </p>
-                    ) : (
-                      <p className="text-slate-600">—</p>
-                    )}
-                  </div>
-                ) : sampleDevelopment.type === "new" ? (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-slate-700">
-                      <span className="text-slate-500">New development:</span> submitted
-                    </p>
-                    <Button type="button" size="sm" variant="outline" onClick={() => setNewDevViewOpen(true)}>
-                      View details…
-                    </Button>
-                  </div>
-                ) : (
-                  <p className="text-slate-600">—</p>
-                )}
-              </div>
-            )}
-            {(order.sampleDetails || order.sampleQuantity) && (
-              <div className="rounded-lg border border-slate-100 bg-slate-50/80 p-3 space-y-1">
-                {order.sampleDetails && (
-                  <p>
-                    <span className="text-slate-500">Sample details:</span> {order.sampleDetails}
-                  </p>
-                )}
-                {order.sampleQuantity && (
-                  <p>
-                    <span className="text-slate-500">Quantity:</span> {order.sampleQuantity}
-                  </p>
-                )}
-                {order.sampleWeight && (
-                  <p>
-                    <span className="text-slate-500">Weight:</span> {order.sampleWeight}
-                  </p>
-                )}
-              </div>
-            )}
-            {order.sampleApprovedAt && (
-              <p className="text-slate-700">
-                <span className="text-slate-500">Approved</span>{" "}
-                {new Date(order.sampleApprovedAt).toLocaleString()}
-                {order.sampleApprovedBy?.name && ` · ${order.sampleApprovedBy.name}`}
-              </p>
-            )}
-            {order.sampleShippedAt && (
-              <div className="rounded-lg border border-emerald-100 bg-emerald-50/50 p-3 space-y-1">
-                <p>
-                  <span className="text-slate-500">Shipped</span> {new Date(order.sampleShippedAt).toLocaleString()}
-                </p>
-                <p>
-                  <span className="text-slate-500">Sent by courier:</span>{" "}
-                  {order.sampleShippedByCourier === false ? "No" : "Yes"}
-                </p>
-                {order.courierName && (
-                  <p>
-                    <span className="text-slate-500">Courier:</span> {order.courierName}
-                  </p>
-                )}
-                {order.trackingId && (
-                  <p>
-                    <span className="text-slate-500">Tracking ID:</span> {order.trackingId}
-                  </p>
-                )}
-                {order.sampleProofUrl && (
-                  <div className="space-y-2">
-                    <p>
-                      <span className="text-slate-500">Proof:</span>{" "}
-                      <a
-                        className="text-blue-700 underline"
-                        href={order.sampleProofUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        Open in new tab
-                      </a>
-                    </p>
-                    {sampleProofUrlKind(order.sampleProofUrl) === "image" ? (
-                      // eslint-disable-next-line @next/next/no-img-element -- user-uploaded proof from our public/uploads
-                      <img
-                        src={order.sampleProofUrl}
-                        alt="Sample shipment proof"
-                        className="mt-1 max-h-96 w-full max-w-lg rounded-md border border-slate-200 bg-white object-contain"
-                      />
-                    ) : sampleProofUrlKind(order.sampleProofUrl) === "pdf" ? (
-                      <iframe
-                        title="Sample shipment proof"
-                        src={order.sampleProofUrl}
-                        className="mt-1 h-112 w-full max-w-2xl rounded-md border border-slate-200 bg-white"
-                      />
-                    ) : null}
-                  </div>
-                )}
-              </div>
-            )}
-            {order.salesFeedback && (
-              <p>
-                <span className="text-slate-500">Sales feedback:</span> {order.salesFeedback}{" "}
-                <span className="text-slate-400">
-                  ({order.salesFeedbackAt ? new Date(order.salesFeedbackAt).toLocaleString() : ""})
-                </span>
-              </p>
-            )}
-
-            {sampleError && (
-              <div className="rounded-lg border border-red-100 bg-red-50 text-red-700 text-sm p-3">{sampleError}</div>
-            )}
-
-            {showInteractiveUi && mightManageSample && (
-              <div className="space-y-6 border-t border-slate-100 pt-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Division actions</p>
-                {!order.sampleApprovedAt && (
-                  <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-3">
-                    <p className="text-sm font-medium text-slate-900">Step 1 — Submit sample details</p>
-                    <p className="text-xs text-slate-500">
-                      Enter details and click Save. Approval is only available after details are saved.
-                    </p>
-                    {isManager && (
-                      <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-2">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                          Sample type (manager only)
-                        </p>
-                        <label className="flex items-center gap-2 text-sm text-slate-800">
-                          <input
-                            type="checkbox"
-                            checked={sampleDevType === "new"}
-                            onChange={(e) => setSampleDevType(e.target.checked ? "new" : "existing")}
-                          />
-                          New development (not an existing sample)
-                        </label>
-                        {sampleDevType === "existing" ? (
-                          <div className="space-y-2">
-                            <Label htmlFor="existing-ref">Existing sample reference</Label>
-                            <Input
-                              id="existing-ref"
-                              value={sampleExistingRef}
-                              onChange={(e) => setSampleExistingRef(e.target.value)}
-                              placeholder="Previous sample name/title or brief details"
-                            />
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              disabled={sampleMutation.isPending || !sampleExistingRef.trim()}
-                              onClick={() =>
-                                sampleMutation.mutate({
-                                  action: "setDevelopment",
-                                  developmentType: "existing",
-                                  existingReference: sampleExistingRef.trim(),
-                                })
-                              }
-                            >
-                              Save existing reference
-                            </Button>
-                          </div>
-                        ) : (
-                          <div className="flex flex-wrap items-center gap-2">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              onClick={() => setNewDevOpen(true)}
-                            >
-                              Explain new development…
-                            </Button>
-                            {hasSampleDevelopmentSaved ? (
-                              <span className="text-xs text-emerald-700 font-medium">Saved</span>
-                            ) : (
-                              <span className="text-xs text-slate-500">Not yet submitted</span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    <div className="space-y-2">
-                      <Label htmlFor="sample-details">Sample details</Label>
-                      <textarea
-                        id="sample-details"
-                        value={sampleDetails}
-                        onChange={(e) => setSampleDetails(e.target.value)}
-                        placeholder="Sample specifications, color, finish…"
-                        rows={2}
-                        className="flex min-h-[56px] w-full rounded-md border border-slate-200 px-3 py-2 text-sm bg-white"
-                      />
-                      <Input
-                        value={sampleQuantity}
-                        onChange={(e) => setSampleQuantity(e.target.value)}
-                        placeholder="e.g. 2 meters, 3 swatches"
-                      />
-                      <Input
-                        value={sampleWeight}
-                        onChange={(e) => setSampleWeight(e.target.value)}
-                        placeholder="Weight (e.g. 250 gsm, 1.5 kg)"
-                      />
-                      <Button
-                        type="button"
-                        variant="default"
-                        size="sm"
-                        disabled={
-                          sampleMutation.isPending ||
-                          (!sampleDetails.trim() && !sampleQuantity.trim() && !sampleWeight.trim())
-                        }
-                        onClick={() =>
-                          sampleMutation.mutate({
-                            action: "setDetails",
-                            sampleDetails: sampleDetails.trim() || undefined,
-                            sampleQuantity: sampleQuantity.trim() || undefined,
-                            sampleWeight: sampleWeight.trim() || undefined,
-                          })
-                        }
-                      >
-                        Save sample details
-                      </Button>
-                    </div>
-                  </div>
-                )}
-                {!order.sampleApprovedAt && (
-                  <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
-                    <p className="text-sm font-medium text-slate-900">Step 2 — Approve sample</p>
-                    {!canApproveSampleNow ? (
-                      <p className="text-sm text-slate-500">
-                        Save sample details in step 1 first (or submit the manager-only sample type / new development
-                        details). At least one of these must be saved before you can approve.
-                      </p>
-                    ) : (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={sampleMutation.isPending}
-                        onClick={() => setApproveSampleOpen(true)}
-                      >
-                        Approve sample…
-                      </Button>
-                    )}
-                  </div>
-                )}
-                {order.sampleApprovedAt && !order.sampleShippedAt && (
-                  <div className="space-y-2">
-                    <Label>Record shipment</Label>
-                    <label className="flex items-center gap-2 text-sm text-slate-700">
-                      <input
-                        type="checkbox"
-                        checked={sentByCourier}
-                        onChange={(e) => setSentByCourier(e.target.checked)}
-                      />
-                      Sent by courier (requires courier + tracking)
-                    </label>
-                    {sentByCourier && (
-                      <>
-                        <Input
-                          value={courierName}
-                          onChange={(e) => setCourierName(e.target.value)}
-                          placeholder="Courier name"
-                        />
-                        <Input
-                          value={trackingId}
-                          onChange={(e) => setTrackingId(e.target.value)}
-                          placeholder="Tracking ID"
-                        />
-                      </>
-                    )}
-                    <div className="space-y-1">
-                      <Label>Proof (optional: png/jpg/webp/pdf, max 5MB)</Label>
-                      <input
-                        type="file"
-                        accept=".png,.jpg,.jpeg,.webp,.pdf"
-                        onChange={(e) => setSampleProofFile(e.target.files?.[0] ?? null)}
-                      />
-                    </div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      disabled={
-                        sampleMutation.isPending ||
-                        (sentByCourier && (!courierName.trim() || !trackingId.trim()))
-                      }
-                      onClick={async () => {
-                        try {
-                          setSampleError("");
-                          let proofUrl: string | undefined;
-                          if (sampleProofFile) {
-                            const fd = new FormData();
-                            fd.append("file", sampleProofFile);
-                            const res = await fetch(`/api/orders/${orderId}/sample-proof`, {
-                              method: "POST",
-                              credentials: "include",
-                              body: fd,
-                            });
-                            const contentType = res.headers.get("content-type") ?? "";
-                            const data = contentType.includes("application/json")
-                              ? await res.json().catch(() => ({}))
-                              : {};
-                            if (!res.ok) {
-                              throw new Error(
-                                  (data as { error?: string; detail?: string }).detail ||
-                                  (data as { error?: string; detail?: string }).error ||
-                                  `Failed to upload proof (${res.status})`
-                              );
-                            }
-                            proofUrl =
-                              typeof (data as { url?: unknown }).url === "string"
-                                ? (data as { url: string }).url
-                                : undefined;
-                          }
-                          sampleMutation.mutate({
-                            action: "ship",
-                            sentByCourier,
-                            courierName: sentByCourier ? courierName.trim() : undefined,
-                            trackingId: sentByCourier ? trackingId.trim() : undefined,
-                            sampleProofUrl: proofUrl,
-                          });
-                        } catch (e) {
-                          setSampleError(e instanceof Error ? e.message : String(e));
-                        }
-                      }}
-                    >
-                      Mark sample shipped
-                    </Button>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {showInteractiveUi && mightSubmitFeedback && (
-              <div className="space-y-2 border-t border-slate-100 pt-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Sales feedback</p>
-                <textarea
-                  value={salesFeedback}
-                  onChange={(e) => setSalesFeedback(e.target.value)}
-                  placeholder="Customer reaction, follow-up needed…"
-                  rows={3}
-                  className="flex min-h-[72px] w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={sampleMutation.isPending || !salesFeedback.trim()}
-                  onClick={() =>
-                    sampleMutation.mutate({ action: "salesFeedback", salesFeedback: salesFeedback.trim() })
-                  }
-                >
-                  Submit feedback
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
+      {/* Sample workflow section removed per UI requirement. */}
 
       {(order.editHistory?.length ?? 0) > 0 && (
         <Card>
@@ -1627,30 +1454,335 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         </Card>
       )}
 
-      {canAct && showInteractiveUi && (
+      {/* Standalone Actions card removed (buttons moved into Enquiry details). */}
+
+      {canRunDivisionWorkflow && (
         <Card>
-          <CardHeader><CardTitle>Actions</CardTitle></CardHeader>
-          <CardContent className="flex flex-wrap gap-2">
-            {(order.status === "PLACED" || order.status === "TRANSFERRED") && (
-              <Button onClick={() => setAcceptOpen(true)} disabled={acceptMutation.isPending}>
-                Accept
+          <CardHeader>
+            <CardTitle>Division workflow (required)</CardTitle>
+            <p className="text-sm text-slate-500 font-normal">
+              Accept → classify (Existing / New Development) → submit to Supervisor with remarks.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4 text-sm">
+            <div className="relative rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-slate-50/40 p-5 space-y-4 ring-1 ring-slate-900/5 shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                    Step 1
+                  </p>
+                  <h3 className="mt-0.5 text-base font-semibold tracking-tight text-slate-900">
+                    Classify product
+                  </h3>
+                </div>
+                {productKind ? (
+                  <span
+                    className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium ${
+                      productKind === "NEW"
+                        ? "bg-blue-50 text-blue-700 ring-1 ring-blue-100"
+                        : "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100"
+                    }`}
+                  >
+                    {productKind === "NEW" ? "New Development" : "Existing Product"}
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-700 ring-1 ring-amber-100">
+                    Pending classification
+                  </span>
+                )}
+              </div>
+
+              <p className="text-sm text-slate-600">
+                Pick how this enquiry should proceed. <strong>Existing product</strong> follows the standard path.
+                <strong className="ml-1">New development</strong> opens the planning popup to capture planning details.
+              </p>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setProductKindDraft("EXISTING")}
+                  className={`group rounded-xl border px-4 py-2.5 text-left text-sm transition-all ${
+                    productKindDraft === "EXISTING"
+                      ? "border-slate-900 bg-slate-900 text-white shadow-sm"
+                      : "border-slate-200 bg-white text-slate-800 hover:border-slate-300 hover:bg-slate-50"
+                  }`}
+                >
+                  <span className="block text-[11px] uppercase tracking-wider opacity-70">Option A</span>
+                  <span className="block font-semibold">Existing product</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setProductKindDraft("NEW")}
+                  className={`group rounded-xl border px-4 py-2.5 text-left text-sm transition-all ${
+                    productKindDraft === "NEW"
+                      ? "border-slate-900 bg-slate-900 text-white shadow-sm"
+                      : "border-slate-200 bg-white text-slate-800 hover:border-slate-300 hover:bg-slate-50"
+                  }`}
+                >
+                  <span className="block text-[11px] uppercase tracking-wider opacity-70">Option B</span>
+                  <span className="block font-semibold">New development</span>
+                </button>
+              </div>
+
+              {productKindDraft === "EXISTING" ? (
+                <div className="grid grid-cols-1 gap-3">
+                  <div className="space-y-2">
+                    <Label className="font-semibold text-slate-900">Existing product reference (required)</Label>
+                    <textarea
+                      value={existingProductRef}
+                      onChange={(e) => setExistingProductRef(e.target.value)}
+                      rows={2}
+                      className="w-full rounded-md border border-amber-300 bg-amber-50/40 px-3 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-400"
+                      placeholder="Style / ref / previous enquiry number..."
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Existing sample info (optional)</Label>
+                    <textarea
+                      value={existingSampleInfo}
+                      onChange={(e) => setExistingSampleInfo(e.target.value)}
+                      rows={2}
+                      className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-300"
+                      placeholder="Any existing sample details..."
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Internal remarks (optional)</Label>
+                    <textarea
+                      value={existingInternalRemarks}
+                      onChange={(e) => setExistingInternalRemarks(e.target.value)}
+                      rows={3}
+                      className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-300"
+                      placeholder="Notes for supervisor/head..."
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={classifyMutation.isPending || existingProductRef.trim().length < 5}
+                    onClick={() =>
+                      classifyMutation.mutate({
+                        kind: "EXISTING",
+                        existingProductRef,
+                        existingSampleInfo,
+                        existingInternalRemarks,
+                      })
+                    }
+                  >
+                    {classifyMutation.isPending ? "Saving…" : "Save classification"}
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-3 rounded-xl border border-blue-100 bg-blue-50/40 p-4">
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="bg-slate-900 text-white hover:bg-slate-800"
+                    disabled={classifyMutation.isPending}
+                    onClick={() => {
+                      setActionError("");
+                      // If already classified as NEW, just open the planning popup immediately.
+                      if (productKind === "NEW") {
+                        setPlanningOpen(true);
+                        return;
+                      }
+                      // Otherwise classify as NEW first; open the modal on success OR show error.
+                      classifyMutation.mutate(
+                        { kind: "NEW" },
+                        {
+                          onSuccess: () => setPlanningOpen(true),
+                          onError: (err: Error) => setActionError(err.message),
+                        }
+                      );
+                    }}
+                  >
+                    {classifyMutation.isPending ? "Starting…" : "Start New Development planning"}
+                  </Button>
+                  {productKind === "NEW" ? (
+                    <p className="text-[11px] text-slate-500">
+                      Already classified. Click the button to reopen the planning popup.
+                    </p>
+                  ) : null}
+
+                  {productKind === "NEW" ? (
+                    <div className="rounded-lg border border-slate-200 bg-white p-3">
+                      <p className="text-slate-700">
+                        Planning status:{" "}
+                        {planningDone ? (
+                          <span className="font-medium text-emerald-700">Completed</span>
+                        ) : (
+                          <span className="font-medium text-amber-700">Pending</span>
+                        )}
+                      </p>
+                      {!planningDone ? (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <Button type="button" size="sm" variant="outline" onClick={() => setPlanningOpen(true)}>
+                            Open planning popup…
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={classifyMutation.isPending}
+                            onClick={async () => {
+                              const res = await fetch(`/api/orders/${orderId}/complete-planning`, {
+                                method: "POST",
+                                credentials: "include",
+                              });
+                              if (!res.ok) {
+                                const j = (await res.json().catch(() => ({}))) as { error?: string };
+                                setActionError(j.error ?? `Could not complete planning (${res.status})`);
+                                return;
+                              }
+                              setActionError("");
+                              queryClient.invalidateQueries({ queryKey: ["order", orderId] });
+                              queryClient.invalidateQueries({ queryKey: ["order-audit", orderId] });
+                            }}
+                          >
+                            Mark planning complete
+                          </Button>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3 ring-1 ring-slate-900/5">
+              <p className="text-sm font-medium text-slate-900">Step 2 — Submit to Supervisor</p>
+              <p className="text-xs text-slate-500">
+                Mandatory remarks. Supervisor (and Head/ASM) will see this in the enquiry timeline.
+              </p>
+              <div className="space-y-2">
+                <Label className="font-semibold text-slate-900">Remarks (min 10 characters) (required)</Label>
+                <textarea
+                  value={handoffRemarks}
+                  onChange={(e) => setHandoffRemarks(e.target.value)}
+                  rows={4}
+                  className="w-full rounded-md border border-amber-300 bg-amber-50/40 px-3 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-400"
+                  placeholder="What the supervisor should do next, notes, constraints..."
+                />
+              </div>
+              {handoffError ? <p className="text-xs text-red-700">{handoffError}</p> : null}
+              <Button
+                type="button"
+                size="sm"
+                disabled={handoffMutation.isPending || !canHandoff || handoffRemarks.trim().length < 10}
+                onClick={() => {
+                  setHandoffError("");
+                  handoffMutation.mutate();
+                }}
+              >
+                {handoffMutation.isPending ? "Submitting…" : "Submit to supervisor"}
               </Button>
+              {!canHandoff ? (
+                <p className="text-xs text-amber-700">
+                  Complete classification first{productKind === "NEW" ? " (and mark planning complete)" : ""}.
+                </p>
+              ) : null}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <NewDevelopmentModal
+        enquiryId={orderId}
+        open={planningOpen}
+        onOpenChange={setPlanningOpen}
+        initial={{
+          newDevDescription: typeof order?.newDevDescription === "string" ? order.newDevDescription : "",
+          newDevResources: typeof order?.newDevResources === "string" ? order.newDevResources : "",
+          newDevRandD: typeof order?.newDevRandD === "string" ? order.newDevRandD : "",
+          newDevTimeline: typeof order?.newDevTimeline === "string" ? order.newDevTimeline : "",
+          newDevNotes: typeof order?.newDevNotes === "string" ? order.newDevNotes : "",
+          newDevCompletionDuration:
+            typeof order?.newDevCompletionDuration === "string" ? order.newDevCompletionDuration : "",
+          newDevWhyNeeded: typeof order?.newDevWhyNeeded === "string" ? order.newDevWhyNeeded : "",
+        }}
+      />
+
+      {!isAuditView && (
+        <Card className="border-slate-200/80 shadow-sm">
+          <CardHeader>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <CardTitle>Workflow timeline</CardTitle>
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600">
+                {auditLogsDesc.length} event{auditLogsDesc.length === 1 ? "" : "s"}
+              </span>
+            </div>
+            <p className="text-sm text-slate-500 font-normal">Every step in this enquiry — newest first.</p>
+          </CardHeader>
+          <CardContent>
+            {auditQueryError ? (
+              <p className="text-sm text-red-600">Could not load activity log.</p>
+            ) : auditLoading && auditLogsDesc.length === 0 ? (
+              <p className="text-sm text-slate-500">Loading timeline…</p>
+            ) : auditLogsDesc.length === 0 ? (
+              <p className="text-sm text-slate-500">No logged events yet.</p>
+            ) : (
+              <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white">
+                {auditLogsDesc.map((log) => {
+                  const who = log.user?.name?.trim() ? log.user.name : "System";
+                  const role = log.user?.role?.trim() ? log.user.role : "";
+                  const extra = auditPayloadSummary(log.action, log.payload, { hideSlaTimingCopy });
+
+                  const kind =
+                    log.action === "OrderRejected" || log.action === "OrderCancelled"
+                      ? "danger"
+                      : log.action === "OrderTransferred"
+                        ? "transfer"
+                        : log.action === "OrderAccepted" ||
+                            log.action === "OrderCompleted" ||
+                            log.action === "SupervisorHandoffSubmitted" ||
+                            log.action === "ORDERENQUIRYHANDOFFSUBMITTED" ||
+                            log.action === "SAMPLEHEADREQUESTAPPROVED"
+                          ? "success"
+                          : "neutral";
+
+                  const Icon =
+                    kind === "transfer" ? ArrowRightLeft : kind === "danger" ? X : kind === "success" ? Check : CircleDot;
+                  const iconWrap =
+                    kind === "transfer"
+                      ? "bg-slate-100 text-slate-700"
+                      : kind === "danger"
+                        ? "bg-rose-100 text-rose-700"
+                        : kind === "success"
+                          ? "bg-emerald-100 text-emerald-700"
+                          : "bg-slate-100 text-slate-600";
+
+                  return (
+                    <li key={log.id} className="flex items-start gap-3 px-4 py-3">
+                      <span className={`mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${iconWrap}`}>
+                        <Icon className="h-4 w-4" />
+                      </span>
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-slate-900">
+                              {auditActionLabel(log.action, { hideSlaTimingCopy })}
+                            </p>
+                            <p className="mt-0.5 text-xs text-slate-500">
+                              by <span className="font-medium text-slate-700">{who}</span>
+                              {role ? (
+                                <>
+                                  {" · "}
+                                  <span className="font-medium text-slate-600">{role}</span>
+                                </>
+                              ) : null}
+                            </p>
+                          </div>
+                          <time className="shrink-0 text-xs text-slate-400 tabular-nums">
+                            {new Date(log.createdAt).toLocaleString()}
+                          </time>
+                        </div>
+                        {extra ? <p className="mt-2 text-xs text-slate-600">{extra}</p> : null}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
             )}
-            {order.status === "TRANSFERRED" && (
-              <Button onClick={() => receiveMutation.mutate()} disabled={receiveMutation.isPending}>
-                Receive
-              </Button>
-            )}
-            {order.status === "IN_PROGRESS" && (
-              <Button onClick={() => completeMutation.mutate()} disabled={completeMutation.isPending}>
-                Complete
-              </Button>
-            )}
-            <Button variant="outline" onClick={() => setTransferOpen(true)}>Transfer</Button>
-            {canRejectEnquiry && (
-              <Button variant="destructive" onClick={() => setRejectOpen(true)}>Reject</Button>
-            )}
-            {actionError && <p className="w-full text-sm text-red-600">{actionError}</p>}
           </CardContent>
         </Card>
       )}
@@ -1756,148 +1888,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         </DialogContent>
       </Dialog>
 
-      <Dialog open={approveSampleOpen} onOpenChange={setApproveSampleOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Approve sample</DialogTitle>
-            <DialogDescription>
-              This confirms the saved sample details and allows shipment to be recorded next. This step is separate
-              from saving details.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setApproveSampleOpen(false)}>
-              Back
-            </Button>
-            <Button
-              type="button"
-              disabled={sampleMutation.isPending}
-              onClick={() => sampleMutation.mutate({ action: "approve" })}
-            >
-              {sampleMutation.isPending ? "Approving…" : "Confirm approval"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={newDevOpen}
-        onOpenChange={(open) => {
-          setNewDevOpen(open);
-          if (!open) {
-            // leave values for convenience
-          }
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>New development details</DialogTitle>
-            <DialogDescription>
-              Explain why this is new development and what technical information is required. This is visible in the
-              workflow and used for approvals.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label>Why new development? (technical justification)</Label>
-              <textarea
-                value={newDevWhy}
-                onChange={(e) => setNewDevWhy(e.target.value)}
-                placeholder="Why can’t we use an existing sample? What is different/new?"
-                rows={3}
-                className="flex min-h-[84px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] outline-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Technical details / development process</Label>
-              <textarea
-                value={newDevTech}
-                onChange={(e) => setNewDevTech(e.target.value)}
-                placeholder="Materials/spec, construction, tolerances, test requirements, risks, timeline, etc."
-                rows={4}
-                className="flex min-h-[110px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] outline-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Details the team must submit</Label>
-              <textarea
-                value={newDevRequestList}
-                onChange={(e) => setNewDevRequestList(e.target.value)}
-                placeholder="e.g. target shade, finish, reference standards, lab dips, GSM, MOQ, lead time…"
-                rows={3}
-                className="flex min-h-[84px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-ring/50 focus-visible:ring-[3px] outline-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setNewDevOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              disabled={
-                sampleMutation.isPending ||
-                newDevWhy.trim().length < 20 ||
-                newDevTech.trim().length < 20 ||
-                newDevRequestList.trim().length < 10
-              }
-              onClick={() =>
-                sampleMutation.mutate({
-                  action: "setDevelopment",
-                  developmentType: "new",
-                  whyNewDevelopment: newDevWhy.trim(),
-                  technicalDetails: newDevTech.trim(),
-                  requestedDetailsToSubmit: newDevRequestList.trim(),
-                })
-              }
-            >
-              Submit new development details
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={newDevViewOpen} onOpenChange={setNewDevViewOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>New development details</DialogTitle>
-            <DialogDescription>
-              {sampleDevelopmentUpdatedAtLabel ? `Submitted / updated: ${sampleDevelopmentUpdatedAtLabel}` : ""}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2 text-sm">
-            <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Why new development</p>
-              <p className="whitespace-pre-wrap text-slate-800">
-                {typeof sampleDevelopment?.whyNewDevelopment === "string"
-                  ? sampleDevelopment.whyNewDevelopment
-                  : "—"}
-              </p>
-            </div>
-            <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Technical details</p>
-              <p className="whitespace-pre-wrap text-slate-800">
-                {typeof sampleDevelopment?.technicalDetails === "string"
-                  ? sampleDevelopment.technicalDetails
-                  : "—"}
-              </p>
-            </div>
-            <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Details to submit</p>
-              <p className="whitespace-pre-wrap text-slate-800">
-                {typeof sampleDevelopment?.requestedDetailsToSubmit === "string"
-                  ? sampleDevelopment.requestedDetailsToSubmit
-                  : "—"}
-              </p>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setNewDevViewOpen(false)}>
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Sample new-development dialogs removed. */}
 
       <Dialog
         open={cancelOpen}
