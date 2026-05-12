@@ -10,7 +10,7 @@ export async function GET(
 ) {
   const auth = await withAuth();
   if (auth.response) return auth.response;
-  if (!["MANAGER", "SUPER_ADMIN", "MANAGING_DIRECTOR"].includes(auth.payload.role)) {
+  if (!["MANAGER", "DIVISION_HEAD", "SUPER_ADMIN", "MANAGING_DIRECTOR"].includes(auth.payload.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   const id = Number((await params).id);
@@ -28,10 +28,10 @@ export async function GET(
   const supervisors = await prisma.user.findMany({
     where: {
       divisionId: orderRow.currentDivisionId,
-      role: "SUPERVISOR",
+      role: { in: ["SUPERVISOR", "ASM"] },
       active: true,
     },
-    select: { id: true, name: true, email: true },
+    select: { id: true, name: true, email: true, role: true },
     orderBy: { name: "asc" },
   });
   return NextResponse.json({ supervisors });

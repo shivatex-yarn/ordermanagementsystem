@@ -17,7 +17,9 @@ export async function withAuth(): Promise<
 const roleHierarchy: Record<Role, number> = {
   USER: 0,
   SUPERVISOR: 1,
+  ASM: 1,
   MANAGER: 2,
+  DIVISION_HEAD: 2,
   ACCOUNTS: 2,
   MANAGING_DIRECTOR: 3,
   SUPER_ADMIN: 4,

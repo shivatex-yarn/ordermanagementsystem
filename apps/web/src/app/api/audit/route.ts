@@ -52,10 +52,10 @@ export async function GET(req: Request) {
     }
     where.orderId = oid;
   } else {
-    if (!["SUPER_ADMIN", "MANAGING_DIRECTOR", "MANAGER"].includes(role)) {
+    if (!["SUPER_ADMIN", "MANAGING_DIRECTOR", "MANAGER", "DIVISION_HEAD"].includes(role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
-    if (role === "MANAGER" && auth.payload.divisionId) {
+    if ((role === "MANAGER" || role === "DIVISION_HEAD") && auth.payload.divisionId) {
       const orderIds = await prisma.order.findMany({
         where: { currentDivisionId: auth.payload.divisionId },
         select: { id: true },

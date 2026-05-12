@@ -1,8 +1,27 @@
 @import "tailwindcss";
 
+/*
+ * Enquiry Management Application — premium black/white executive design tokens.
+ * Existing slate-based components keep working; new pages use these accents
+ * for SLA breach, approval, rejection, sample, and priority highlights.
+ */
+
 :root {
   --background: #ffffff;
-  --foreground: #0f172a;
+  --foreground: #0a0a0a;
+
+  /* Workflow accent tokens */
+  --enq-ink: #0f172a;             /* primary ink — near-black */
+  --enq-ink-soft: #1f2937;        /* secondary ink */
+  --enq-muted: #64748b;            /* muted slate */
+  --enq-line: #e5e7eb;             /* hairline */
+  --enq-surface: #f8fafc;          /* card backdrop */
+
+  /* Status tones */
+  --enq-success: #047857;
+  --enq-warn: #b45309;
+  --enq-danger: #b91c1c;
+  --enq-info: #1d4ed8;
 }
 
 @theme inline {
@@ -16,4 +35,25 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-feature-settings: "rlig" 1, "calt" 1;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Smooth motion baseline for executive UI */
+* {
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease, box-shadow 160ms ease;
+}
+
+/* Status pill helper classes — used as fallbacks where Tailwind utility composition is verbose. */
+.enq-pill-breached { @apply bg-red-50 text-red-700 ring-1 ring-red-100; }
+.enq-pill-warn     { @apply bg-amber-50 text-amber-700 ring-1 ring-amber-100; }
+.enq-pill-success  { @apply bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100; }
+.enq-pill-info     { @apply bg-blue-50 text-blue-700 ring-1 ring-blue-100; }
+.enq-pill-neutral  { @apply bg-slate-100 text-slate-700 ring-1 ring-slate-100; }
+.enq-pill-strong   { @apply bg-slate-900 text-white; }
+
+/* Subtle card surface used on premium dashboards */
+.enq-card {
+  @apply rounded-xl border border-slate-200/70 bg-white shadow-none ring-1 ring-slate-200/60;
 }

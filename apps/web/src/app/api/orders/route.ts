@@ -65,22 +65,29 @@ export async function GET(req: Request) {
   }
   if (!isAccountsViewer) {
     if (auth.payload.role === "USER") where.createdById = Number(auth.payload.sub);
-    if (auth.payload.role === "MANAGER" || auth.payload.role === "SUPERVISOR") {
-    const userId = Number(auth.payload.sub);
-    const managed = await prisma.divisionManager.findMany({
-      where: { userId },
-      select: { divisionId: true },
-    });
-    const accessibleDivisionIds = Array.from(
-      new Set([auth.payload.divisionId ?? null, ...managed.map((m) => m.divisionId)].filter((v): v is number => typeof v === "number"))
-    );
-    if (accessibleDivisionIds.length > 0) {
-      // Only list enquiries for divisions the manager/supervisor is mapped to.
-      where.currentDivisionId = { in: accessibleDivisionIds };
-    } else {
-      // No division mapping → no enquiries.
-      where.currentDivisionId = -1;
-    }
+    if (
+      auth.payload.role === "MANAGER" ||
+      auth.payload.role === "SUPERVISOR" ||
+      auth.payload.role === "DIVISION_HEAD" ||
+      auth.payload.role === "ASM"
+    ) {
+      const userId = Number(auth.payload.sub);
+      const managed = await prisma.divisionManager.findMany({
+        where: { userId },
+        select: { divisionId: true },
+      });
+      const accessibleDivisionIds = Array.from(
+        new Set(
+          [auth.payload.divisionId ?? null, ...managed.map((m) => m.divisionId)].filter(
+            (v): v is number => typeof v === "number"
+          )
+        )
+      );
+      if (accessibleDivisionIds.length > 0) {
+        where.currentDivisionId = { in: accessibleDivisionIds };
+      } else {
+        where.currentDivisionId = -1;
+      }
     }
   }
   // SUPER_ADMIN and MANAGING_DIRECTOR see all (no extra filter)

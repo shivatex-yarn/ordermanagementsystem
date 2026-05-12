@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { userCanViewOrder } from "@/lib/order-view-permission";
 import { withAuth } from "@/lib/with-auth";
+import { canViewCustomerFeedback } from "@/lib/roles";
 
 const fullInclude = {
   createdBy: { select: { id: true, name: true, email: true } },
@@ -140,7 +141,13 @@ export async function GET(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  return NextResponse.json(order);
+  // Spec: customer feedback visible only to Division Head + higher mgmt. Strip for others.
+  const canSeeFeedback =
+    canViewCustomerFeedback(auth.payload.role) || order.createdById === Number(auth.payload.sub);
+  const responseBody = canSeeFeedback
+    ? order
+    : { ...order, customerFeedback: null, customerFeedbackAt: null };
+  return NextResponse.json(responseBody);
 }
 
 export async function PATCH() {

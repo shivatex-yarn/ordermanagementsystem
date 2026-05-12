@@ -7,7 +7,7 @@ export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await withRole(["MANAGER", "SUPER_ADMIN"]);
+  const auth = await withRole(["MANAGER", "DIVISION_HEAD", "SUPER_ADMIN"]);
   if (auth.response) return auth.response;
 
   const id = Number((await params).id);
