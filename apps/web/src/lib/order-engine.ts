@@ -113,6 +113,7 @@ export async function createOrder(
   }
 ) {
   const orderNumber = `Enq-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  const customerId = `CUS-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
   const slaDeadline = computeSlaDeadline(new Date());
   const sampleRequested = Boolean(data.sampleRequested);
   const parsedCustomerOrderDate = data.customerOrderDate ? new Date(data.customerOrderDate) : null;
@@ -129,6 +130,7 @@ export async function createOrder(
       createdById,
       currentDivisionId: divisionId,
       slaDeadline,
+      customerId,
       customerName: data.customerName?.trim() || null,
       customerPhone: data.customerPhone?.trim() || null,
       gstNumber: data.gstNumber?.trim() || null,

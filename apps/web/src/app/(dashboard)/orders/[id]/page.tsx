@@ -147,6 +147,7 @@ type OrderDetail = {
   }>;
   slaBreaches?: unknown;
   // Customer identity fields
+  customerId?: string | null;
   customerName?: string | null;
   customerPhone?: string | null;
   gstNumber?: string | null;
@@ -477,6 +478,31 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [feedbackRemarks, setFeedbackRemarks] = useState("");
   const [feedbackReceivedDate, setFeedbackReceivedDate] = useState("");
   const [sampleError, setSampleError] = useState("");
+
+  // Salesperson edit state
+  const [editingEnquiry, setEditingEnquiry] = useState(false);
+  const [editCustomerName, setEditCustomerName] = useState("");
+  const [editCustomerPhone, setEditCustomerPhone] = useState("");
+  const [editGstNumber, setEditGstNumber] = useState("");
+  const [editGstCopyUrl, setEditGstCopyUrl] = useState("");
+  const [editCompanyName, setEditCompanyName] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editCustomerOrderDate, setEditCustomerOrderDate] = useState("");
+  const [editEnquiryError, setEditEnquiryError] = useState("");
+  const [editEnquirySaving, setEditEnquirySaving] = useState(false);
+
+  // Supervisor sample edit state
+  const [editingSample, setEditingSample] = useState(false);
+  const [editSampleDetails, setEditSampleDetails] = useState("");
+  const [editSampleQuantity, setEditSampleQuantity] = useState("");
+  const [editSampleWeight, setEditSampleWeight] = useState("");
+  const [editSampleRemarks, setEditSampleRemarks] = useState("");
+  const [editSampleDeliveryDate, setEditSampleDeliveryDate] = useState("");
+  const [editCourierName, setEditCourierName] = useState("");
+  const [editTrackingId, setEditTrackingId] = useState("");
+  const [editSampleByCourier, setEditSampleByCourier] = useState(true);
+  const [editSampleError, setEditSampleError] = useState("");
+  const [editSampleSaving, setEditSampleSaving] = useState(false);
   const [approveSampleOpen, setApproveSampleOpen] = useState(false);
   const [sampleDevType, setSampleDevType] = useState<"existing" | "new">("existing");
   const [sampleExistingRef, setSampleExistingRef] = useState("");
@@ -1114,46 +1140,157 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             </span>
           </div>
           <div className="divide-y divide-slate-100">
-          {/* Customer identity fields */}
-          {(order.customerName || order.customerPhone || order.gstNumber || order.customerOrderDate) ? (
-            <div className="bg-blue-50/40 px-5 py-3 border-b border-blue-100">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-blue-700">Customer details</p>
-              <div className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
-                {order.customerName ? (
-                  <p className="flex flex-col">
-                    <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Customer name</span>
-                    <span className="text-sm font-medium text-slate-800">{order.customerName}</span>
-                  </p>
-                ) : null}
-                {order.customerPhone ? (
-                  <p className="flex flex-col">
-                    <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Phone</span>
-                    <span className="text-sm font-medium text-slate-800">{order.customerPhone}</span>
-                  </p>
-                ) : null}
-                {order.gstNumber ? (
-                  <p className="flex flex-col">
-                    <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">GST number</span>
-                    <span className="font-mono text-sm font-medium text-slate-800">{order.gstNumber}</span>
-                  </p>
-                ) : null}
-                {order.customerOrderDate ? (
-                  <p className="flex flex-col">
-                    <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Customer order date</span>
-                    <span className="text-sm font-medium text-slate-800">{new Date(order.customerOrderDate).toLocaleDateString()}</span>
-                  </p>
-                ) : null}
-                {order.gstCopyUrl ? (
-                  <p className="flex flex-col sm:col-span-2">
-                    <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">GST certificate</span>
-                    <a href={order.gstCopyUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-blue-600 underline underline-offset-2">
-                      View GST certificate ↗
-                    </a>
-                  </p>
-                ) : null}
+          {/* Customer identity fields — editable by salesperson while PLACED */}
+          {(() => {
+            const canEditEnquiry =
+              showInteractiveUi &&
+              user &&
+              ["USER", "SUPERVISOR", "ASM"].includes(user.role) &&
+              order.createdById === user.id &&
+              order.status === "PLACED";
+
+            const openEdit = () => {
+              setEditCustomerName(order.customerName ?? "");
+              setEditCustomerPhone(order.customerPhone ?? "");
+              setEditGstNumber(order.gstNumber ?? "");
+              setEditGstCopyUrl(order.gstCopyUrl ?? "");
+              setEditCompanyName(order.companyName ?? "");
+              setEditDescription(order.description ?? "");
+              setEditCustomerOrderDate(
+                order.customerOrderDate
+                  ? new Date(order.customerOrderDate).toISOString().split("T")[0]
+                  : ""
+              );
+              setEditEnquiryError("");
+              setEditingEnquiry(true);
+            };
+
+            const saveEdit = async () => {
+              setEditEnquirySaving(true);
+              setEditEnquiryError("");
+              try {
+                const res = await fetch(`/api/orders/${orderId}`, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  credentials: "include",
+                  body: JSON.stringify({
+                    customerName: editCustomerName,
+                    customerPhone: editCustomerPhone,
+                    gstNumber: editGstNumber,
+                    gstCopyUrl: editGstCopyUrl,
+                    companyName: editCompanyName,
+                    description: editDescription,
+                    customerOrderDate: editCustomerOrderDate,
+                  }),
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || "Save failed");
+                setEditingEnquiry(false);
+                queryClient.invalidateQueries({ queryKey: ["order", orderId] });
+              } catch (e) {
+                setEditEnquiryError(e instanceof Error ? e.message : "Save failed");
+              } finally {
+                setEditEnquirySaving(false);
+              }
+            };
+
+            return (
+              <div className="bg-blue-50/40 px-5 py-3.5 border-b border-blue-100">
+                <div className="mb-2 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-blue-700">Customer details</p>
+                    {order.customerId && (
+                      <p className="text-[10px] font-mono text-blue-500 mt-0.5">{order.customerId}</p>
+                    )}
+                  </div>
+                  {canEditEnquiry && !editingEnquiry && (
+                    <button
+                      type="button"
+                      onClick={openEdit}
+                      className="text-xs font-medium text-blue-600 hover:text-blue-800 underline underline-offset-2"
+                    >
+                      Edit
+                    </button>
+                  )}
+                </div>
+
+                {editingEnquiry ? (
+                  <div className="space-y-3">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Customer name</label>
+                        <input value={editCustomerName} onChange={(e) => setEditCustomerName(e.target.value)} className="flex h-8 w-full rounded border border-slate-200 bg-white px-2.5 text-sm" />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Phone</label>
+                        <input value={editCustomerPhone} onChange={(e) => setEditCustomerPhone(e.target.value)} className="flex h-8 w-full rounded border border-slate-200 bg-white px-2.5 text-sm" />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">GST number</label>
+                        <input value={editGstNumber} onChange={(e) => setEditGstNumber(e.target.value.toUpperCase())} className="flex h-8 w-full rounded border border-slate-200 bg-white px-2.5 font-mono text-sm" />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Customer order date</label>
+                        <input type="date" value={editCustomerOrderDate} onChange={(e) => setEditCustomerOrderDate(e.target.value)} className="flex h-8 w-full rounded border border-slate-200 bg-white px-2.5 text-sm" />
+                      </div>
+                      <div className="space-y-1 sm:col-span-2">
+                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Company name</label>
+                        <input value={editCompanyName} onChange={(e) => setEditCompanyName(e.target.value)} className="flex h-8 w-full rounded border border-slate-200 bg-white px-2.5 text-sm" />
+                      </div>
+                      <div className="space-y-1 sm:col-span-2">
+                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Product description</label>
+                        <input value={editDescription} onChange={(e) => setEditDescription(e.target.value)} className="flex h-8 w-full rounded border border-slate-200 bg-white px-2.5 text-sm" />
+                      </div>
+                    </div>
+                    {editEnquiryError && <p className="text-xs text-red-600">{editEnquiryError}</p>}
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => void saveEdit()} disabled={editEnquirySaving} className="rounded bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700 disabled:opacity-60">
+                        {editEnquirySaving ? "Saving…" : "Save changes"}
+                      </button>
+                      <button type="button" onClick={() => setEditingEnquiry(false)} className="rounded border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50">
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
+                    {order.customerName ? (
+                      <p className="flex flex-col">
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Customer name</span>
+                        <span className="text-sm font-medium text-slate-800">{order.customerName}</span>
+                      </p>
+                    ) : null}
+                    {order.customerPhone ? (
+                      <p className="flex flex-col">
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Phone</span>
+                        <span className="text-sm font-medium text-slate-800">{order.customerPhone}</span>
+                      </p>
+                    ) : null}
+                    {order.gstNumber ? (
+                      <p className="flex flex-col">
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">GST number</span>
+                        <span className="font-mono text-sm font-medium text-slate-800">{order.gstNumber}</span>
+                      </p>
+                    ) : null}
+                    {order.customerOrderDate ? (
+                      <p className="flex flex-col">
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Customer order date</span>
+                        <span className="text-sm font-medium text-slate-800">{new Date(order.customerOrderDate).toLocaleDateString()}</span>
+                      </p>
+                    ) : null}
+                    {order.gstCopyUrl ? (
+                      <p className="flex flex-col sm:col-span-2">
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">GST certificate</span>
+                        <a href={order.gstCopyUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-blue-600 underline underline-offset-2">
+                          View GST certificate ↗
+                        </a>
+                      </p>
+                    ) : null}
+                  </div>
+                )}
               </div>
-            </div>
-          ) : null}
+            );
+          })()}
           <p className="flex flex-col gap-0.5 px-5 py-3.5 sm:flex-row sm:items-baseline sm:gap-3">
             <span className="min-w-[10rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">Company name</span>
             <span className="text-sm font-semibold text-slate-900">
@@ -1703,22 +1840,119 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 )}
               </div>
             )}
-            {canSeeSampleDetails && (order.sampleDetails || order.sampleQuantity || order.sampleWeight) && (
-              <div className="rounded-lg border border-slate-100 bg-slate-50/80 p-3 space-y-1">
-                {order.sampleDetails && (
-                  <p>
-                    <span className="text-slate-500">Sample details:</span> {order.sampleDetails}
-                  </p>
-                )}
-                {order.sampleQuantity && (
-                  <p>
-                    <span className="text-slate-500">Quantity:</span> {order.sampleQuantity}
-                  </p>
-                )}
-                {order.sampleWeight && (
-                  <p>
-                    <span className="text-slate-500">Weight:</span> {order.sampleWeight}
-                  </p>
+            {canSeeSampleDetails && (order.sampleDetails || order.sampleQuantity || order.sampleWeight || order.sampleRemarks || order.sampleDeliveryDate) && (
+              <div className="rounded-lg border border-slate-100 bg-slate-50/80 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Sample details</p>
+                  {showInteractiveUi && assignedSupervisorMe && !editingSample && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditSampleDetails(order.sampleDetails ?? "");
+                        setEditSampleQuantity(order.sampleQuantity ?? "");
+                        setEditSampleWeight(order.sampleWeight ?? "");
+                        setEditSampleRemarks((order as { sampleRemarks?: string | null }).sampleRemarks ?? "");
+                        setEditCourierName(order.courierName ?? "");
+                        setEditTrackingId(order.trackingId ?? "");
+                        setEditSampleByCourier(order.sampleShippedByCourier ?? true);
+                        setEditSampleDeliveryDate(
+                          (order as { sampleDeliveryDate?: string | null }).sampleDeliveryDate
+                            ? new Date((order as { sampleDeliveryDate: string }).sampleDeliveryDate).toISOString().split("T")[0]
+                            : ""
+                        );
+                        setEditSampleError("");
+                        setEditingSample(true);
+                      }}
+                      className="text-xs font-medium text-blue-600 hover:text-blue-800 underline underline-offset-2"
+                    >
+                      Edit
+                    </button>
+                  )}
+                </div>
+                {editingSample ? (
+                  <div className="space-y-2">
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <div className="space-y-1 sm:col-span-2">
+                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Sample details</label>
+                        <textarea value={editSampleDetails} onChange={(e) => setEditSampleDetails(e.target.value)} rows={2} className="flex w-full rounded border border-slate-200 bg-white px-2.5 py-1.5 text-sm" />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Quantity</label>
+                        <input value={editSampleQuantity} onChange={(e) => setEditSampleQuantity(e.target.value)} className="flex h-8 w-full rounded border border-slate-200 bg-white px-2.5 text-sm" />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Weight</label>
+                        <input value={editSampleWeight} onChange={(e) => setEditSampleWeight(e.target.value)} className="flex h-8 w-full rounded border border-slate-200 bg-white px-2.5 text-sm" />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Delivery date</label>
+                        <input type="date" value={editSampleDeliveryDate} onChange={(e) => setEditSampleDeliveryDate(e.target.value)} className="flex h-8 w-full rounded border border-slate-200 bg-white px-2.5 text-sm" />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Courier name</label>
+                        <input value={editCourierName} onChange={(e) => setEditCourierName(e.target.value)} className="flex h-8 w-full rounded border border-slate-200 bg-white px-2.5 text-sm" />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Tracking ID</label>
+                        <input value={editTrackingId} onChange={(e) => setEditTrackingId(e.target.value)} className="flex h-8 w-full rounded border border-slate-200 bg-white px-2.5 text-sm" />
+                      </div>
+                      <div className="space-y-1 sm:col-span-2">
+                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Remarks</label>
+                        <input value={editSampleRemarks} onChange={(e) => setEditSampleRemarks(e.target.value)} className="flex h-8 w-full rounded border border-slate-200 bg-white px-2.5 text-sm" />
+                      </div>
+                    </div>
+                    {editSampleError && <p className="text-xs text-red-600">{editSampleError}</p>}
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        disabled={editSampleSaving}
+                        onClick={async () => {
+                          setEditSampleSaving(true);
+                          setEditSampleError("");
+                          try {
+                            const res = await fetch(`/api/orders/${orderId}`, {
+                              method: "PATCH",
+                              headers: { "Content-Type": "application/json" },
+                              credentials: "include",
+                              body: JSON.stringify({
+                                sampleDetails: editSampleDetails,
+                                sampleQuantity: editSampleQuantity,
+                                sampleWeight: editSampleWeight,
+                                sampleRemarks: editSampleRemarks,
+                                sampleDeliveryDate: editSampleDeliveryDate,
+                                courierName: editCourierName,
+                                trackingId: editTrackingId,
+                                sampleShippedByCourier: editSampleByCourier,
+                              }),
+                            });
+                            const data = await res.json();
+                            if (!res.ok) throw new Error(data.error || "Save failed");
+                            setEditingSample(false);
+                            queryClient.invalidateQueries({ queryKey: ["order", orderId] });
+                          } catch (e) {
+                            setEditSampleError(e instanceof Error ? e.message : "Save failed");
+                          } finally {
+                            setEditSampleSaving(false);
+                          }
+                        }}
+                        className="rounded bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700 disabled:opacity-60"
+                      >
+                        {editSampleSaving ? "Saving…" : "Save changes"}
+                      </button>
+                      <button type="button" onClick={() => setEditingSample(false)} className="rounded border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50">
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-1 text-sm">
+                    {order.sampleDetails && <p><span className="text-slate-500">Details:</span> {order.sampleDetails}</p>}
+                    {order.sampleQuantity && <p><span className="text-slate-500">Quantity:</span> {order.sampleQuantity}</p>}
+                    {order.sampleWeight && <p><span className="text-slate-500">Weight:</span> {order.sampleWeight}</p>}
+                    {(order as { sampleDeliveryDate?: string | null }).sampleDeliveryDate && <p><span className="text-slate-500">Delivery date:</span> {new Date((order as { sampleDeliveryDate: string }).sampleDeliveryDate).toLocaleDateString()}</p>}
+                    {(order as { sampleRemarks?: string | null }).sampleRemarks && <p><span className="text-slate-500">Remarks:</span> {(order as { sampleRemarks: string }).sampleRemarks}</p>}
+                    {order.courierName && <p><span className="text-slate-500">Courier:</span> {order.courierName}{order.trackingId ? ` · ${order.trackingId}` : ""}</p>}
+                  </div>
                 )}
               </div>
             )}

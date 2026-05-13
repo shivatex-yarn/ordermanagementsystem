@@ -150,12 +150,115 @@ export async function GET(
   return NextResponse.json(responseBody);
 }
 
-export async function PATCH() {
-  return NextResponse.json(
-    {
-      error:
-        "Enquiries cannot be edited. If you need to correct details before the division acts, cancel this enquiry (withdraw) with a reason and submit a new one.",
+/**
+ * PATCH /api/orders/[id]
+ *
+ * Role-based field editing:
+ *  • Salesperson (creator, USER/ASM/SUPERVISOR)  → customer & product fields (while PLACED)
+ *  • Division Head (MANAGER/DIVISION_HEAD)       → handoff / acceptance details (while IN_PROGRESS)
+ *  • Supervisor (assignedSupervisorId)           → sample details (any non-closed status)
+ */
+export async function PATCH(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const auth = await withAuth();
+  if (auth.response) return auth.response;
+
+  const { id } = await params;
+  const orderId = Number(id);
+  if (!Number.isInteger(orderId) || orderId < 1) {
+    return NextResponse.json({ error: "Invalid id" }, { status: 400 });
+  }
+
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: {
+      id: true,
+      status: true,
+      createdById: true,
+      currentDivisionId: true,
+      assignedSupervisorId: true,
     },
-    { status: 403 }
-  );
+  });
+  if (!order) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  const userId = Number(auth.payload.sub);
+  const role = auth.payload.role;
+  const closed = ["REJECTED", "CANCELLED", "COMPLETED"].includes(order.status);
+  if (closed) return NextResponse.json({ error: "Enquiry is closed" }, { status: 400 });
+
+  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+  const str = (v: unknown) => (typeof v === "string" ? v.trim() : undefined);
+
+  // ── Salesperson: edit customer & product fields while PLACED ──────────────
+  if (["USER", "SUPERVISOR", "ASM"].includes(role) && order.createdById === userId) {
+    if (order.status !== "PLACED") {
+      return NextResponse.json(
+        { error: "You can only edit enquiry details before the Division Head acts on it." },
+        { status: 400 }
+      );
+    }
+    const data: Record<string, unknown> = {};
+    if (str(body.customerName) !== undefined) data.customerName = str(body.customerName) || null;
+    if (str(body.customerPhone) !== undefined) data.customerPhone = str(body.customerPhone) || null;
+    if (str(body.gstNumber) !== undefined) data.gstNumber = str(body.gstNumber)?.toUpperCase() || null;
+    if (str(body.gstCopyUrl) !== undefined) data.gstCopyUrl = str(body.gstCopyUrl) || null;
+    if (str(body.companyName) !== undefined) data.companyName = str(body.companyName) || null;
+    if (str(body.description) !== undefined) data.description = str(body.description) || null;
+    if (str(body.customerOrderDate) !== undefined) {
+      const d = body.customerOrderDate ? new Date(String(body.customerOrderDate)) : null;
+      data.customerOrderDate = d && !isNaN(d.getTime()) ? d : null;
+    }
+    if (Object.keys(data).length === 0) {
+      return NextResponse.json({ error: "No editable fields provided" }, { status: 400 });
+    }
+    const updated = await prisma.order.update({ where: { id: orderId }, data });
+    return NextResponse.json({ ok: true, order: updated });
+  }
+
+  // ── Division Head: edit handoff / notes ───────────────────────────────────
+  if (["MANAGER", "DIVISION_HEAD"].includes(role)) {
+    const managed = await prisma.divisionManager.findFirst({
+      where: { userId, divisionId: order.currentDivisionId },
+    });
+    const adminBypass = ["SUPER_ADMIN", "MANAGING_DIRECTOR"].includes(role);
+    if (!managed && !adminBypass) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+    const data: Record<string, unknown> = {};
+    if (str(body.acceptanceReason) !== undefined) data.acceptanceReason = str(body.acceptanceReason) || null;
+    if (body.enquiryHandoff !== undefined && typeof body.enquiryHandoff === "object") {
+      const existing = (await prisma.order.findUnique({ where: { id: orderId }, select: { enquiryHandoff: true } }))?.enquiryHandoff as Record<string, unknown> | null ?? {};
+      data.enquiryHandoff = { ...existing, ...(body.enquiryHandoff as Record<string, unknown>) };
+    }
+    if (Object.keys(data).length === 0) {
+      return NextResponse.json({ error: "No editable fields provided" }, { status: 400 });
+    }
+    const updated = await prisma.order.update({ where: { id: orderId }, data });
+    return NextResponse.json({ ok: true, order: updated });
+  }
+
+  // ── Supervisor / ASM: edit sample details ────────────────────────────────
+  if (["SUPERVISOR", "ASM"].includes(role) && order.assignedSupervisorId === userId) {
+    const data: Record<string, unknown> = {};
+    if (str(body.sampleDetails) !== undefined) data.sampleDetails = str(body.sampleDetails) || null;
+    if (str(body.sampleQuantity) !== undefined) data.sampleQuantity = str(body.sampleQuantity) || null;
+    if (str(body.sampleWeight) !== undefined) data.sampleWeight = str(body.sampleWeight) || null;
+    if (str(body.sampleRemarks) !== undefined) data.sampleRemarks = str(body.sampleRemarks) || null;
+    if (str(body.courierName) !== undefined) data.courierName = str(body.courierName) || null;
+    if (str(body.trackingId) !== undefined) data.trackingId = str(body.trackingId) || null;
+    if (typeof body.sampleShippedByCourier === "boolean") data.sampleShippedByCourier = body.sampleShippedByCourier;
+    if (str(body.sampleDeliveryDate) !== undefined) {
+      const d = body.sampleDeliveryDate ? new Date(String(body.sampleDeliveryDate)) : null;
+      data.sampleDeliveryDate = d && !isNaN(d.getTime()) ? d : null;
+    }
+    if (Object.keys(data).length === 0) {
+      return NextResponse.json({ error: "No editable fields provided" }, { status: 400 });
+    }
+    const updated = await prisma.order.update({ where: { id: orderId }, data });
+    return NextResponse.json({ ok: true, order: updated });
+  }
+
+  return NextResponse.json({ error: "You do not have permission to edit this enquiry." }, { status: 403 });
 }
