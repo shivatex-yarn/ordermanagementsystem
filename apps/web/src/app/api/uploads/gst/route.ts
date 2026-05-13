@@ -1,10 +1,17 @@
 import { NextResponse } from "next/server";
 import { withAuth } from "@/lib/with-auth";
 import { userMayCreateEnquiry } from "@/lib/enquiry-access";
-import { put } from "@vercel/blob";
 import path from "path";
 
 export const runtime = "nodejs";
+
+const MIME_MAP: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".pdf": "application/pdf",
+};
 
 export async function POST(req: Request) {
   try {
@@ -34,18 +41,19 @@ export async function POST(req: Request) {
       .replace(/[^a-zA-Z0-9._-]+/g, "_")
       .slice(0, 80);
     const ext = path.extname(safeName).toLowerCase();
-    const allowed = new Set([".png", ".jpg", ".jpeg", ".webp", ".pdf"]);
-    if (!allowed.has(ext)) {
+    if (!MIME_MAP[ext]) {
       return NextResponse.json(
         { error: "Unsupported file type. Allowed: PDF, JPG, PNG" },
         { status: 400 }
       );
     }
 
-    const filename = `gst-${Date.now()}-${Math.random().toString(36).slice(2, 7)}${ext}`;
-    const blob = await put(`gst/${filename}`, file, { access: "public" });
+    const buf = await file.arrayBuffer();
+    const base64 = Buffer.from(buf).toString("base64");
+    const dataUrl = `data:${MIME_MAP[ext]};base64,${base64}`;
 
-    return NextResponse.json({ url: blob.url, name: file.name });
+    // Stored as JSON in the DB: { url: "<data URI>", name: "<original filename>" }
+    return NextResponse.json({ url: dataUrl, name: file.name });
   } catch (err) {
     console.error("[GST upload]", err);
     return NextResponse.json({ error: "Upload failed. Please try again." }, { status: 500 });

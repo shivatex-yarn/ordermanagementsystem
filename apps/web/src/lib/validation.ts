@@ -48,7 +48,7 @@ export const createOrderSchema = z.object({
   customerName: z.string().min(1, "Customer name is required").max(500),
   customerPhone: z.string().min(7, "Phone number is required").max(20),
   gstNumber: z.string().min(1, "GST number is required").max(50),
-  gstCopyUrl: z.string().min(1, "GST certificate upload is required").max(500),
+  gstCopyUrl: z.string().min(1, "GST certificate upload is required").max(8_000_000),
   customerOrderDate: z.string().min(1, "Customer order date is required"),
 });
 
