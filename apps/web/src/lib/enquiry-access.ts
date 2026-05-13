@@ -1,5 +1,5 @@
-/** Who may raise a new enquiry (sales-side roles only). Division heads handle them; they do not open new ones here. */
-export const ENQUIRY_CREATOR_ROLES = ["USER", "SUPERVISOR", "ASM"] as const;
+/** Who may raise a new enquiry (sales-side roles only). Division heads and supervisors handle them; they do not open new ones. */
+export const ENQUIRY_CREATOR_ROLES = ["USER", "ASM"] as const;
 
 export type EnquiryCreatorRole = (typeof ENQUIRY_CREATOR_ROLES)[number];
 
