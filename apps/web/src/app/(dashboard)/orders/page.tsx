@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Download } from "lucide-react";
+import { Plus, Download, Package } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import type { EnquiryPeriodFilter } from "@/lib/date-period";
 import { PERIOD_LABELS } from "@/lib/date-period";
@@ -88,10 +88,13 @@ export default function OrdersPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">Enquiries</h1>
+        <div>
+          <h1 className="text-xl font-bold tracking-tight text-slate-900">Enquiries</h1>
+          <p className="mt-0.5 text-sm text-slate-500">All enquiries across your divisions.</p>
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-2">
-            <span className="text-sm text-slate-600">Period</span>
+            <span className="text-xs font-medium text-slate-500">Period</span>
             <Select
               value={period || "all"}
               onValueChange={(v) => {
@@ -155,17 +158,38 @@ export default function OrdersPage() {
           )}
         </div>
       </div>
-      <Card>
-        <CardHeader>
-          <CardTitle>All enquiries</CardTitle>
+      <Card className="overflow-hidden border border-slate-200 shadow-sm">
+        <CardHeader className="border-b border-slate-100 bg-slate-50 px-5 py-4">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm font-semibold text-slate-800">All enquiries</CardTitle>
+            {data?.total ? (
+              <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
+                {data.total} total
+              </span>
+            ) : null}
+          </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-0">
           {isLoading ? (
-            <div className="py-8 text-center text-slate-500">Loading...</div>
+            <div className="divide-y divide-slate-100">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="flex items-center gap-4 px-5 py-4">
+                  <div className="h-8 w-1 animate-pulse rounded-full bg-slate-200" />
+                  <div className="flex-1 space-y-1.5">
+                    <div className="h-3.5 w-36 animate-pulse rounded bg-slate-100" />
+                    <div className="h-3 w-56 animate-pulse rounded bg-slate-100" />
+                  </div>
+                  <div className="h-5 w-20 animate-pulse rounded-full bg-slate-100" />
+                </div>
+              ))}
+            </div>
           ) : !data?.orders?.length ? (
-            <div className="py-8 text-center text-slate-500">No enquiries yet.</div>
+            <div className="flex flex-col items-center gap-2 py-16 text-center">
+              <Package className="h-8 w-8 text-slate-300" />
+              <p className="text-sm text-slate-500">No enquiries yet.</p>
+            </div>
           ) : (
-            <div className="space-y-4">
+            <div className="divide-y divide-slate-100">
               {data.orders.map(
                 (order: {
                   id: number;
@@ -174,68 +198,60 @@ export default function OrdersPage() {
                   currentDivision: { name: string };
                   createdAt: string;
                   createdBy?: { name: string; email: string };
-                }) => (
-                  <Link
-                    key={order.id}
-                    href={`/orders/${order.id}`}
-                    className="flex flex-col gap-3 rounded-lg border-2 border-slate-300/70 p-4 shadow-sm transition-colors hover:border-indigo-300/60 hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
-                  >
-                    <div>
-                      <p className="inline-flex max-w-full flex-wrap items-center gap-2">
-                        <span className="rounded-md border-2 border-indigo-400/70 bg-indigo-50 px-2 py-0.5 font-mono text-sm font-semibold text-indigo-950 ring-1 ring-indigo-200/70">
-                          {formatEnquiryNumber(order.orderNumber)}
-                        </span>
-                      </p>
-                      <p className="text-sm text-slate-500">
-                        {order.createdBy?.name ? (
-                          <>
-                            <span className="text-slate-500">Raised by </span>
-                            <span className="inline-block rounded-md bg-indigo-50 px-2 py-0.5 font-semibold text-indigo-950 ring-1 ring-indigo-200/70">
-                              {order.createdBy.name}
-                            </span>
-                            <span className="text-slate-500">
-                              {" "}
-                              ·{" "}
-                              <time dateTime={order.createdAt} suppressHydrationWarning>
-                                {new Date(order.createdAt).toLocaleString()}
-                              </time>
-                            </span>
-                          </>
-                        ) : (
+                }) => {
+                  const statusBar: Record<string, string> = {
+                    PLACED: "bg-slate-400",
+                    IN_PROGRESS: "bg-slate-700",
+                    TRANSFERRED: "bg-slate-500",
+                    REJECTED: "bg-slate-900",
+                    COMPLETED: "bg-slate-600",
+                    CANCELLED: "bg-slate-300",
+                  };
+                  return (
+                    <Link
+                      key={order.id}
+                      href={`/orders/${order.id}`}
+                      className="group flex items-center gap-4 px-5 py-4 transition-colors hover:bg-slate-50"
+                    >
+                      <div className={`h-9 w-1 shrink-0 rounded-full ${statusBar[order.status] ?? "bg-slate-300"}`} />
+                      <div className="min-w-0 flex-1">
+                        <p className="flex flex-wrap items-center gap-2">
+                          <span className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-xs font-semibold text-slate-800">
+                            {formatEnquiryNumber(order.orderNumber)}
+                          </span>
+                          {!hideDivision && order.currentDivision?.name ? (
+                            <span className="text-xs text-slate-400">{order.currentDivision.name}</span>
+                          ) : null}
+                        </p>
+                        <p className="mt-0.5 truncate text-xs text-slate-500">
+                          {order.createdBy?.name ? (
+                            <span className="font-medium text-slate-600">{order.createdBy.name} · </span>
+                          ) : null}
                           <time dateTime={order.createdAt} suppressHydrationWarning>
                             {new Date(order.createdAt).toLocaleString()}
                           </time>
-                        )}
-                        {!hideDivision ? (
-                          <>
-                            {" "}
-                            · {order.currentDivision?.name}
-                          </>
-                        ) : null}
-                      </p>
-                    </div>
-                    <Badge variant={statusVariant[order.status] ?? "secondary"}>
-                      {order.status.replace("_", " ")}
-                    </Badge>
-                  </Link>
-                )
+                        </p>
+                      </div>
+                      <Badge variant={statusVariant[order.status] ?? "secondary"} className="shrink-0 text-[11px]">
+                        {order.status.replace("_", " ")}
+                      </Badge>
+                    </Link>
+                  );
+                }
               )}
               {data.total > data.limit && (
-                <div className="flex justify-center items-center gap-2 pt-4">
-                  <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-                    Previous
-                  </Button>
-                  <span className="text-sm text-slate-600 px-2">
-                    Page {page} of {Math.max(1, Math.ceil(data.total / data.limit))}
+                <div className="flex items-center justify-between bg-slate-50 px-5 py-3">
+                  <span className="text-xs text-slate-500">
+                    Page {page} of {Math.max(1, Math.ceil(data.total / data.limit))} · {data.total} total
                   </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={page * data.limit >= data.total}
-                    onClick={() => setPage((p) => p + 1)}
-                  >
-                    Next
-                  </Button>
+                  <div className="flex gap-1.5">
+                    <Button variant="outline" size="sm" className="h-7 text-xs" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+                      Previous
+                    </Button>
+                    <Button variant="outline" size="sm" className="h-7 text-xs" disabled={page * data.limit >= data.total} onClick={() => setPage((p) => p + 1)}>
+                      Next
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>

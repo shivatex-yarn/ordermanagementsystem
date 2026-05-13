@@ -237,23 +237,29 @@ export default function DashboardPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-slate-500 mt-1">
-          Welcome back, {user?.name}. Here&apos;s an overview of your enquiries{isAccountsView ? "." : " and SLA."}
+        <h1 className="text-xl font-bold tracking-tight text-slate-900">Dashboard</h1>
+        <p className="mt-1 text-sm text-slate-500">
+          Overview of enquiries{isAccountsView ? "" : " and SLA performance"}.
         </p>
       </div>
 
-      <div className="grid gap-6 sm:grid-cols-2 md:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
         {metricCards.map((card) => {
           const Icon = card.icon;
+          const isAlert = "alert" in card && card.alert;
           return (
-            <Card key={card.title} className={"alert" in card && card.alert ? "border-amber-200" : ""}>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-slate-500">{card.title}</CardTitle>
-                <Icon className="h-4 w-4 text-slate-500" />
+            <Card key={card.title} className={`overflow-hidden border shadow-sm ${isAlert ? "border-slate-300" : "border-slate-200"} bg-white`}>
+              <CardHeader className="flex flex-row items-center justify-between pb-2 pt-5 px-5">
+                <CardTitle className="text-xs font-semibold uppercase tracking-wide text-slate-500">{card.title}</CardTitle>
+                <div className={`rounded-md p-1.5 ${isAlert ? "bg-slate-900" : "bg-slate-100"}`}>
+                  <Icon className={`h-3.5 w-3.5 ${isAlert ? "text-white" : "text-slate-500"}`} />
+                </div>
               </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{card.value}</div>
+              <CardContent className="px-5 pb-5">
+                <div className="text-3xl font-bold tabular-nums text-slate-900">{card.value}</div>
+                {isAlert && (card.value as number) > 0 ? (
+                  <p className="mt-1 text-xs font-medium text-slate-500">Requires attention</p>
+                ) : null}
               </CardContent>
             </Card>
           );
@@ -363,18 +369,30 @@ export default function DashboardPage() {
         />
       )}
 
-      <Card>
-        <CardHeader className="flex flex-row items-start justify-between gap-4">
-          <div>
-            <CardTitle>{isAccountsView ? "Enquiries" : "Enquiry pipeline"}</CardTitle>
-            <p className="text-sm text-slate-500 font-normal mt-1">{pipelineSubtitle}</p>
+      <Card className="overflow-hidden border border-slate-200 shadow-sm">
+        <CardHeader className="border-b border-slate-100 bg-slate-50 px-5 py-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-sm font-semibold text-slate-800">
+                {isAccountsView ? "Enquiries" : "Enquiry pipeline"}
+              </CardTitle>
+              <p className="mt-0.5 text-xs text-slate-500">{pipelineSubtitle}</p>
+            </div>
+            {data.total > 0 && (
+              <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
+                {data.total} total
+              </span>
+            )}
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-0">
           {!data.orders?.length ? (
-            <div className="py-8 text-center text-slate-500">No enquiries in this view.</div>
+            <div className="flex flex-col items-center gap-2 py-14 text-center">
+              <Package className="h-7 w-7 text-slate-300" />
+              <p className="text-sm text-slate-500">No enquiries in this view.</p>
+            </div>
           ) : (
-            <div className="space-y-4">
+            <div className="divide-y divide-slate-100">
               {data.orders.map(
                 (order: {
                   id: number;
@@ -383,61 +401,60 @@ export default function DashboardPage() {
                   createdAt: string;
                   createdBy?: { name: string };
                   currentDivision?: { name: string };
-                }) => (
-                  <Link
-                    key={order.id}
-                    href={`/orders/${order.id}`}
-                    className="flex flex-col gap-3 rounded-lg border border-slate-100 p-4 transition-colors hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
-                  >
-                    <div>
-                      <p className="font-medium">{formatEnquiryNumber(order.orderNumber)}</p>
-                      <p className="text-sm text-slate-500">
-                        {order.createdBy?.name ? (
-                          <>
-                            <span className="text-slate-500">Raised by </span>
-                            <span className="inline-block rounded-md bg-indigo-50 px-2 py-0.5 font-semibold text-indigo-950 ring-1 ring-indigo-200/70">
-                              {order.createdBy.name}
-                            </span>
-                            <span className="text-slate-500">
-                              {" "}
-                              ·{" "}
-                              <time dateTime={order.createdAt} suppressHydrationWarning>
-                                {new Date(order.createdAt).toLocaleString()}
-                              </time>
-                            </span>
-                          </>
-                        ) : (
+                }) => {
+                  const statusBar: Record<string, string> = {
+                    PLACED: "bg-slate-400",
+                    IN_PROGRESS: "bg-slate-700",
+                    TRANSFERRED: "bg-slate-500",
+                    REJECTED: "bg-slate-900",
+                    COMPLETED: "bg-slate-600",
+                    CANCELLED: "bg-slate-300",
+                  };
+                  return (
+                    <Link
+                      key={order.id}
+                      href={`/orders/${order.id}`}
+                      className="flex items-center gap-4 px-5 py-3.5 transition-colors hover:bg-slate-50"
+                    >
+                      <div className={`h-8 w-1 shrink-0 rounded-full ${statusBar[order.status] ?? "bg-slate-300"}`} />
+                      <div className="min-w-0 flex-1">
+                        <p className="flex flex-wrap items-center gap-2">
+                          <span className="font-mono text-xs font-semibold text-slate-800">
+                            {formatEnquiryNumber(order.orderNumber)}
+                          </span>
+                          {!hideDivision && order.currentDivision?.name ? (
+                            <span className="text-xs text-slate-400">{order.currentDivision.name}</span>
+                          ) : null}
+                        </p>
+                        <p className="mt-0.5 truncate text-xs text-slate-500">
+                          {order.createdBy?.name ? (
+                            <span className="font-medium text-slate-600">{order.createdBy.name} · </span>
+                          ) : null}
                           <time dateTime={order.createdAt} suppressHydrationWarning>
                             {new Date(order.createdAt).toLocaleString()}
                           </time>
-                        )}
-                        {!hideDivision && order.currentDivision?.name ? (
-                          <> · {order.currentDivision.name}</>
-                        ) : null}
-                      </p>
-                    </div>
-                    <Badge variant={statusVariant[order.status] ?? "secondary"}>
-                      {order.status.replace("_", " ")}
-                    </Badge>
-                  </Link>
-                )
+                        </p>
+                      </div>
+                      <Badge variant={statusVariant[order.status] ?? "secondary"} className="shrink-0 text-[11px]">
+                        {order.status.replace("_", " ")}
+                      </Badge>
+                    </Link>
+                  );
+                }
               )}
               {data.total > data.limit && (
-                <div className="flex justify-center gap-2 pt-2">
-                  <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-                    Previous
-                  </Button>
-                  <span className="text-sm text-slate-600 self-center px-2">
+                <div className="flex items-center justify-between bg-slate-50 px-5 py-3">
+                  <span className="text-xs text-slate-500">
                     Page {page} of {Math.max(1, Math.ceil(data.total / data.limit))}
                   </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={page * data.limit >= data.total}
-                    onClick={() => setPage((p) => p + 1)}
-                  >
-                    Next
-                  </Button>
+                  <div className="flex gap-1.5">
+                    <Button variant="outline" size="sm" className="h-7 text-xs" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+                      Previous
+                    </Button>
+                    <Button variant="outline" size="sm" className="h-7 text-xs" disabled={page * data.limit >= data.total} onClick={() => setPage((p) => p + 1)}>
+                      Next
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>
