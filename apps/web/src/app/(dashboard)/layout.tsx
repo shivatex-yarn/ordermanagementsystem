@@ -134,122 +134,158 @@ export default function DashboardLayout({
     return true;
   });
 
+  const userInitials = user.name
+    ? user.name.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2)
+    : "U";
+
   return (
-    <div className="flex min-h-screen flex-col overflow-x-hidden bg-white md:flex-row">
+    <div className="flex min-h-screen flex-col overflow-x-hidden bg-slate-50 md:flex-row">
       {sidebarOpen ? (
         <button
           type="button"
           aria-label="Close navigation"
-          className="fixed inset-0 z-30 bg-slate-900/40 backdrop-blur-[1px] md:hidden"
+          className="fixed inset-0 z-30 bg-slate-900/50 backdrop-blur-sm md:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       ) : null}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-40 flex w-64 max-w-[85vw] flex-col border-r border-slate-100 bg-slate-50/80 transition-transform duration-200 ease-out md:static md:z-auto md:max-w-none md:translate-x-0",
+          "fixed inset-y-0 left-0 z-40 flex w-64 max-w-[85vw] flex-col border-r border-slate-200/80 bg-white shadow-xl transition-transform duration-200 ease-out md:static md:z-auto md:max-w-none md:translate-x-0 md:shadow-none",
           sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         )}
       >
-        <div className="flex items-center justify-between gap-2 border-b border-slate-100 p-4 md:p-6">
+        {/* Sidebar brand header */}
+        <div className="flex items-center justify-between gap-2 border-b border-slate-100 bg-gradient-to-r from-indigo-600 to-violet-600 p-4 md:p-5">
           <Link
             href={user.role === "MANAGING_DIRECTOR" ? "/md" : "/dashboard"}
-            className="min-w-0 font-semibold text-lg text-slate-900"
+            className="flex min-w-0 items-center gap-2.5"
             onClick={() => setSidebarOpen(false)}
           >
-            Dashboard
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/20 text-white backdrop-blur-sm">
+              <Package className="h-5 w-5" />
+            </div>
+            <span className="min-w-0 truncate text-base font-bold tracking-tight text-white">
+              EnquiryMS
+            </span>
           </Link>
           <Button
             type="button"
             variant="ghost"
             size="icon"
-            className="h-9 w-9 shrink-0 md:hidden"
+            className="h-8 w-8 shrink-0 text-white/80 hover:bg-white/20 hover:text-white md:hidden"
             aria-label="Close navigation"
             onClick={() => setSidebarOpen(false)}
           >
-            <X className="h-5 w-5 text-slate-600" />
+            <X className="h-4 w-4" />
           </Button>
         </div>
+
+        {/* Nav items */}
         <nav className="flex-1 space-y-0.5 overflow-y-auto p-3">
           {filteredNav.map((item) => {
             const Icon = item.icon;
+            const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 onClick={() => setSidebarOpen(false)}
                 className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                  pathname === item.href
-                    ? "bg-white text-slate-900 shadow-sm border border-slate-100"
-                    : "text-slate-600 hover:bg-white/60 hover:text-slate-900"
+                  "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-150",
+                  isActive
+                    ? "bg-indigo-50 text-indigo-700 shadow-sm ring-1 ring-indigo-100"
+                    : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                 )}
               >
-                <Icon className="h-5 w-5 shrink-0" />
+                <Icon className={cn("h-5 w-5 shrink-0", isActive ? "text-indigo-600" : "text-slate-400")} />
                 <span className="min-w-0">{item.label}</span>
+                {isActive && (
+                  <span className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-500" aria-hidden />
+                )}
               </Link>
             );
           })}
         </nav>
+
+        {/* Sidebar user footer */}
+        <div className="border-t border-slate-100 p-3">
+          <div className="flex items-center gap-3 rounded-xl bg-slate-50 p-2.5">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-xs font-bold text-indigo-700">
+              {userInitials}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-semibold text-slate-800">{user.name}</p>
+              <p className="truncate text-[10px] uppercase tracking-wide text-slate-400">
+                {user.role.replace(/_/g, " ")}
+              </p>
+            </div>
+          </div>
+        </div>
       </aside>
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-white">
-        <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center justify-between gap-2 border-b border-slate-100 bg-white px-3 sm:gap-3 sm:px-4 md:px-8">
+
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center justify-between gap-2 border-b border-slate-200/70 bg-white/95 px-3 shadow-sm backdrop-blur-md sm:gap-3 sm:px-4 md:px-6">
           <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
             <Button
               type="button"
-              variant="outline"
+              variant="ghost"
               size="icon"
-              className="h-9 w-9 shrink-0 md:hidden"
+              className="h-9 w-9 shrink-0 text-slate-600 hover:bg-slate-100 md:hidden"
               aria-label="Open navigation"
               onClick={() => setSidebarOpen(true)}
             >
               <Menu className="h-5 w-5" />
             </Button>
-          <div className="min-w-0 flex-1">
-            <h2 className="truncate text-sm font-semibold leading-tight text-slate-900 sm:text-base">
-              Welcome back, {user.name}
-            </h2>
-            <p className="line-clamp-2 text-xs text-slate-500 sm:line-clamp-none">
-              {!showUnreadUi ? (
-                <span className="inline-block h-3 w-44 max-w-full animate-pulse rounded bg-slate-200" aria-hidden />
-              ) : unreadCount > 0 ? (
-                `You have ${unreadCount} unread notification${unreadCount === 1 ? "" : "s"}.`
-              ) : (
-                "You’re all caught up."
-              )}
-            </p>
-          </div>
-          </div>
-          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-            <div className="hidden text-right sm:block">
-              <p className="text-sm font-medium leading-tight text-slate-900">{user.name}</p>
-              <p className="text-xs text-slate-500 wrap-break-word">{user.email}</p>
+            <div className="min-w-0 flex-1">
+              <h2 className="truncate text-sm font-semibold leading-tight text-slate-900 sm:text-base">
+                Welcome back, <span className="text-indigo-600">{user.name}</span>
+              </h2>
+              <p className="line-clamp-1 text-xs text-slate-500">
+                {!showUnreadUi ? (
+                  <span className="inline-block h-3 w-44 max-w-full animate-pulse rounded bg-slate-200" aria-hidden />
+                ) : unreadCount > 0 ? (
+                  <span className="text-amber-600 font-medium">
+                    {unreadCount} unread notification{unreadCount === 1 ? "" : "s"}
+                  </span>
+                ) : (
+                  "You’re all caught up."
+                )}
+              </p>
             </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
             <Link
               href="/notifications"
-              className="relative flex h-9 w-9 items-center justify-center rounded-lg text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
+              className="relative flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800"
               aria-label={
                 showUnreadUi && unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"
               }
             >
               <Bell className="h-5 w-5" />
               {showUnreadUi && unreadCount > 0 ? (
-                <span className="absolute -right-0.5 -top-0.5 flex h-[1.125rem] min-w-[1.125rem] items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold leading-none text-white">
+                <span className="absolute -right-0.5 -top-0.5 flex h-[1.125rem] min-w-[1.125rem] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold leading-none text-white ring-2 ring-white">
                   {unreadCount > 99 ? "99+" : unreadCount}
                 </span>
               ) : null}
             </Link>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button type="button" variant="outline" size="icon" className="h-9 w-9 shrink-0" aria-label="Account menu">
-                  <ChevronDown className="h-4 w-4" />
-                </Button>
+                <button
+                  type="button"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-xs font-bold text-indigo-700 transition-colors hover:bg-indigo-200"
+                  aria-label="Account menu"
+                >
+                  {userInitials}
+                </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuContent align="end" className="w-56 shadow-lg">
                 <DropdownMenuLabel className="font-normal">
                   <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium text-slate-900">{user.name}</p>
+                    <p className="text-sm font-semibold text-slate-900">{user.name}</p>
                     <p className="text-xs text-slate-500">{user.email}</p>
-                    <p className="text-[10px] uppercase tracking-wide text-slate-400">{user.role.replace("_", " ")}</p>
+                    <span className="mt-1 inline-flex w-fit rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-indigo-700">
+                      {user.role.replace(/_/g, " ")}
+                    </span>
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
