@@ -237,9 +237,9 @@ export default function DashboardPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Dashboard</h1>
+        <h1 className="text-xl font-bold tracking-tight text-slate-900">Dashboard</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Here&apos;s your overview{isAccountsView ? "" : " of enquiries and SLA performance"}.
+          Overview of enquiries{isAccountsView ? "" : " and SLA performance"}.
         </p>
       </div>
 
@@ -247,25 +247,18 @@ export default function DashboardPage() {
         {metricCards.map((card) => {
           const Icon = card.icon;
           const isAlert = "alert" in card && card.alert;
-          const cardStyles = isAlert
-            ? "border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50"
-            : "border-slate-200 bg-white";
           return (
-            <Card key={card.title} className={`overflow-hidden shadow-sm ${cardStyles}`}>
-              <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4">
-                <CardTitle className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  {card.title}
-                </CardTitle>
-                <div className={`rounded-lg p-1.5 ${isAlert ? "bg-amber-100" : "bg-slate-100"}`}>
-                  <Icon className={`h-4 w-4 ${isAlert ? "text-amber-600" : "text-slate-500"}`} />
+            <Card key={card.title} className={`overflow-hidden border shadow-sm ${isAlert ? "border-slate-300" : "border-slate-200"} bg-white`}>
+              <CardHeader className="flex flex-row items-center justify-between pb-2 pt-5 px-5">
+                <CardTitle className="text-xs font-semibold uppercase tracking-wide text-slate-500">{card.title}</CardTitle>
+                <div className={`rounded-md p-1.5 ${isAlert ? "bg-slate-900" : "bg-slate-100"}`}>
+                  <Icon className={`h-3.5 w-3.5 ${isAlert ? "text-white" : "text-slate-500"}`} />
                 </div>
               </CardHeader>
-              <CardContent className="pb-4">
-                <div className={`text-3xl font-bold tabular-nums ${isAlert ? "text-amber-700" : "text-slate-900"}`}>
-                  {card.value}
-                </div>
+              <CardContent className="px-5 pb-5">
+                <div className="text-3xl font-bold tabular-nums text-slate-900">{card.value}</div>
                 {isAlert && (card.value as number) > 0 ? (
-                  <p className="mt-1 text-xs font-medium text-amber-600">Requires attention</p>
+                  <p className="mt-1 text-xs font-medium text-slate-500">Requires attention</p>
                 ) : null}
               </CardContent>
             </Card>
@@ -377,16 +370,16 @@ export default function DashboardPage() {
       )}
 
       <Card className="overflow-hidden border border-slate-200 shadow-sm">
-        <CardHeader className="border-b border-slate-100 bg-slate-50/60 px-5 py-4">
+        <CardHeader className="border-b border-slate-100 bg-slate-50 px-5 py-4">
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-base font-semibold text-slate-800">
+              <CardTitle className="text-sm font-semibold text-slate-800">
                 {isAccountsView ? "Enquiries" : "Enquiry pipeline"}
               </CardTitle>
               <p className="mt-0.5 text-xs text-slate-500">{pipelineSubtitle}</p>
             </div>
             {data.total > 0 && (
-              <span className="rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-semibold text-indigo-700">
+              <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
                 {data.total} total
               </span>
             )}
@@ -395,7 +388,7 @@ export default function DashboardPage() {
         <CardContent className="p-0">
           {!data.orders?.length ? (
             <div className="flex flex-col items-center gap-2 py-14 text-center">
-              <Package className="h-8 w-8 text-slate-300" />
+              <Package className="h-7 w-7 text-slate-300" />
               <p className="text-sm text-slate-500">No enquiries in this view.</p>
             </div>
           ) : (
@@ -409,21 +402,21 @@ export default function DashboardPage() {
                   createdBy?: { name: string };
                   currentDivision?: { name: string };
                 }) => {
-                  const statusBarColor: Record<string, string> = {
+                  const statusBar: Record<string, string> = {
                     PLACED: "bg-slate-400",
-                    IN_PROGRESS: "bg-blue-500",
-                    TRANSFERRED: "bg-amber-500",
-                    REJECTED: "bg-red-500",
-                    COMPLETED: "bg-emerald-500",
-                    CANCELLED: "bg-stone-400",
+                    IN_PROGRESS: "bg-slate-700",
+                    TRANSFERRED: "bg-slate-500",
+                    REJECTED: "bg-slate-900",
+                    COMPLETED: "bg-slate-600",
+                    CANCELLED: "bg-slate-300",
                   };
                   return (
                     <Link
                       key={order.id}
                       href={`/orders/${order.id}`}
-                      className="group flex items-center gap-4 px-5 py-3.5 transition-colors hover:bg-indigo-50/40"
+                      className="flex items-center gap-4 px-5 py-3.5 transition-colors hover:bg-slate-50"
                     >
-                      <div className={`h-9 w-1 shrink-0 rounded-full ${statusBarColor[order.status] ?? "bg-slate-300"}`} />
+                      <div className={`h-8 w-1 shrink-0 rounded-full ${statusBar[order.status] ?? "bg-slate-300"}`} />
                       <div className="min-w-0 flex-1">
                         <p className="flex flex-wrap items-center gap-2">
                           <span className="font-mono text-xs font-semibold text-slate-800">
@@ -450,7 +443,7 @@ export default function DashboardPage() {
                 }
               )}
               {data.total > data.limit && (
-                <div className="flex items-center justify-between bg-slate-50/60 px-5 py-3">
+                <div className="flex items-center justify-between bg-slate-50 px-5 py-3">
                   <span className="text-xs text-slate-500">
                     Page {page} of {Math.max(1, Math.ceil(data.total / data.limit))}
                   </span>
@@ -458,13 +451,7 @@ export default function DashboardPage() {
                     <Button variant="outline" size="sm" className="h-7 text-xs" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
                       Previous
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-xs"
-                      disabled={page * data.limit >= data.total}
-                      onClick={() => setPage((p) => p + 1)}
-                    >
+                    <Button variant="outline" size="sm" className="h-7 text-xs" disabled={page * data.limit >= data.total} onClick={() => setPage((p) => p + 1)}>
                       Next
                     </Button>
                   </div>

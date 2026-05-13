@@ -89,12 +89,12 @@ export default function OrdersPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Enquiries</h1>
-          <p className="mt-0.5 text-sm text-slate-500">Manage and track all enquiries across your divisions.</p>
+          <h1 className="text-xl font-bold tracking-tight text-slate-900">Enquiries</h1>
+          <p className="mt-0.5 text-sm text-slate-500">All enquiries across your divisions.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Period</span>
+            <span className="text-xs font-medium text-slate-500">Period</span>
             <Select
               value={period || "all"}
               onValueChange={(v) => {
@@ -159,11 +159,11 @@ export default function OrdersPage() {
         </div>
       </div>
       <Card className="overflow-hidden border border-slate-200 shadow-sm">
-        <CardHeader className="border-b border-slate-100 bg-slate-50/60 px-5 py-4">
+        <CardHeader className="border-b border-slate-100 bg-slate-50 px-5 py-4">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-base font-semibold text-slate-800">All enquiries</CardTitle>
+            <CardTitle className="text-sm font-semibold text-slate-800">All enquiries</CardTitle>
             {data?.total ? (
-              <span className="rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-semibold text-indigo-700">
+              <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
                 {data.total} total
               </span>
             ) : null}
@@ -171,25 +171,22 @@ export default function OrdersPage() {
         </CardHeader>
         <CardContent className="p-0">
           {isLoading ? (
-            <div className="space-y-0 divide-y divide-slate-100">
+            <div className="divide-y divide-slate-100">
               {[1, 2, 3].map((i) => (
                 <div key={i} className="flex items-center gap-4 px-5 py-4">
-                  <div className="h-9 w-9 animate-pulse rounded-lg bg-slate-100" />
-                  <div className="flex-1 space-y-2">
-                    <div className="h-4 w-40 animate-pulse rounded bg-slate-100" />
-                    <div className="h-3 w-64 animate-pulse rounded bg-slate-100" />
+                  <div className="h-8 w-1 animate-pulse rounded-full bg-slate-200" />
+                  <div className="flex-1 space-y-1.5">
+                    <div className="h-3.5 w-36 animate-pulse rounded bg-slate-100" />
+                    <div className="h-3 w-56 animate-pulse rounded bg-slate-100" />
                   </div>
-                  <div className="h-6 w-20 animate-pulse rounded-full bg-slate-100" />
+                  <div className="h-5 w-20 animate-pulse rounded-full bg-slate-100" />
                 </div>
               ))}
             </div>
           ) : !data?.orders?.length ? (
-            <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100">
-                <Package className="h-6 w-6 text-slate-400" />
-              </div>
-              <p className="text-sm font-medium text-slate-600">No enquiries yet</p>
-              <p className="text-xs text-slate-400">New enquiries will appear here once submitted.</p>
+            <div className="flex flex-col items-center gap-2 py-16 text-center">
+              <Package className="h-8 w-8 text-slate-300" />
+              <p className="text-sm text-slate-500">No enquiries yet.</p>
             </div>
           ) : (
             <div className="divide-y divide-slate-100">
@@ -202,45 +199,40 @@ export default function OrdersPage() {
                   createdAt: string;
                   createdBy?: { name: string; email: string };
                 }) => {
-                  const statusColors: Record<string, string> = {
+                  const statusBar: Record<string, string> = {
                     PLACED: "bg-slate-400",
-                    IN_PROGRESS: "bg-blue-500",
-                    TRANSFERRED: "bg-amber-500",
-                    REJECTED: "bg-red-500",
-                    COMPLETED: "bg-emerald-500",
-                    CANCELLED: "bg-stone-400",
+                    IN_PROGRESS: "bg-slate-700",
+                    TRANSFERRED: "bg-slate-500",
+                    REJECTED: "bg-slate-900",
+                    COMPLETED: "bg-slate-600",
+                    CANCELLED: "bg-slate-300",
                   };
                   return (
                     <Link
                       key={order.id}
                       href={`/orders/${order.id}`}
-                      className="group flex items-center gap-4 px-5 py-4 transition-colors hover:bg-indigo-50/40"
+                      className="group flex items-center gap-4 px-5 py-4 transition-colors hover:bg-slate-50"
                     >
-                      <div className={`h-10 w-1 shrink-0 rounded-full ${statusColors[order.status] ?? "bg-slate-300"}`} />
+                      <div className={`h-9 w-1 shrink-0 rounded-full ${statusBar[order.status] ?? "bg-slate-300"}`} />
                       <div className="min-w-0 flex-1">
                         <p className="flex flex-wrap items-center gap-2">
-                          <span className="rounded-md border border-indigo-200 bg-indigo-50 px-2 py-0.5 font-mono text-xs font-semibold text-indigo-800">
+                          <span className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-xs font-semibold text-slate-800">
                             {formatEnquiryNumber(order.orderNumber)}
                           </span>
                           {!hideDivision && order.currentDivision?.name ? (
-                            <span className="text-xs font-medium text-slate-500">
-                              {order.currentDivision.name}
-                            </span>
+                            <span className="text-xs text-slate-400">{order.currentDivision.name}</span>
                           ) : null}
                         </p>
-                        <p className="mt-1 truncate text-xs text-slate-500">
+                        <p className="mt-0.5 truncate text-xs text-slate-500">
                           {order.createdBy?.name ? (
-                            <>
-                              <span className="font-medium text-slate-700">{order.createdBy.name}</span>
-                              <span className="mx-1 text-slate-300">·</span>
-                            </>
+                            <span className="font-medium text-slate-600">{order.createdBy.name} · </span>
                           ) : null}
                           <time dateTime={order.createdAt} suppressHydrationWarning>
                             {new Date(order.createdAt).toLocaleString()}
                           </time>
                         </p>
                       </div>
-                      <Badge variant={statusVariant[order.status] ?? "secondary"} className="shrink-0 text-[11px] font-semibold">
+                      <Badge variant={statusVariant[order.status] ?? "secondary"} className="shrink-0 text-[11px]">
                         {order.status.replace("_", " ")}
                       </Badge>
                     </Link>
@@ -248,21 +240,15 @@ export default function OrdersPage() {
                 }
               )}
               {data.total > data.limit && (
-                <div className="flex items-center justify-between gap-2 bg-slate-50/60 px-5 py-3">
+                <div className="flex items-center justify-between bg-slate-50 px-5 py-3">
                   <span className="text-xs text-slate-500">
-                    Showing page {page} of {Math.max(1, Math.ceil(data.total / data.limit))} · {data.total} total
+                    Page {page} of {Math.max(1, Math.ceil(data.total / data.limit))} · {data.total} total
                   </span>
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex gap-1.5">
                     <Button variant="outline" size="sm" className="h-7 text-xs" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
                       Previous
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-xs"
-                      disabled={page * data.limit >= data.total}
-                      onClick={() => setPage((p) => p + 1)}
-                    >
+                    <Button variant="outline" size="sm" className="h-7 text-xs" disabled={page * data.limit >= data.total} onClick={() => setPage((p) => p + 1)}>
                       Next
                     </Button>
                   </div>
