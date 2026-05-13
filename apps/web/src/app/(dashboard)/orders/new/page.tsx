@@ -48,7 +48,8 @@ export default function NewOrderPage() {
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [gstNumber, setGstNumber] = useState("");
-  const [gstCopyUrl, setGstCopyUrl] = useState("");
+  const [gstCopyUrl, setGstCopyUrl] = useState(""); // stored as JSON {url,name} for submission
+  const [gstFileUrl, setGstFileUrl] = useState(""); // actual URL for preview link
   const [gstFileName, setGstFileName] = useState("");
   const [customerOrderDate, setCustomerOrderDate] = useState("");
 
@@ -95,6 +96,7 @@ export default function NewOrderPage() {
       if (!res.ok) throw new Error(data.error || "Upload failed");
       if (!data.url) throw new Error("Upload failed: no URL returned");
       setGstCopyUrl(JSON.stringify({ url: data.url, name: data.name ?? file.name }));
+      setGstFileUrl(data.url);
       setGstFileName(data.name ?? file.name);
     } catch (e) {
       setUploadError(e instanceof Error ? e.message : "Upload failed");
@@ -275,7 +277,7 @@ export default function NewOrderPage() {
                   <CheckCircle className="h-4 w-4 shrink-0 text-emerald-600" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium text-emerald-800">{gstFileName || "GST certificate uploaded"}</p>
-                    <a href={gstCopyUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-emerald-600 underline">
+                    <a href={gstFileUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-emerald-600 underline">
                       View uploaded file
                     </a>
                   </div>
@@ -284,7 +286,7 @@ export default function NewOrderPage() {
                     variant="ghost"
                     size="sm"
                     className="shrink-0 text-slate-500 hover:text-red-600"
-                    onClick={() => { setGstCopyUrl(""); setGstFileName(""); }}
+                    onClick={() => { setGstCopyUrl(""); setGstFileUrl(""); setGstFileName(""); }}
                   >
                     <X className="h-3.5 w-3.5" />
                   </Button>
