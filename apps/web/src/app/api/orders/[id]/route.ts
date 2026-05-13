@@ -217,20 +217,38 @@ export async function PATCH(
     return NextResponse.json({ ok: true, order: updated });
   }
 
-  // ── Division Head: edit handoff / notes ───────────────────────────────────
-  if (["MANAGER", "DIVISION_HEAD"].includes(role)) {
-    const managed = await prisma.divisionManager.findFirst({
-      where: { userId, divisionId: order.currentDivisionId },
-    });
-    const adminBypass = ["SUPER_ADMIN", "MANAGING_DIRECTOR"].includes(role);
-    if (!managed && !adminBypass) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  // ── Division Head / Admin: edit handoff, customer fields, newDevPlan ────────
+  if (["MANAGER", "DIVISION_HEAD", "SUPER_ADMIN", "MANAGING_DIRECTOR"].includes(role)) {
+    const isAdminRole = ["SUPER_ADMIN", "MANAGING_DIRECTOR"].includes(role);
+    if (!isAdminRole) {
+      const managed = await prisma.divisionManager.findFirst({
+        where: { userId, divisionId: order.currentDivisionId },
+      });
+      if (!managed) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
     }
     const data: Record<string, unknown> = {};
+    // Handoff / acceptance notes
     if (str(body.acceptanceReason) !== undefined) data.acceptanceReason = str(body.acceptanceReason) || null;
     if (body.enquiryHandoff !== undefined && typeof body.enquiryHandoff === "object") {
       const existing = (await prisma.order.findUnique({ where: { id: orderId }, select: { enquiryHandoff: true } }))?.enquiryHandoff as Record<string, unknown> | null ?? {};
       data.enquiryHandoff = { ...existing, ...(body.enquiryHandoff as Record<string, unknown>) };
+    }
+    // Customer & product fields (HEAD can correct these in any non-closed status)
+    if (str(body.customerName) !== undefined) data.customerName = str(body.customerName) || null;
+    if (str(body.customerPhone) !== undefined) data.customerPhone = str(body.customerPhone) || null;
+    if (str(body.gstNumber) !== undefined) data.gstNumber = str(body.gstNumber)?.toUpperCase() || null;
+    if (str(body.gstCopyUrl) !== undefined) data.gstCopyUrl = str(body.gstCopyUrl) || null;
+    if (str(body.companyName) !== undefined) data.companyName = str(body.companyName) || null;
+    if (str(body.description) !== undefined) data.description = str(body.description) || null;
+    if (str(body.customerOrderDate) !== undefined) {
+      const d = body.customerOrderDate ? new Date(String(body.customerOrderDate)) : null;
+      data.customerOrderDate = d && !isNaN(d.getTime()) ? d : null;
+    }
+    // New dev plan editing (replaces entire plan object)
+    if (body.newDevPlan !== undefined) {
+      data.newDevPlan = (typeof body.newDevPlan === "object" ? body.newDevPlan : null) as unknown;
     }
     if (Object.keys(data).length === 0) {
       return NextResponse.json({ error: "No editable fields provided" }, { status: 400 });
