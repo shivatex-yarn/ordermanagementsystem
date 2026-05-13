@@ -200,6 +200,8 @@ model Order {
   acceptanceReason              String?   @map("acceptance_reason") @db.Text
   receiveReason                   String?   @map("receive_reason") @db.Text
   enquiryHandoff                  Json?     @map("enquiry_handoff")
+  /// New development planning payload — filled by Division Head before handoff when developmentKind="new".
+  newDevPlan                      Json?     @map("new_dev_plan")
   headSampleRequestApprovedAt     DateTime? @map("head_sample_request_approved_at")
 
   // Enquiry workflow extensions (Enquiry Management Application spec)

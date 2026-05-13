@@ -174,6 +174,19 @@ export const receiveOrderSchema = z.object({
   reason: z.string().min(10, "Reason for marking received must be at least 10 characters"),
 });
 
+export const newDevPlanSchema = z.object({
+  description: z.string().min(10, "Development description required (min 10 characters)").max(20000),
+  resourcesRequired: z.string().min(1, "Required resources/materials is required").max(20000),
+  researchRequirements: z.string().max(20000).optional(),
+  planningNotes: z.string().max(20000).optional(),
+  estimatedTimeline: z.string().min(1, "Estimated timeline is required").max(500),
+  expectedCompletionDuration: z.string().min(1, "Expected completion duration is required").max(500),
+  internalNotes: z.string().max(20000).optional(),
+  reasonForNewDevelopment: z.string().min(1, "Reason for new development is required").max(20000),
+});
+
+export type NewDevPlanInput = z.infer<typeof newDevPlanSchema>;
+
 export const enquiryHandoffSchema = z
   .object({
     orderId: z.number().int().positive(),
@@ -181,25 +194,22 @@ export const enquiryHandoffSchema = z
     developmentKind: z.enum(["new", "existing"]),
     newDevelopmentDetails: z.string().max(20000).optional(),
     existingProductDetails: z.string().max(20000).optional(),
+    newDevPlan: newDevPlanSchema.optional(),
   })
   .superRefine((data, ctx) => {
     if (data.developmentKind === "new") {
-      const t = data.newDevelopmentDetails?.trim() ?? "";
+      if (!data.newDevPlan) {
+        ctx.addIssue({ code: "custom", message: "Planning details are required for new development", path: ["newDevPlan"] });
+        return;
+      }
+      const t = data.newDevPlan.description.trim();
       if (t.length < 10) {
-        ctx.addIssue({
-          code: "custom",
-          message: "New development details are required (min 10 characters)",
-          path: ["newDevelopmentDetails"],
-        });
+        ctx.addIssue({ code: "custom", message: "Development description required (min 10 characters)", path: ["newDevPlan", "description"] });
       }
     } else {
       const t = data.existingProductDetails?.trim() ?? "";
       if (t.length < 10) {
-        ctx.addIssue({
-          code: "custom",
-          message: "Existing product details are required (min 10 characters)",
-          path: ["existingProductDetails"],
-        });
+        ctx.addIssue({ code: "custom", message: "Existing product details are required (min 10 characters)", path: ["existingProductDetails"] });
       }
     }
   });

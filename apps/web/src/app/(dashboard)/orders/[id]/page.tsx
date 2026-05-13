@@ -122,6 +122,7 @@ type OrderDetail = {
   receiveReason?: string | null;
   assignedSupervisorId?: number | null;
   enquiryHandoff?: Record<string, unknown> | null;
+  newDevPlan?: Record<string, unknown> | null;
   headSampleRequestApprovedAt?: string | null;
   assignedSupervisor?: { id: number; name: string; email: string } | null;
   headSampleRequestApprovedBy?: { name?: string | null; email?: string | null } | null;
@@ -595,6 +596,15 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         showInteractiveUi &&
         (user.role === "MANAGER" || user.role === "SUPER_ADMIN" || user.role === "MANAGING_DIRECTOR")
     );
+
+  // Auto-open planning dialog when "New development" is selected
+  useEffect(() => {
+    if (handoffDevKind === "new" && needsHandoff && !pendingNewDevPlan) {
+      setNewDevDialogOpen(true);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handoffDevKind]);
+
   const { data: supervisorsData } = useQuery({
     queryKey: ["order-supervisors", orderId],
     queryFn: async () => {
@@ -751,6 +761,10 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         setHandoffSupervisorId("");
         setHandoffNewDetails("");
         setHandoffExistingDetails("");
+        setPendingNewDevPlan(null);
+        setNewDevDescription(""); setNewDevResources(""); setNewDevResearch("");
+        setNewDevPlanningNotes(""); setNewDevTimeline(""); setNewDevCompletionDuration("");
+        setNewDevInternalNotes(""); setNewDevReason("");
         queryClient.invalidateQueries({ queryKey: ["order", orderId] });
         queryClient.invalidateQueries({ queryKey: ["order-audit", orderId] });
         queryClient.invalidateQueries({ queryKey: ["orders"] });
@@ -1433,11 +1447,54 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                   <span className={`h-1.5 w-1.5 rounded-full ${order.enquiryHandoff.developmentKind === "existing" ? "bg-blue-500" : "bg-violet-500"}`} />
                   {order.enquiryHandoff.developmentKind === "existing" ? "Existing development" : "New development"}
                 </span>
-                {typeof order.enquiryHandoff.newDevelopmentDetails === "string" && order.enquiryHandoff.newDevelopmentDetails.trim() ? (
-                  <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{order.enquiryHandoff.newDevelopmentDetails}</p>
-                ) : null}
                 {typeof order.enquiryHandoff.existingProductDetails === "string" && order.enquiryHandoff.existingProductDetails.trim() ? (
                   <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{order.enquiryHandoff.existingProductDetails}</p>
+                ) : null}
+                {/* New Development Plan details */}
+                {order.enquiryHandoff.developmentKind === "new" && order.newDevPlan && typeof order.newDevPlan === "object" ? (
+                  <div className="mt-2 space-y-2 border-t border-slate-100 pt-2">
+                    {(["description","resourcesRequired","researchRequirements","planningNotes","estimatedTimeline","expectedCompletionDuration","reasonForNewDevelopment"] as const).map((key) => {
+                      const labels: Record<string, string> = {
+                        description: "Development description",
+                        resourcesRequired: "Resources / materials",
+                        researchRequirements: "Research requirements",
+                        planningNotes: "Planning notes",
+                        estimatedTimeline: "Estimated timeline",
+                        expectedCompletionDuration: "Expected completion",
+                        reasonForNewDevelopment: "Reason for new development",
+                      };
+                      const val = (order.newDevPlan as Record<string,unknown>)[key];
+                      if (typeof val !== "string" || !val.trim()) return null;
+                      return (
+                        <div key={key}>
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{labels[key]}</p>
+                          <p className="text-sm text-slate-800 whitespace-pre-wrap">{val}</p>
+                        </div>
+                      );
+                    })}
+                    {/* Internal notes — MD / Super Admin only */}
+                    {user && ["MANAGING_DIRECTOR", "SUPER_ADMIN"].includes(user.role) && typeof (order.newDevPlan as Record<string,unknown>).internalNotes === "string" && ((order.newDevPlan as Record<string,unknown>).internalNotes as string).trim() ? (
+                      <div className="rounded-lg border border-amber-100 bg-amber-50 p-2.5">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-600">Internal notes (MD / Super Admin only)</p>
+                        <p className="text-sm text-amber-900 whitespace-pre-wrap">{(order.newDevPlan as Record<string,unknown>).internalNotes as string}</p>
+                      </div>
+                    ) : null}
+                    {/* Planning timing — MD / Super Admin only */}
+                    {user && ["MANAGING_DIRECTOR", "SUPER_ADMIN"].includes(user.role) ? (() => {
+                      const p = order.newDevPlan as Record<string,unknown>;
+                      const recvAt = typeof p.enquiryReceivedAt === "string" ? new Date(p.enquiryReceivedAt) : null;
+                      const subAt = typeof p.planningSubmittedAt === "string" ? new Date(p.planningSubmittedAt) : null;
+                      const durationHrs = recvAt && subAt ? Math.round((subAt.getTime() - recvAt.getTime()) / 36e5) : null;
+                      return (
+                        <div className="rounded-lg border border-slate-100 bg-slate-50 p-2.5 space-y-0.5">
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Planning timing (MD / Super Admin only)</p>
+                          {recvAt ? <p className="text-xs text-slate-600">Enquiry received: <span className="font-mono">{recvAt.toLocaleString()}</span></p> : null}
+                          {subAt ? <p className="text-xs text-slate-600">Planning submitted: <span className="font-mono">{subAt.toLocaleString()}</span></p> : null}
+                          {durationHrs !== null ? <p className="text-xs text-slate-600">Planning duration: <span className="font-semibold">{durationHrs}h</span></p> : null}
+                        </div>
+                      );
+                    })() : null}
+                  </div>
                 ) : null}
               </div>
             </div>
@@ -1732,14 +1789,32 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 </div>
                 {handoffDevKind === "new" ? (
                   <div className="space-y-2">
-                    <Label>New development details (min 10 characters)</Label>
-                    <textarea
-                      value={handoffNewDetails}
-                      onChange={(e) => setHandoffNewDetails(e.target.value)}
-                      rows={4}
-                      className="flex min-h-[96px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs"
-                      placeholder="Reason and technical / scope details for new development"
-                    />
+                    {!pendingNewDevPlan ? (
+                      <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 flex items-center justify-between gap-3">
+                        <p className="text-xs text-amber-800 font-medium">Planning details required for new development.</p>
+                        <button
+                          type="button"
+                          className="shrink-0 rounded bg-amber-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-amber-700"
+                          onClick={() => setNewDevDialogOpen(true)}
+                        >
+                          Fill planning form
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-semibold text-emerald-800">Planning details completed ✓</p>
+                          <p className="text-xs text-emerald-700 truncate max-w-xs">{pendingNewDevPlan.description}</p>
+                        </div>
+                        <button
+                          type="button"
+                          className="shrink-0 rounded border border-emerald-300 bg-white px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+                          onClick={() => setNewDevDialogOpen(true)}
+                        >
+                          Edit
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -1759,7 +1834,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                   disabled={
                     handoffMutation.isPending ||
                     !handoffSupervisorId ||
-                    (handoffDevKind === "new" ? handoffNewDetails.trim().length < 10 : handoffExistingDetails.trim().length < 10)
+                    (handoffDevKind === "new" ? !pendingNewDevPlan : handoffExistingDetails.trim().length < 10)
                   }
                   onClick={() => {
                     setHandoffError("");
@@ -2755,6 +2830,94 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setNewDevViewOpen(false)}>
               Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── New Development Planning Dialog ── */}
+      <Dialog open={newDevDialogOpen} onOpenChange={(open) => { setNewDevDialogOpen(open); setNewDevDialogError(""); }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>New Development Planning</DialogTitle>
+            <DialogDescription>
+              Complete planning details before assigning. SLA timer starts only after this form is submitted.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-1">
+            <div className="space-y-1.5">
+              <Label>Development description <span className="text-red-500">*</span></Label>
+              <textarea value={newDevDescription} onChange={(e) => setNewDevDescription(e.target.value)} rows={3}
+                className="flex min-h-[72px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs"
+                placeholder="Describe the new development in detail (min 10 characters)" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Required resources / materials <span className="text-red-500">*</span></Label>
+              <textarea value={newDevResources} onChange={(e) => setNewDevResources(e.target.value)} rows={3}
+                className="flex min-h-[72px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs"
+                placeholder="List materials, equipment, or resources needed" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Research requirements <span className="text-slate-400 text-xs">(optional)</span></Label>
+              <textarea value={newDevResearch} onChange={(e) => setNewDevResearch(e.target.value)} rows={2}
+                className="flex min-h-[56px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs"
+                placeholder="Any R&D or technical research needed" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Planning notes <span className="text-slate-400 text-xs">(optional)</span></Label>
+              <textarea value={newDevPlanningNotes} onChange={(e) => setNewDevPlanningNotes(e.target.value)} rows={2}
+                className="flex min-h-[56px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs"
+                placeholder="Additional internal planning notes" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>Estimated timeline <span className="text-red-500">*</span></Label>
+                <Input value={newDevTimeline} onChange={(e) => setNewDevTimeline(e.target.value)}
+                  placeholder='e.g. "2 weeks", "10 working days"' />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Expected completion duration <span className="text-red-500">*</span></Label>
+                <Input value={newDevCompletionDuration} onChange={(e) => setNewDevCompletionDuration(e.target.value)}
+                  placeholder='e.g. "3 weeks from approval"' />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Reason for new development <span className="text-red-500">*</span></Label>
+              <textarea value={newDevReason} onChange={(e) => setNewDevReason(e.target.value)} rows={2}
+                className="flex min-h-[56px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs"
+                placeholder="Why is this a new development rather than an existing product?" />
+            </div>
+            {user && ["MANAGING_DIRECTOR", "SUPER_ADMIN"].includes(user.role) ? (
+              <div className="space-y-1.5 rounded-lg border border-amber-100 bg-amber-50 p-3">
+                <Label>Internal notes <span className="text-xs text-amber-700 font-normal">(visible to MD & Super Admin only)</span></Label>
+                <textarea value={newDevInternalNotes} onChange={(e) => setNewDevInternalNotes(e.target.value)} rows={2}
+                  className="flex min-h-[56px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs"
+                  placeholder="Confidential planning notes" />
+              </div>
+            ) : null}
+            {newDevDialogError ? <p className="text-sm text-red-600">{newDevDialogError}</p> : null}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setNewDevDialogOpen(false); setNewDevDialogError(""); }}>Cancel</Button>
+            <Button
+              type="button"
+              disabled={newDevDescription.trim().length < 10 || !newDevResources.trim() || !newDevTimeline.trim() || !newDevCompletionDuration.trim() || !newDevReason.trim()}
+              onClick={() => {
+                setPendingNewDevPlan({
+                  description: newDevDescription.trim(),
+                  resourcesRequired: newDevResources.trim(),
+                  researchRequirements: newDevResearch.trim() || undefined,
+                  planningNotes: newDevPlanningNotes.trim() || undefined,
+                  estimatedTimeline: newDevTimeline.trim(),
+                  expectedCompletionDuration: newDevCompletionDuration.trim(),
+                  internalNotes: newDevInternalNotes.trim() || undefined,
+                  reasonForNewDevelopment: newDevReason.trim(),
+                });
+                setNewDevDialogError("");
+                setNewDevDialogOpen(false);
+              }}
+            >
+              Confirm planning details
             </Button>
           </DialogFooter>
         </DialogContent>

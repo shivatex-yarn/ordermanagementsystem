@@ -22,6 +22,7 @@ export async function POST(
     developmentKind: body?.developmentKind,
     newDevelopmentDetails: body?.newDevelopmentDetails,
     existingProductDetails: body?.existingProductDetails,
+    newDevPlan: body?.newDevPlan,
   });
   if (!parsed.success) {
     return NextResponse.json(
@@ -48,6 +49,7 @@ export async function POST(
       developmentKind: parsed.data.developmentKind,
       newDevelopmentDetails: parsed.data.newDevelopmentDetails,
       existingProductDetails: parsed.data.existingProductDetails,
+      newDevPlan: parsed.data.newDevPlan,
     },
     { bypassHeadCheck: bypassHead }
   );
