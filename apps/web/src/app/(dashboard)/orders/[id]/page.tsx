@@ -1195,21 +1195,24 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             };
 
             return (
-              <div className="bg-blue-50/40 px-5 py-3.5 border-b border-blue-100">
-                <div className="mb-2 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wider text-blue-700">Customer details</p>
-                    {order.customerId && (
-                      <p className="text-[10px] font-mono text-blue-500 mt-0.5">{order.customerId}</p>
-                    )}
+              <div className="bg-gradient-to-br from-blue-50/60 to-indigo-50/30 px-5 py-4 border-b border-blue-100">
+                <div className="mb-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-xs font-bold text-blue-700">C</div>
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-wider text-blue-700">Customer details</p>
+                      {order.customerId && (
+                        <p className="font-mono text-[10px] text-blue-500/80 mt-0.5 tracking-wide">{order.customerId}</p>
+                      )}
+                    </div>
                   </div>
                   {canEditEnquiry && !editingEnquiry && (
                     <button
                       type="button"
                       onClick={openEdit}
-                      className="text-xs font-medium text-blue-600 hover:text-blue-800 underline underline-offset-2"
+                      className="rounded-md border border-blue-200 bg-white/60 px-2.5 py-1 text-xs font-medium text-blue-700 transition-colors hover:bg-white hover:text-blue-900"
                     >
-                      Edit
+                      Edit details
                     </button>
                   )}
                 </div>
@@ -1328,19 +1331,20 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             </p>
           ) : null}
           {order.enquiryHandoff && typeof order.enquiryHandoff === "object" ? (
-            <div className="px-5 py-3.5 space-y-1 text-sm">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Development classification</p>
-              <p className="text-slate-900">
-                {order.enquiryHandoff.developmentKind === "existing" ? "Existing development" : "New development"}
-              </p>
-              {typeof order.enquiryHandoff.newDevelopmentDetails === "string" &&
-              order.enquiryHandoff.newDevelopmentDetails.trim() ? (
-                <p className="text-slate-800 whitespace-pre-wrap">{order.enquiryHandoff.newDevelopmentDetails}</p>
-              ) : null}
-              {typeof order.enquiryHandoff.existingProductDetails === "string" &&
-              order.enquiryHandoff.existingProductDetails.trim() ? (
-                <p className="text-slate-800 whitespace-pre-wrap">{order.enquiryHandoff.existingProductDetails}</p>
-              ) : null}
+            <div className="px-5 py-3.5">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Development classification</p>
+              <div className="rounded-xl border border-slate-100 bg-gradient-to-br from-slate-50/80 to-white p-3 space-y-2">
+                <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ring-1 ${order.enquiryHandoff.developmentKind === "existing" ? "bg-blue-50 text-blue-700 ring-blue-200" : "bg-violet-50 text-violet-700 ring-violet-200"}`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${order.enquiryHandoff.developmentKind === "existing" ? "bg-blue-500" : "bg-violet-500"}`} />
+                  {order.enquiryHandoff.developmentKind === "existing" ? "Existing development" : "New development"}
+                </span>
+                {typeof order.enquiryHandoff.newDevelopmentDetails === "string" && order.enquiryHandoff.newDevelopmentDetails.trim() ? (
+                  <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{order.enquiryHandoff.newDevelopmentDetails}</p>
+                ) : null}
+                {typeof order.enquiryHandoff.existingProductDetails === "string" && order.enquiryHandoff.existingProductDetails.trim() ? (
+                  <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{order.enquiryHandoff.existingProductDetails}</p>
+                ) : null}
+              </div>
             </div>
           ) : null}
           </div>
@@ -1371,16 +1375,26 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               <span className="text-sm font-medium text-slate-800">{order.sampleRequestNotes}</span>
             </p>
           ) : null}
-          {order.customFields && typeof order.customFields === "object" && Object.keys(order.customFields).length > 0 && (
-            <div>
-              <span className="text-slate-500">Custom fields:</span>
-              <ul className="mt-1 list-inside list-disc text-sm">
-                {Object.entries(order.customFields as Record<string, unknown>).map(([k, v]) => (
-                  <li key={k}><span className="font-medium">{k}:</span> {String(v)}</li>
-                ))}
-              </ul>
-            </div>
-          )}
+          {(() => {
+            const INTERNAL_CF_KEYS = new Set(["supervisorHandoff", "sampleDevelopment", "sampleStatusUpdates", "enquiryHandoff", "newDevelopment"]);
+            const userFields = order.customFields && typeof order.customFields === "object"
+              ? Object.entries(order.customFields as Record<string, unknown>).filter(([k]) => !INTERNAL_CF_KEYS.has(k))
+              : [];
+            if (userFields.length === 0) return null;
+            return (
+              <div className="px-5 py-3.5">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Custom fields</span>
+                <ul className="mt-2 space-y-1">
+                  {userFields.map(([k, v]) => (
+                    <li key={k} className="flex gap-2 text-sm">
+                      <span className="font-medium text-slate-600">{k}:</span>
+                      <span className="text-slate-800">{typeof v === "object" ? JSON.stringify(v) : String(v)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })()}
           {order.slaDeadline ? (
             <p className="flex flex-col gap-0.5 px-5 py-3.5 sm:flex-row sm:items-baseline sm:gap-3">
               <span className="min-w-[10rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">SLA deadline</span>
@@ -1799,51 +1813,80 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
       {order.sampleRequested && (
         <Card className="overflow-hidden border border-slate-200 shadow-sm">
-          <CardHeader className="border-b border-slate-100 bg-slate-50/60 px-5 py-4">
-            <CardTitle className="text-base font-semibold text-slate-800">Sample workflow</CardTitle>
-            <p className="mt-0.5 text-xs text-slate-500">
-              Submit and save sample details, then approve in a separate step. Shipment requires courier and tracking ID.
-            </p>
+          <CardHeader className="border-b border-violet-100 bg-gradient-to-br from-violet-50/70 via-purple-50/30 to-slate-50/50 px-5 py-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-sm font-bold text-violet-700">S</div>
+              <div className="min-w-0">
+                <CardTitle className="text-base font-semibold text-slate-800">Sample workflow</CardTitle>
+                <p className="mt-0.5 text-xs text-violet-700/70">
+                  Head approves request → supervisor submits details → head approves details → ship → sales records feedback
+                </p>
+              </div>
+            </div>
           </CardHeader>
-          <CardContent className="space-y-4 text-sm">
-            {sampleDevelopment && (
-              <div className="rounded-lg border border-slate-100 bg-slate-50/80 p-3 space-y-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="font-medium text-slate-900">Sample type</p>
-                  {sampleDevelopmentUpdatedAtLabel ? (
-                    <span className="text-xs text-slate-500">Updated: {sampleDevelopmentUpdatedAtLabel}</span>
-                  ) : null}
-                </div>
 
-                {sampleDevelopment.type === "existing" ? (
-                  <div className="space-y-2">
-                    {typeof sampleDevelopment.existingReference === "string" ? (
-                      <p className="text-slate-700">
-                        <span className="text-slate-500">Existing sample (previous):</span>{" "}
-                        {sampleDevelopment.existingReference}
-                      </p>
-                    ) : (
-                      <p className="text-slate-600">—</p>
-                    )}
-                  </div>
-                ) : sampleDevelopment.type === "new" ? (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-slate-700">
-                      <span className="text-slate-500">New development:</span> submitted
-                    </p>
-                    <Button type="button" size="sm" variant="outline" onClick={() => setNewDevViewOpen(true)}>
-                      View details…
+          {/* Status badges strip */}
+          <div className="flex flex-wrap gap-2 border-b border-slate-100 bg-slate-50/40 px-5 py-3">
+            {order.headSampleRequestApprovedAt ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                Request approved{order.headSampleRequestApprovedBy?.name ? ` · ${order.headSampleRequestApprovedBy.name}` : ""}
+              </span>
+            ) : order.sampleRequested && !legacySampleProgress ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 ring-1 ring-amber-200">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400" />
+                Awaiting head approval
+              </span>
+            ) : null}
+            {order.sampleApprovedAt && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                Details approved{order.sampleApprovedBy?.name ? ` · ${order.sampleApprovedBy.name}` : ""}
+              </span>
+            )}
+            {order.sampleShippedAt && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700 ring-1 ring-indigo-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
+                Shipped · {new Date(order.sampleShippedAt).toLocaleDateString()}
+              </span>
+            )}
+          </div>
+
+          <CardContent className="p-0">
+
+            {/* Development type */}
+            {sampleDevelopment && (
+              <div className="border-b border-slate-100 px-5 py-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Development classification</p>
+                  {sampleDevelopmentUpdatedAtLabel && (
+                    <span className="text-xs text-slate-400">Updated {sampleDevelopmentUpdatedAtLabel}</span>
+                  )}
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-3">
+                  <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ring-1 ${sampleDevelopment.type === "existing" ? "bg-blue-50 text-blue-700 ring-blue-200" : "bg-violet-50 text-violet-700 ring-violet-200"}`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${sampleDevelopment.type === "existing" ? "bg-blue-500" : "bg-violet-500"}`} />
+                    {sampleDevelopment.type === "existing" ? "Existing development" : "New development"}
+                  </span>
+                  {sampleDevelopment.type === "new" && (
+                    <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setNewDevViewOpen(true)}>
+                      View details →
                     </Button>
-                  </div>
-                ) : (
-                  <p className="text-slate-600">—</p>
+                  )}
+                </div>
+                {sampleDevelopment.type === "existing" && typeof sampleDevelopment.existingReference === "string" && sampleDevelopment.existingReference.trim() && (
+                  <p className="mt-2 text-sm text-slate-700">
+                    <span className="text-slate-400">Reference: </span>{sampleDevelopment.existingReference}
+                  </p>
                 )}
               </div>
             )}
-            {canSeeSampleDetails && (order.sampleDetails || order.sampleQuantity || order.sampleWeight || order.sampleRemarks || order.sampleDeliveryDate) && (
-              <div className="rounded-lg border border-slate-100 bg-slate-50/80 p-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Sample details</p>
+
+            {/* Sample details display */}
+            {canSeeSampleDetails && (order.sampleDetails || order.sampleQuantity || order.sampleWeight || (order as { sampleRemarks?: string | null }).sampleRemarks || (order as { sampleDeliveryDate?: string | null }).sampleDeliveryDate) && (
+              <div className="border-b border-slate-100 px-5 py-4">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Sample details</p>
                   {showInteractiveUi && assignedSupervisorMe && !editingSample && (
                     <button
                       type="button"
@@ -1863,42 +1906,42 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                         setEditSampleError("");
                         setEditingSample(true);
                       }}
-                      className="text-xs font-medium text-blue-600 hover:text-blue-800 underline underline-offset-2"
+                      className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
                     >
-                      Edit
+                      Edit details
                     </button>
                   )}
                 </div>
                 {editingSample ? (
-                  <div className="space-y-2">
-                    <div className="grid gap-2 sm:grid-cols-2">
+                  <div className="mt-3 space-y-3 rounded-xl border border-violet-100 bg-violet-50/30 p-4">
+                    <div className="grid gap-3 sm:grid-cols-2">
                       <div className="space-y-1 sm:col-span-2">
                         <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Sample details</label>
-                        <textarea value={editSampleDetails} onChange={(e) => setEditSampleDetails(e.target.value)} rows={2} className="flex w-full rounded border border-slate-200 bg-white px-2.5 py-1.5 text-sm" />
+                        <textarea value={editSampleDetails} onChange={(e) => setEditSampleDetails(e.target.value)} rows={2} className="flex w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300" />
                       </div>
                       <div className="space-y-1">
                         <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Quantity</label>
-                        <input value={editSampleQuantity} onChange={(e) => setEditSampleQuantity(e.target.value)} className="flex h-8 w-full rounded border border-slate-200 bg-white px-2.5 text-sm" />
+                        <input value={editSampleQuantity} onChange={(e) => setEditSampleQuantity(e.target.value)} className="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300" />
                       </div>
                       <div className="space-y-1">
                         <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Weight</label>
-                        <input value={editSampleWeight} onChange={(e) => setEditSampleWeight(e.target.value)} className="flex h-8 w-full rounded border border-slate-200 bg-white px-2.5 text-sm" />
+                        <input value={editSampleWeight} onChange={(e) => setEditSampleWeight(e.target.value)} className="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300" />
                       </div>
                       <div className="space-y-1">
                         <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Delivery date</label>
-                        <input type="date" value={editSampleDeliveryDate} onChange={(e) => setEditSampleDeliveryDate(e.target.value)} className="flex h-8 w-full rounded border border-slate-200 bg-white px-2.5 text-sm" />
+                        <input type="date" value={editSampleDeliveryDate} onChange={(e) => setEditSampleDeliveryDate(e.target.value)} className="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300" />
                       </div>
                       <div className="space-y-1">
                         <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Courier name</label>
-                        <input value={editCourierName} onChange={(e) => setEditCourierName(e.target.value)} className="flex h-8 w-full rounded border border-slate-200 bg-white px-2.5 text-sm" />
+                        <input value={editCourierName} onChange={(e) => setEditCourierName(e.target.value)} className="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300" />
                       </div>
                       <div className="space-y-1">
                         <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Tracking ID</label>
-                        <input value={editTrackingId} onChange={(e) => setEditTrackingId(e.target.value)} className="flex h-8 w-full rounded border border-slate-200 bg-white px-2.5 text-sm" />
+                        <input value={editTrackingId} onChange={(e) => setEditTrackingId(e.target.value)} className="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300" />
                       </div>
                       <div className="space-y-1 sm:col-span-2">
                         <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Remarks</label>
-                        <input value={editSampleRemarks} onChange={(e) => setEditSampleRemarks(e.target.value)} className="flex h-8 w-full rounded border border-slate-200 bg-white px-2.5 text-sm" />
+                        <input value={editSampleRemarks} onChange={(e) => setEditSampleRemarks(e.target.value)} className="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300" />
                       </div>
                     </div>
                     {editSampleError && <p className="text-xs text-red-600">{editSampleError}</p>}
@@ -1935,277 +1978,209 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                             setEditSampleSaving(false);
                           }
                         }}
-                        className="rounded bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700 disabled:opacity-60"
+                        className="rounded-lg bg-violet-600 px-4 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-violet-700 disabled:opacity-60"
                       >
                         {editSampleSaving ? "Saving…" : "Save changes"}
                       </button>
-                      <button type="button" onClick={() => setEditingSample(false)} className="rounded border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50">
+                      <button type="button" onClick={() => setEditingSample(false)} className="rounded-lg border border-slate-200 px-4 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50">
                         Cancel
                       </button>
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-1 text-sm">
-                    {order.sampleDetails && <p><span className="text-slate-500">Details:</span> {order.sampleDetails}</p>}
-                    {order.sampleQuantity && <p><span className="text-slate-500">Quantity:</span> {order.sampleQuantity}</p>}
-                    {order.sampleWeight && <p><span className="text-slate-500">Weight:</span> {order.sampleWeight}</p>}
-                    {(order as { sampleDeliveryDate?: string | null }).sampleDeliveryDate && <p><span className="text-slate-500">Delivery date:</span> {new Date((order as { sampleDeliveryDate: string }).sampleDeliveryDate).toLocaleDateString()}</p>}
-                    {(order as { sampleRemarks?: string | null }).sampleRemarks && <p><span className="text-slate-500">Remarks:</span> {(order as { sampleRemarks: string }).sampleRemarks}</p>}
-                    {order.courierName && <p><span className="text-slate-500">Courier:</span> {order.courierName}{order.trackingId ? ` · ${order.trackingId}` : ""}</p>}
+                  <div className="mt-3 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+                    {order.sampleDetails && (
+                      <p className="flex flex-col sm:col-span-2">
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Details</span>
+                        <span className="text-slate-800">{order.sampleDetails}</span>
+                      </p>
+                    )}
+                    {order.sampleQuantity && (
+                      <p className="flex flex-col">
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Quantity</span>
+                        <span className="text-slate-800">{order.sampleQuantity}</span>
+                      </p>
+                    )}
+                    {order.sampleWeight && (
+                      <p className="flex flex-col">
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Weight</span>
+                        <span className="text-slate-800">{order.sampleWeight}</span>
+                      </p>
+                    )}
+                    {(order as { sampleDeliveryDate?: string | null }).sampleDeliveryDate && (
+                      <p className="flex flex-col">
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Delivery date</span>
+                        <span className="text-slate-800">{new Date((order as { sampleDeliveryDate: string }).sampleDeliveryDate).toLocaleDateString()}</span>
+                      </p>
+                    )}
+                    {(order as { sampleRemarks?: string | null }).sampleRemarks && (
+                      <p className="flex flex-col sm:col-span-2">
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Remarks</span>
+                        <span className="text-slate-800">{(order as { sampleRemarks: string }).sampleRemarks}</span>
+                      </p>
+                    )}
+                    {order.courierName && (
+                      <p className="flex flex-col">
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Courier</span>
+                        <span className="text-slate-800">{order.courierName}{order.trackingId ? ` · ${order.trackingId}` : ""}</span>
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
             )}
+
             {!canSeeSampleDetails && (order.sampleDetails || order.sampleQuantity || order.sampleWeight) ? (
-              <p className="rounded-lg border border-slate-100 bg-slate-50/70 px-3 py-2 text-slate-600">
-                Sample details are pending head approval. They will appear here after the head approves.
-              </p>
+              <div className="border-b border-slate-100 px-5 py-4">
+                <p className="rounded-xl border border-slate-100 bg-slate-50/70 px-4 py-3 text-sm text-slate-600">
+                  Sample details are pending head approval and will appear here after approval.
+                </p>
+              </div>
             ) : null}
-            {order.headSampleRequestApprovedAt ? (
-              <p className="text-slate-700">
-                <span className="text-slate-500">Sample request approved by head</span>{" "}
-                {new Date(order.headSampleRequestApprovedAt).toLocaleString()}
-                {order.headSampleRequestApprovedBy?.name ? ` · ${order.headSampleRequestApprovedBy.name}` : ""}
-              </p>
-            ) : order.sampleRequested && !legacySampleProgress ? (
-              <p className="rounded-lg border border-amber-100 bg-amber-50/80 px-3 py-2 text-amber-950">
-                Awaiting division head approval of the sample request before supervisors can enter sample details.
-              </p>
-            ) : null}
-            {order.sampleApprovedAt && (
-              <p className="text-slate-700">
-                <span className="text-slate-500">Sample workflow approved</span>{" "}
-                {new Date(order.sampleApprovedAt).toLocaleString()}
-                {order.sampleApprovedBy?.name && ` · ${order.sampleApprovedBy.name}`}
-              </p>
-            )}
+
+            {/* Shipment record */}
             {order.sampleShippedAt && (
-              <div className="rounded-lg border border-emerald-100 bg-emerald-50/50 p-3 space-y-1">
-                <p>
-                  <span className="text-slate-500">Shipped</span> {new Date(order.sampleShippedAt).toLocaleString()}
-                </p>
-                <p>
-                  <span className="text-slate-500">Sent by courier:</span>{" "}
-                  {order.sampleShippedByCourier === false ? "No" : "Yes"}
-                </p>
-                {order.courierName && (
-                  <p>
-                    <span className="text-slate-500">Courier:</span> {order.courierName}
+              <div className="border-b border-emerald-100 bg-emerald-50/30 px-5 py-4">
+                <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-emerald-700">Shipment record</p>
+                <div className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+                  <p className="flex flex-col">
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Shipped on</span>
+                    <span className="text-slate-800">{new Date(order.sampleShippedAt).toLocaleString()}</span>
                   </p>
-                )}
-                {order.trackingId && (
-                  <p>
-                    <span className="text-slate-500">Tracking ID:</span> {order.trackingId}
+                  <p className="flex flex-col">
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Method</span>
+                    <span className="text-slate-800">{order.sampleShippedByCourier === false ? "Hand delivery" : "By courier"}</span>
                   </p>
-                )}
-                {order.sampleProofUrl && (
-                  <div className="space-y-2">
-                    <p>
-                      <span className="text-slate-500">Proof:</span>{" "}
-                      <a
-                        className="text-blue-700 underline"
-                        href={order.sampleProofUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        Open in new tab
+                  {order.courierName && (
+                    <p className="flex flex-col">
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Courier</span>
+                      <span className="text-slate-800">{order.courierName}</span>
+                    </p>
+                  )}
+                  {order.trackingId && (
+                    <p className="flex flex-col">
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Tracking ID</span>
+                      <span className="font-mono text-slate-800">{order.trackingId}</span>
+                    </p>
+                  )}
+                  {order.sampleProofUrl && (
+                    <p className="flex flex-col sm:col-span-2">
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Proof</span>
+                      <a className="text-sm font-medium text-blue-600 underline underline-offset-2" href={order.sampleProofUrl} target="_blank" rel="noreferrer">
+                        View proof ↗
                       </a>
                     </p>
-                    {sampleProofUrlKind(order.sampleProofUrl) === "image" ? (
-                      // eslint-disable-next-line @next/next/no-img-element -- user-uploaded proof from our public/uploads
-                      <img
-                        src={order.sampleProofUrl}
-                        alt="Sample shipment proof"
-                        className="mt-1 max-h-96 w-full max-w-lg rounded-md border border-slate-200 bg-white object-contain"
-                      />
-                    ) : sampleProofUrlKind(order.sampleProofUrl) === "pdf" ? (
-                      <iframe
-                        title="Sample shipment proof"
-                        src={order.sampleProofUrl}
-                        className="mt-1 h-112 w-full max-w-2xl rounded-md border border-slate-200 bg-white"
-                      />
-                    ) : null}
-                  </div>
+                  )}
+                </div>
+                {order.sampleProofUrl && sampleProofUrlKind(order.sampleProofUrl) === "image" && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={order.sampleProofUrl} alt="Sample shipment proof" className="mt-3 max-h-96 w-full max-w-lg rounded-xl border border-slate-200 bg-white object-contain" />
+                )}
+                {order.sampleProofUrl && sampleProofUrlKind(order.sampleProofUrl) === "pdf" && (
+                  <iframe title="Sample shipment proof" src={order.sampleProofUrl} className="mt-3 h-112 w-full max-w-2xl rounded-xl border border-slate-200 bg-white" />
                 )}
               </div>
             )}
+
+            {/* Sales feedback display */}
             {order.salesFeedback && (
-              <p>
-                <span className="text-slate-500">Sales feedback:</span> {order.salesFeedback}{" "}
-                <span className="text-slate-400">
-                  ({order.salesFeedbackAt ? new Date(order.salesFeedbackAt).toLocaleString() : ""})
-                </span>
-              </p>
+              <div className="border-b border-slate-100 px-5 py-4">
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">Sales feedback</p>
+                <p className="text-sm text-slate-800">{order.salesFeedback}</p>
+                {order.salesFeedbackAt && <p className="mt-1 text-xs text-slate-400">{new Date(order.salesFeedbackAt).toLocaleString()}</p>}
+              </div>
             )}
+
+            {/* Customer feedback display */}
             {order.customerFeedback && (
-              <div className="rounded-lg border border-slate-100 bg-slate-50 p-3 space-y-1">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Customer feedback</p>
-                {order.customerResponseStatus && (
-                  <p className="text-xs font-semibold">
-                    <span className={{
-                      POSITIVE: "text-emerald-600",
-                      NEUTRAL: "text-amber-600",
-                      NEGATIVE: "text-red-600",
-                      PENDING: "text-blue-600",
-                    }[order.customerResponseStatus] ?? "text-slate-600"}>
+              <div className="border-b border-slate-100 px-5 py-4">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Customer feedback</p>
+                  {order.customerResponseStatus && (
+                    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ${{
+                      POSITIVE: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+                      NEUTRAL: "bg-amber-50 text-amber-700 ring-amber-200",
+                      NEGATIVE: "bg-red-50 text-red-700 ring-red-200",
+                      PENDING: "bg-blue-50 text-blue-700 ring-blue-200",
+                    }[order.customerResponseStatus] ?? "bg-slate-50 text-slate-600 ring-slate-200"}`}>
+                      <span className={`h-1.5 w-1.5 rounded-full ${{
+                        POSITIVE: "bg-emerald-500",
+                        NEUTRAL: "bg-amber-500",
+                        NEGATIVE: "bg-red-500",
+                        PENDING: "bg-blue-500",
+                      }[order.customerResponseStatus] ?? "bg-slate-400"}`} />
                       {order.customerResponseStatus}
                     </span>
-                  </p>
-                )}
-                <p className="text-sm text-slate-800">{order.customerFeedback}</p>
-                {order.customerFeedbackRemarks && (
-                  <p className="text-xs text-slate-500">Remarks: {order.customerFeedbackRemarks}</p>
-                )}
-                {order.customerFeedbackAt && (
-                  <p className="text-xs text-slate-400">{new Date(order.customerFeedbackAt).toLocaleString()}</p>
-                )}
+                  )}
+                </div>
+                <p className="text-sm text-slate-800 leading-relaxed">{order.customerFeedback}</p>
+                {order.customerFeedbackRemarks && <p className="mt-1.5 text-xs text-slate-500">{order.customerFeedbackRemarks}</p>}
+                {order.customerFeedbackAt && <p className="mt-1 text-xs text-slate-400">{new Date(order.customerFeedbackAt).toLocaleString()}</p>}
               </div>
             )}
 
             {sampleError && (
-              <div className="rounded-lg border border-red-100 bg-red-50 text-red-700 text-sm p-3">{sampleError}</div>
+              <div className="mx-5 my-3 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">{sampleError}</div>
             )}
 
+            {/* ── Division Head Actions ── */}
             {showInteractiveUi && mightManageSample && (
-              <div className="space-y-6 border-t border-slate-100 pt-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Division actions</p>
-                {order.sampleRequested &&
-                !order.headSampleRequestApprovedAt &&
-                mightManageSample &&
-                order.enquiryHandoff ? (
-                  <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-4 space-y-2">
-                    <p className="text-sm font-medium text-slate-900">Approve sample request</p>
-                    <p className="text-xs text-slate-600">
-                      Sales requested a sample. Approve so the assigned supervisor can submit sample specifications.
-                    </p>
-                    <Button
-                      type="button"
-                      size="sm"
-                      disabled={sampleMutation.isPending}
-                      onClick={() => sampleMutation.mutate({ action: "approveSampleRequest" })}
-                    >
+              <div className="border-t-2 border-indigo-100 bg-gradient-to-br from-indigo-50/60 via-blue-50/30 to-slate-50/40 px-5 py-5 space-y-4">
+                <div className="flex items-center gap-2">
+                  <div className="h-6 w-1 rounded-full bg-indigo-500" />
+                  <p className="text-xs font-bold uppercase tracking-widest text-indigo-700">Division Head Actions</p>
+                </div>
+
+                {order.sampleRequested && !order.headSampleRequestApprovedAt && mightManageSample && order.enquiryHandoff ? (
+                  <div className="rounded-xl border border-indigo-200 bg-white/90 p-4 shadow-sm space-y-3">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">Approve sample request</p>
+                      <p className="mt-0.5 text-xs text-slate-500">Salesperson has requested a sample. Approve so the assigned supervisor can submit sample specifications.</p>
+                    </div>
+                    <Button type="button" size="sm" disabled={sampleMutation.isPending} onClick={() => sampleMutation.mutate({ action: "approveSampleRequest" })}>
                       Approve sample request
                     </Button>
                   </div>
                 ) : null}
-                {order.sampleRequested &&
-                !order.headSampleRequestApprovedAt &&
-                user?.role === "SUPERVISOR" &&
-                assignedSupervisorMe ? (
-                  <p className="text-sm text-slate-600">
-                    The division head must approve the sample request before you can enter sample details.
-                  </p>
-                ) : null}
-                {sampleGateOk && !order.sampleApprovedAt && assignedSupervisorMe && user?.role === "SUPERVISOR" && (
-                  <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-3">
-                    <p className="text-sm font-medium text-slate-900">Step 1 — Submit sample details</p>
-                    <p className="text-xs text-slate-500">
-                      Enter details and click Save. Approval is only available after details are saved.
-                    </p>
-                    {(assignedSupervisorMe || (isManager && sampleGateOk)) && (
-                    <div className="space-y-2">
-                      <Label htmlFor="sample-details">Sample details</Label>
-                      <textarea
-                        id="sample-details"
-                        value={sampleDetails}
-                        onChange={(e) => setSampleDetails(e.target.value)}
-                        placeholder="Sample specifications, color, finish…"
-                        rows={2}
-                        className="flex min-h-[56px] w-full rounded-md border border-slate-200 px-3 py-2 text-sm bg-white"
-                      />
-                      <Input
-                        value={sampleQuantity}
-                        onChange={(e) => setSampleQuantity(e.target.value)}
-                        placeholder="e.g. 2 meters, 3 swatches"
-                      />
-                      <Input
-                        value={sampleWeight}
-                        onChange={(e) => setSampleWeight(e.target.value)}
-                        placeholder="Weight (e.g. 250 gsm, 1.5 kg)"
-                      />
-                      <Button
-                        type="button"
-                        variant="default"
-                        size="sm"
-                        disabled={
-                          sampleMutation.isPending ||
-                          (!sampleDetails.trim() && !sampleQuantity.trim() && !sampleWeight.trim())
-                        }
-                        onClick={() =>
-                          sampleMutation.mutate({
-                            action: "setDetails",
-                            sampleDetails: sampleDetails.trim() || undefined,
-                            sampleQuantity: sampleQuantity.trim() || undefined,
-                            sampleWeight: sampleWeight.trim() || undefined,
-                          })
-                        }
-                      >
-                        Save sample details
-                      </Button>
-                    </div>
-                    )}
-                  </div>
-                )}
+
                 {sampleGateOk && !order.sampleApprovedAt && mightManageSample && !assignedSupervisorMe && (
-                  <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
-                    <p className="text-sm font-medium text-slate-900">Approve sample details</p>
-                    {!canApproveSampleNow ? (
-                      <p className="text-sm text-slate-500">
-                        Wait for the supervisor to submit sample details first. Once submitted, you can approve here.
-                      </p>
-                    ) : (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={sampleMutation.isPending}
-                        onClick={() => setApproveSampleOpen(true)}
-                      >
+                  <div className="rounded-xl border border-indigo-200 bg-white/90 p-4 shadow-sm space-y-3">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">Approve sample details</p>
+                      {!canApproveSampleNow ? (
+                        <p className="mt-0.5 text-xs text-slate-500">Wait for the supervisor to submit sample details first, then approve here.</p>
+                      ) : (
+                        <p className="mt-0.5 text-xs text-emerald-700">Sample details have been submitted — ready to review and approve.</p>
+                      )}
+                    </div>
+                    {canApproveSampleNow && (
+                      <Button type="button" size="sm" variant="outline" disabled={sampleMutation.isPending} onClick={() => setApproveSampleOpen(true)}>
                         Approve sample…
                       </Button>
                     )}
                   </div>
                 )}
+
                 {sampleGateOk && order.sampleApprovedAt && !order.sampleShippedAt && (
-                  <div className="space-y-2">
-                    <Label>Record shipment</Label>
+                  <div className="rounded-xl border border-indigo-200 bg-white/90 p-4 shadow-sm space-y-3">
+                    <p className="text-sm font-semibold text-slate-900">Record shipment</p>
                     <label className="flex items-center gap-2 text-sm text-slate-700">
-                      <input
-                        type="checkbox"
-                        checked={sentByCourier}
-                        onChange={(e) => setSentByCourier(e.target.checked)}
-                      />
+                      <input type="checkbox" checked={sentByCourier} onChange={(e) => setSentByCourier(e.target.checked)} className="rounded" />
                       Sent by courier (requires courier + tracking)
                     </label>
                     {sentByCourier && (
-                      <>
-                        <Input
-                          value={courierName}
-                          onChange={(e) => setCourierName(e.target.value)}
-                          placeholder="Courier name"
-                        />
-                        <Input
-                          value={trackingId}
-                          onChange={(e) => setTrackingId(e.target.value)}
-                          placeholder="Tracking ID"
-                        />
-                      </>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <Input value={courierName} onChange={(e) => setCourierName(e.target.value)} placeholder="Courier name" />
+                        <Input value={trackingId} onChange={(e) => setTrackingId(e.target.value)} placeholder="Tracking ID" />
+                      </div>
                     )}
                     <div className="space-y-1">
-                      <Label>Proof (optional: png/jpg/webp/pdf, max 5MB)</Label>
-                      <input
-                        type="file"
-                        accept=".png,.jpg,.jpeg,.webp,.pdf"
-                        onChange={(e) => setSampleProofFile(e.target.files?.[0] ?? null)}
-                      />
+                      <Label className="text-xs text-slate-500">Proof (optional · png/jpg/pdf, max 5MB)</Label>
+                      <input type="file" accept=".png,.jpg,.jpeg,.webp,.pdf" onChange={(e) => setSampleProofFile(e.target.files?.[0] ?? null)} className="text-xs" />
                     </div>
                     <Button
-                      type="button"
-                      size="sm"
-                      disabled={
-                        sampleMutation.isPending ||
-                        (sentByCourier && (!courierName.trim() || !trackingId.trim()))
-                      }
+                      type="button" size="sm"
+                      disabled={sampleMutation.isPending || (sentByCourier && (!courierName.trim() || !trackingId.trim()))}
                       onClick={async () => {
                         try {
                           setSampleError("");
@@ -2213,34 +2188,13 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                           if (sampleProofFile) {
                             const fd = new FormData();
                             fd.append("file", sampleProofFile);
-                            const res = await fetch(`/api/orders/${orderId}/sample-proof`, {
-                              method: "POST",
-                              credentials: "include",
-                              body: fd,
-                            });
+                            const res = await fetch(`/api/orders/${orderId}/sample-proof`, { method: "POST", credentials: "include", body: fd });
                             const contentType = res.headers.get("content-type") ?? "";
-                            const data = contentType.includes("application/json")
-                              ? await res.json().catch(() => ({}))
-                              : {};
-                            if (!res.ok) {
-                              throw new Error(
-                                  (data as { error?: string; detail?: string }).detail ||
-                                  (data as { error?: string; detail?: string }).error ||
-                                  `Failed to upload proof (${res.status})`
-                              );
-                            }
-                            proofUrl =
-                              typeof (data as { url?: unknown }).url === "string"
-                                ? (data as { url: string }).url
-                                : undefined;
+                            const data = contentType.includes("application/json") ? await res.json().catch(() => ({})) : {};
+                            if (!res.ok) throw new Error((data as { error?: string; detail?: string }).detail || (data as { error?: string; detail?: string }).error || `Failed to upload proof (${res.status})`);
+                            proofUrl = typeof (data as { url?: unknown }).url === "string" ? (data as { url: string }).url : undefined;
                           }
-                          sampleMutation.mutate({
-                            action: "ship",
-                            sentByCourier,
-                            courierName: sentByCourier ? courierName.trim() : undefined,
-                            trackingId: sentByCourier ? trackingId.trim() : undefined,
-                            sampleProofUrl: proofUrl,
-                          });
+                          sampleMutation.mutate({ action: "ship", sentByCourier, courierName: sentByCourier ? courierName.trim() : undefined, trackingId: sentByCourier ? trackingId.trim() : undefined, sampleProofUrl: proofUrl });
                         } catch (e) {
                           setSampleError(e instanceof Error ? e.message : String(e));
                         }
@@ -2253,72 +2207,93 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               </div>
             )}
 
-            {showInteractiveUi && mightSubmitFeedback && (
-              <div className="space-y-3 border-t border-slate-100 pt-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Customer feedback</p>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium text-slate-500">Sample received date</label>
-                    <input
-                      type="date"
-                      value={feedbackReceivedDate}
-                      onChange={(e) => setFeedbackReceivedDate(e.target.value)}
-                      className="flex h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
-                    />
+            {/* ── Supervisor Actions ── */}
+            {showInteractiveUi && sampleGateOk && !order.sampleApprovedAt && assignedSupervisorMe && (user?.role === "SUPERVISOR" || user?.role === "ASM") && (
+              <div className="border-t-2 border-violet-100 bg-gradient-to-br from-violet-50/60 via-purple-50/30 to-slate-50/40 px-5 py-5 space-y-4">
+                <div className="flex items-center gap-2">
+                  <div className="h-6 w-1 rounded-full bg-violet-500" />
+                  <p className="text-xs font-bold uppercase tracking-widest text-violet-700">Supervisor Actions</p>
+                </div>
+
+                {order.sampleRequested && !order.headSampleRequestApprovedAt ? (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-4">
+                    <p className="text-sm font-medium text-amber-900">Awaiting head approval</p>
+                    <p className="mt-0.5 text-xs text-amber-700">The division head must approve the sample request before you can enter details.</p>
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium text-slate-500">Response status</label>
-                    <select
-                      value={feedbackResponseStatus}
-                      onChange={(e) => setFeedbackResponseStatus(e.target.value)}
-                      className="flex h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
-                    >
-                      <option value="">Select status…</option>
-                      <option value="POSITIVE">Positive — customer interested</option>
-                      <option value="NEUTRAL">Neutral — under consideration</option>
-                      <option value="NEGATIVE">Negative — not proceeding</option>
-                      <option value="PENDING">Pending — awaiting response</option>
-                    </select>
+                ) : (
+                  <div className="rounded-xl border border-violet-200 bg-white/90 p-4 shadow-sm space-y-3">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">Submit sample details</p>
+                      <p className="mt-0.5 text-xs text-slate-500">Save details here — the division head will approve after reviewing.</p>
+                    </div>
+                    <div className="space-y-2">
+                      <textarea
+                        value={sampleDetails}
+                        onChange={(e) => setSampleDetails(e.target.value)}
+                        placeholder="Sample specifications, color, finish, fabric…"
+                        rows={2}
+                        className="flex min-h-[56px] w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300"
+                      />
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <Input value={sampleQuantity} onChange={(e) => setSampleQuantity(e.target.value)} placeholder="Quantity (e.g. 2 meters)" />
+                        <Input value={sampleWeight} onChange={(e) => setSampleWeight(e.target.value)} placeholder="Weight (e.g. 250 gsm)" />
+                      </div>
+                      <Button
+                        type="button" variant="default" size="sm"
+                        disabled={sampleMutation.isPending || (!sampleDetails.trim() && !sampleQuantity.trim() && !sampleWeight.trim())}
+                        onClick={() => sampleMutation.mutate({ action: "setDetails", sampleDetails: sampleDetails.trim() || undefined, sampleQuantity: sampleQuantity.trim() || undefined, sampleWeight: sampleWeight.trim() || undefined })}
+                      >
+                        Save sample details
+                      </Button>
+                    </div>
                   </div>
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-slate-500">Customer feedback <span className="text-red-500">*</span></label>
-                  <textarea
-                    value={salesFeedback}
-                    onChange={(e) => setSalesFeedback(e.target.value)}
-                    placeholder="Customer reaction, sample quality remarks, follow-up needed…"
-                    rows={3}
-                    className="flex min-h-[72px] w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-slate-500">Additional remarks (optional)</label>
-                  <textarea
-                    value={feedbackRemarks}
-                    onChange={(e) => setFeedbackRemarks(e.target.value)}
-                    placeholder="Any additional notes for Division Head…"
-                    rows={2}
-                    className="flex min-h-[56px] w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
-                  />
-                </div>
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={sampleMutation.isPending || salesFeedback.trim().length < 5}
-                  onClick={() =>
-                    sampleMutation.mutate({
-                      action: "salesFeedback",
-                      salesFeedback: salesFeedback.trim(),
-                      responseStatus: feedbackResponseStatus || undefined,
-                      remarks: feedbackRemarks.trim() || undefined,
-                      sampleReceivedAt: feedbackReceivedDate || undefined,
-                    })
-                  }
-                >
-                  Submit customer feedback
-                </Button>
+                )}
               </div>
             )}
+
+            {/* ── Customer feedback form ── */}
+            {showInteractiveUi && mightSubmitFeedback && (
+              <div className="border-t-2 border-fuchsia-100 bg-gradient-to-br from-fuchsia-50/50 via-pink-50/20 to-slate-50/40 px-5 py-5 space-y-4">
+                <div className="flex items-center gap-2">
+                  <div className="h-6 w-1 rounded-full bg-fuchsia-500" />
+                  <p className="text-xs font-bold uppercase tracking-widest text-fuchsia-700">Customer Feedback</p>
+                </div>
+                <div className="rounded-xl border border-fuchsia-100 bg-white/90 p-4 shadow-sm space-y-3">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Sample received date</label>
+                      <input type="date" value={feedbackReceivedDate} onChange={(e) => setFeedbackReceivedDate(e.target.value)} className="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-fuchsia-200" />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Response status</label>
+                      <select value={feedbackResponseStatus} onChange={(e) => setFeedbackResponseStatus(e.target.value)} className="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-fuchsia-200">
+                        <option value="">Select status…</option>
+                        <option value="POSITIVE">Positive — customer interested</option>
+                        <option value="NEUTRAL">Neutral — under consideration</option>
+                        <option value="NEGATIVE">Negative — not proceeding</option>
+                        <option value="PENDING">Pending — awaiting response</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Customer feedback <span className="normal-case text-red-400">*</span></label>
+                    <textarea value={salesFeedback} onChange={(e) => setSalesFeedback(e.target.value)} placeholder="Customer reaction, sample quality remarks, follow-up needed…" rows={3} className="flex min-h-[72px] w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-fuchsia-200" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Additional remarks (optional)</label>
+                    <textarea value={feedbackRemarks} onChange={(e) => setFeedbackRemarks(e.target.value)} placeholder="Any additional notes for Division Head…" rows={2} className="flex min-h-[56px] w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-fuchsia-200" />
+                  </div>
+                  <Button
+                    type="button" size="sm"
+                    disabled={sampleMutation.isPending || salesFeedback.trim().length < 5}
+                    onClick={() => sampleMutation.mutate({ action: "salesFeedback", salesFeedback: salesFeedback.trim(), responseStatus: feedbackResponseStatus || undefined, remarks: feedbackRemarks.trim() || undefined, sampleReceivedAt: feedbackReceivedDate || undefined })}
+                  >
+                    Submit customer feedback
+                  </Button>
+                </div>
+              </div>
+            )}
+
           </CardContent>
         </Card>
       )}

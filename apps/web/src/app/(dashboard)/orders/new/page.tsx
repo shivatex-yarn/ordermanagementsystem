@@ -223,7 +223,7 @@ export default function NewOrderPage() {
                   id="customerName"
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
-                  placeholder="e.g. Rajesh Kumar"
+                  placeholder="e.g. John Doe"
                   required
                 />
               </div>
