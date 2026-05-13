@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { withAuth } from "@/lib/with-auth";
 import { userMayCreateEnquiry } from "@/lib/enquiry-access";
+import { put } from "@vercel/blob";
 import path from "path";
-import { promises as fs } from "fs";
 
 export const runtime = "nodejs";
 
@@ -43,13 +43,9 @@ export async function POST(req: Request) {
     }
 
     const filename = `gst-${Date.now()}-${Math.random().toString(36).slice(2, 7)}${ext}`;
-    const relUrl = `/uploads/gst/${filename}`;
-    const uploadDir = path.join(process.cwd(), "public", "uploads", "gst");
-    await fs.mkdir(uploadDir, { recursive: true });
-    const buf = await file.arrayBuffer();
-    await fs.writeFile(path.join(uploadDir, filename), Buffer.from(buf));
+    const blob = await put(`gst/${filename}`, file, { access: "public" });
 
-    return NextResponse.json({ url: relUrl, name: file.name });
+    return NextResponse.json({ url: blob.url, name: file.name });
   } catch (err) {
     console.error("[GST upload]", err);
     return NextResponse.json({ error: "Upload failed. Please try again." }, { status: 500 });
