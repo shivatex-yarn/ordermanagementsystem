@@ -1,12 +1,29 @@
+/**
+ * POST /api/orders/[id]/sample-proof
+ *
+ * Sample courier-proof upload. Per user spec the file is NOT written to disk under
+ * `public/uploads/…` — it's encoded as a base64 data URI and stored inside the
+ * order row (`sampleProofUrl`). The matching GET endpoint at
+ * /api/orders/[id]/sample-proof streams it back out with the right MIME type.
+ *
+ * Body: multipart/form-data, single field `file` (PDF / JPG / PNG / WEBP, ≤ 5 MB)
+ */
 import { NextResponse } from "next/server";
 import { withAuth } from "@/lib/with-auth";
 import { prisma } from "@/lib/db";
 import { userCanManageSampleForOrder } from "@/lib/order-sample-actions";
 import { Prisma } from "@prisma/client";
 import path from "path";
-import { promises as fs } from "fs";
 
 export const runtime = "nodejs";
+
+const MIME_MAP: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".pdf": "application/pdf",
+};
 
 export async function POST(
   req: Request,
@@ -45,7 +62,7 @@ export async function POST(
 
     const maxBytes = 5 * 1024 * 1024;
     if (file.size > maxBytes) {
-      return NextResponse.json({ error: "File too large (max 5MB)" }, { status: 400 });
+      return NextResponse.json({ error: "File too large (max 5 MB)" }, { status: 400 });
     }
 
     const safeName = path
@@ -53,30 +70,26 @@ export async function POST(
       .replace(/[^a-zA-Z0-9._-]+/g, "_")
       .slice(0, 80);
     const ext = path.extname(safeName).toLowerCase();
-    const allowed = new Set([".png", ".jpg", ".jpeg", ".webp", ".pdf"]);
-    if (!allowed.has(ext)) {
+    const mime = MIME_MAP[ext];
+    if (!mime) {
       return NextResponse.json(
-        { error: "Unsupported file type (allowed: png, jpg, webp, pdf)" },
+        { error: "Unsupported file type (allowed: PDF, PNG, JPG, WEBP)" },
         { status: 400 }
       );
     }
 
-    const ts = Date.now();
-    const filename = `order-${id}-${ts}${ext}`;
-    const relUrl = `/uploads/samples/${filename}`;
-
-    const uploadDir = path.join(process.cwd(), "public", "uploads", "samples");
-    await fs.mkdir(uploadDir, { recursive: true });
-
-    const arrayBuffer = await file.arrayBuffer();
-    await fs.writeFile(path.join(uploadDir, filename), Buffer.from(arrayBuffer));
+    // Encode inline — NO disk write. Matches the GST upload convention.
+    const buf = await file.arrayBuffer();
+    const base64 = Buffer.from(buf).toString("base64");
+    const dataUrl = `data:${mime};base64,${base64}`;
+    const stored = JSON.stringify({ url: dataUrl, name: file.name });
 
     await prisma.order.update({
       where: { id },
-      data: { sampleProofUrl: relUrl },
+      data: { sampleProofUrl: stored },
     });
 
-    return NextResponse.json({ url: relUrl });
+    return NextResponse.json({ url: dataUrl, name: file.name });
   } catch (err) {
     console.error("[sample-proof upload]", err);
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2022") {
@@ -99,4 +112,3 @@ export async function POST(
     );
   }
 }
-

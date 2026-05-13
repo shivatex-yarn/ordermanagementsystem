@@ -329,13 +329,18 @@ export async function transferOrder(
 }
 
 export async function rejectOrder(orderId: number, rejectedById: number, reason: string) {
+  // Defence-in-depth: route schema enforces min-10-char trimmed input, but the engine
+  // function is callable from integration paths too — trim here so junk whitespace and
+  // empty reasons never reach the OrderRejection row.
+  const trimmedReason = (reason ?? "").trim();
+  if (trimmedReason.length < 10) return null;
   const order = await prisma.order.findUnique({ where: { id: orderId } });
   if (!order) return null;
   if (await blockedByUnansweredBreach(orderId)) return null;
   if (order.status === "REJECTED" || order.status === "COMPLETED" || order.status === "CANCELLED") return null;
   await prisma.$transaction([
     prisma.orderRejection.create({
-      data: { orderId, divisionId: order.currentDivisionId, reason, rejectedById },
+      data: { orderId, divisionId: order.currentDivisionId, reason: trimmedReason, rejectedById },
     }),
     prisma.order.update({
       where: { id: orderId },
@@ -361,7 +366,7 @@ export async function rejectOrder(orderId: number, rejectedById: number, reason:
     orderId: updated.id,
     orderNumber: updated.orderNumber,
     divisionId: updated.currentDivisionId,
-    reason,
+    reason: trimmedReason,
     rejectedById,
     timestamp: new Date().toISOString(),
     userId: rejectedById,

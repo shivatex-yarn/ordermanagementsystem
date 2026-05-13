@@ -194,7 +194,7 @@ async function notificationHandler(event: OrderEvent): Promise<void> {
 
     const notifyUsers = await prisma.user.findMany({
       where: { id: { in: [...userIds] } },
-      select: { id: true, name: true, email: true },
+      select: { id: true, name: true, email: true, role: true },
     });
 
     const title2 = `${formatEnquiryNumber(event.orderNumber)} · ${getNotificationShortLabel(event.type)}`;
@@ -224,6 +224,8 @@ async function notificationHandler(event: OrderEvent): Promise<void> {
     const summary = eventTypeToSummary(event.type, event);
     for (const u of notifyUsers) {
       if (u.id === e.supervisorId) continue;
+      // Spec: MD gets only SLA breach emails; skip routine workflow notifications.
+      if (u.role === "MANAGING_DIRECTOR") continue;
       sendEnquiryNotificationEmail(u.email, u.name, event.orderNumber, event.type, summary).catch((err) =>
         console.error("[email] Notification email failed for", u.email, err)
       );
@@ -252,7 +254,7 @@ async function notificationHandler(event: OrderEvent): Promise<void> {
   superAdmins.forEach((u) => userIds.add(u.id));
   const users = await prisma.user.findMany({
     where: { id: { in: [...userIds] } },
-    select: { id: true, name: true, email: true },
+    select: { id: true, name: true, email: true, role: true },
   });
   for (const userId of userIds) {
     await prisma.notification.create({
@@ -261,6 +263,13 @@ async function notificationHandler(event: OrderEvent): Promise<void> {
   }
   const summary = eventTypeToSummary(event.type, event);
   for (const u of users) {
+    /**
+     * Per spec: MD only receives SLA breach emails. Strip MDs out of routine
+     * workflow notifications (creation, handoff, sample, feedback, etc.). The
+     * in-app notification was already created above so they still see it in
+     * the Notifications page if they want — just no mailbox noise.
+     */
+    if (u.role === "MANAGING_DIRECTOR") continue;
     sendEnquiryNotificationEmail(u.email, u.name, event.orderNumber, event.type, summary).catch((err) =>
       console.error("[email] Notification email failed for", u.email, err)
     );

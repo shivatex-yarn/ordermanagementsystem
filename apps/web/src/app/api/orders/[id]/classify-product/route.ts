@@ -64,12 +64,30 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     );
   }
 
+  /**
+   * SLA pause logic per spec:
+   * • EXISTING product → SLA timer continues running from creation; do NOT clear slaDeadline.
+   * • NEW development  → 48-hour SLA PAUSES. We clear `slaDeadline` (cron skips orders with
+   *                       null deadlines) and record `planningStartedAt`. The SLA timer is
+   *                       restarted by /api/orders/[id]/complete-planning, which sets
+   *                       `planningCompletedAt` and a fresh 48-hour `slaDeadline`. The
+   *                       difference between those two timestamps is the "planning duration"
+   *                       visible only to MD + Super Admin.
+   */
+  const isNewDev = kind === "NEW";
   const updated = await prisma.order.update({
     where: { id: orderId },
     data: {
       productKind: kind,
       existingProductRef: kind === "EXISTING" ? existingRef : null,
-      newProductSpecs: kind === "NEW" ? newSpecs : null,
+      newProductSpecs: isNewDev ? newSpecs : null,
+      // Only touch SLA / planning fields when classifying as NEW.
+      ...(isNewDev
+        ? {
+            planningStartedAt: new Date(),
+            slaDeadline: null, // pause the SLA clock until planning is marked complete
+          }
+        : {}),
     },
     select: {
       id: true,
@@ -78,6 +96,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       productKind: true,
       existingProductRef: true,
       newProductSpecs: true,
+      planningStartedAt: true,
+      slaDeadline: true,
     },
   });
 
@@ -86,10 +106,17 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     orderId: updated.id,
     orderNumber: updated.orderNumber,
     divisionId: updated.currentDivisionId,
-    developmentType: kind === "EXISTING" ? "existing" : "new",
+    developmentType: isNewDev ? "new" : "existing",
     timestamp: new Date().toISOString(),
     userId,
   });
 
-  return NextResponse.json({ ok: true, enquiry: updated });
+  return NextResponse.json({
+    ok: true,
+    enquiry: updated,
+    classification: kind,
+    // UI cue — when true, the detail page opens the New Development planning popup so
+    // the head can submit the seven planning fields and the SLA timer can be restarted.
+    requiresPlanningPopup: isNewDev,
+  });
 }

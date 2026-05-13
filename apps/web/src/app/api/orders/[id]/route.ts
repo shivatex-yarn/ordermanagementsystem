@@ -64,59 +64,61 @@ export async function GET(
   if (!Number.isInteger(id)) {
     return NextResponse.json({ error: "Invalid enquiry id" }, { status: 400 });
   }
-  let order;
-  try {
-    order = await prisma.order.findUnique({
-      where: { id },
-      include: fullInclude,
-    });
-  } catch (err) {
-    console.error("[GET /api/orders/[id]]", err);
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2022") {
+  /**
+   * Fetch with up to 2 attempts. The pooler occasionally drops idle connections; the
+   * first call surfaces P1001 and the second succeeds.
+   *
+   * Crucially, on a successful retry we MUST return data — the previous version had a
+   * control-flow bug where a successful retry inside the catch still fell through to
+   * the generic `return 500`. We now use an explicit result variable + outer-loop break.
+   */
+  let order: Awaited<ReturnType<typeof prisma.order.findUnique>> | undefined;
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      order = await prisma.order.findUnique({ where: { id }, include: fullInclude });
+      lastError = null;
+      break;
+    } catch (err) {
+      lastError = err;
+      // Retry only on transient pooler closes — schema/permission errors are fatal.
+      const code = err instanceof Prisma.PrismaClientKnownRequestError ? err.code : null;
+      if (attempt === 0 && (code === "P1001" || code === "P1017" || code === "P2024")) {
+        await new Promise((r) => setTimeout(r, 350));
+        continue;
+      }
+      break;
+    }
+  }
+
+  if (lastError) {
+    console.error("[GET /api/orders/[id]]", lastError);
+    const msg = lastError instanceof Error ? lastError.message : String(lastError);
+    if (lastError instanceof Prisma.PrismaClientKnownRequestError && lastError.code === "P2022") {
       return NextResponse.json(
         {
           error:
-            "Database is missing required columns (sample workflow / schema update). From apps/web run: npx prisma migrate deploy",
+            "Database is missing required columns. From apps/web run: npx prisma migrate deploy && npx prisma generate, then restart the dev server.",
           code: "SCHEMA_DRIFT",
         },
         { status: 503 }
       );
     }
-    const msg = err instanceof Error ? err.message : String(err);
-    if (
-      err instanceof Prisma.PrismaClientKnownRequestError &&
-      err.code === "P1001"
-    ) {
-      // One quick retry for flaky pooler disconnects.
-      try {
-        await new Promise((r) => setTimeout(r, 450));
-        order = await prisma.order.findUnique({
-          where: { id },
-          include: fullInclude,
-        });
-        if (order) {
-          // continue below (permission check + return)
-        } else {
-          return NextResponse.json({ error: "Enquiry not found" }, { status: 404 });
-        }
-      } catch (retryErr) {
-        const retryMsg = retryErr instanceof Error ? retryErr.message : String(retryErr);
-        return NextResponse.json(
-          {
-            error: "Database unavailable. Please retry.",
-            code: "DB_UNAVAILABLE",
-            detail: process.env.NODE_ENV === "development" ? retryMsg : undefined,
-          },
-          { status: 503 }
-        );
-      }
-    }
     if (/column/i.test(msg) && /does not exist/i.test(msg)) {
       return NextResponse.json(
         {
-          error:
-            "Database schema is out of date. Run migrations: cd apps/web && npx prisma migrate deploy",
+          error: "Database schema is out of date. Run: cd apps/web && npx prisma migrate deploy",
           code: "SCHEMA_DRIFT",
+        },
+        { status: 503 }
+      );
+    }
+    if (lastError instanceof Prisma.PrismaClientKnownRequestError && lastError.code === "P1001") {
+      return NextResponse.json(
+        {
+          error: "Database unavailable. Please retry.",
+          code: "DB_UNAVAILABLE",
+          detail: process.env.NODE_ENV === "development" ? msg : undefined,
         },
         { status: 503 }
       );
@@ -129,6 +131,7 @@ export async function GET(
       { status: 500 }
     );
   }
+
   if (!order) return NextResponse.json({ error: "Enquiry not found" }, { status: 404 });
 
   if (

@@ -77,6 +77,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     actorId: userId,
     metadata: { feedbackLength: feedback.length, sampleStatus, sampleReceivedAt: sampleReceivedAt?.toISOString() ?? null },
   });
+  /**
+   * Event type kept as "SalesFeedbackRecorded" for backward compatibility — existing
+   * subscribers (email handler, audit log, n8n webhook) already match on this name.
+   * Despite the legacy name, the payload describes CUSTOMER feedback collected by the
+   * salesperson, not internal sales notes. Renaming would require coordinating all
+   * subscribers + the timeline-event mapping.
+   */
   await publish({
     type: "SalesFeedbackRecorded",
     orderId,
