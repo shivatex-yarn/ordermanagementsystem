@@ -90,10 +90,12 @@ export default function NewOrderPage() {
         credentials: "include",
         body: form,
       });
-      const data = await res.json();
+      let data: { url?: string; name?: string; error?: string } = {};
+      try { data = await res.json(); } catch { /* empty body */ }
       if (!res.ok) throw new Error(data.error || "Upload failed");
-      setGstCopyUrl(data.url);
-      setGstFileName(file.name);
+      if (!data.url) throw new Error("Upload failed: no URL returned");
+      setGstCopyUrl(JSON.stringify({ url: data.url, name: data.name ?? file.name }));
+      setGstFileName(data.name ?? file.name);
     } catch (e) {
       setUploadError(e instanceof Error ? e.message : "Upload failed");
     } finally {

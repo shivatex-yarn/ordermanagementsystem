@@ -19,7 +19,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { formatEnquiryNumber, formatEnquiryNumberShort } from "@/lib/enquiry-display";
 import { userMayViewEnquiryExecInsights } from "@/lib/enquiry-access";
 import { EnquiryTimeline } from "@/components/enquiry-timeline";
@@ -432,6 +432,15 @@ function EnquiryPipelineStrip({
   );
 }
 
+function parseGstCopy(value: string | null | undefined): { url: string; name: string } | null {
+  if (!value) return null;
+  try {
+    const p = JSON.parse(value);
+    if (p?.url) return { url: p.url, name: p.name ?? "GST certificate" };
+  } catch { /* legacy: plain URL */ }
+  return { url: value, name: "GST certificate" };
+}
+
 function sampleProofUrlKind(url: string): "image" | "pdf" | "other" {
   const path = url.split("?")[0].toLowerCase();
   if (/\.(png|jpe?g|gif|webp)$/i.test(path)) return "image";
@@ -485,6 +494,10 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [editCustomerPhone, setEditCustomerPhone] = useState("");
   const [editGstNumber, setEditGstNumber] = useState("");
   const [editGstCopyUrl, setEditGstCopyUrl] = useState("");
+  const [editGstFileName, setEditGstFileName] = useState("");
+  const [editGstUploading, setEditGstUploading] = useState(false);
+  const [editGstUploadError, setEditGstUploadError] = useState("");
+  const editGstFileRef = useRef<HTMLInputElement>(null);
   const [editCompanyName, setEditCompanyName] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editCustomerOrderDate, setEditCustomerOrderDate] = useState("");
@@ -1149,11 +1162,33 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               order.createdById === user.id &&
               order.status === "PLACED";
 
+            const handleEditGstUpload = async (file: File) => {
+              setEditGstUploadError("");
+              setEditGstUploading(true);
+              try {
+                const form = new FormData();
+                form.append("file", file);
+                const res = await fetch("/api/uploads/gst", { method: "POST", credentials: "include", body: form });
+                let data: { url?: string; name?: string; error?: string } = {};
+                try { data = await res.json(); } catch { /* empty body */ }
+                if (!res.ok) throw new Error(data.error || "Upload failed");
+                if (!data.url) throw new Error("Upload failed");
+                setEditGstCopyUrl(JSON.stringify({ url: data.url, name: data.name ?? file.name }));
+                setEditGstFileName(data.name ?? file.name);
+              } catch (e) {
+                setEditGstUploadError(e instanceof Error ? e.message : "Upload failed");
+              } finally {
+                setEditGstUploading(false);
+              }
+            };
+
             const openEdit = () => {
               setEditCustomerName(order.customerName ?? "");
               setEditCustomerPhone(order.customerPhone ?? "");
               setEditGstNumber(order.gstNumber ?? "");
               setEditGstCopyUrl(order.gstCopyUrl ?? "");
+              const existing = parseGstCopy(order.gstCopyUrl);
+              setEditGstFileName(existing?.name ?? "");
               setEditCompanyName(order.companyName ?? "");
               setEditDescription(order.description ?? "");
               setEditCustomerOrderDate(
@@ -1237,6 +1272,32 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                         <input type="date" value={editCustomerOrderDate} onChange={(e) => setEditCustomerOrderDate(e.target.value)} className="flex h-8 w-full rounded border border-slate-200 bg-white px-2.5 text-sm" />
                       </div>
                       <div className="space-y-1 sm:col-span-2">
+                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">GST certificate</label>
+                        {editGstCopyUrl ? (
+                          <div className="flex items-center gap-2 rounded border border-emerald-200 bg-emerald-50 px-2.5 py-1.5">
+                            <span className="flex-1 truncate text-xs font-medium text-emerald-800">{editGstFileName || "File uploaded"}</span>
+                            <button type="button" onClick={() => { setEditGstCopyUrl(""); setEditGstFileName(""); }} className="text-[10px] text-slate-500 hover:text-red-600 underline">Remove</button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => editGstFileRef.current?.click()}
+                            disabled={editGstUploading}
+                            className="flex h-8 w-full items-center justify-center rounded border border-dashed border-slate-300 bg-white px-2.5 text-xs text-slate-500 hover:border-slate-400 hover:bg-slate-50 disabled:opacity-60"
+                          >
+                            {editGstUploading ? "Uploading…" : "Click to upload PDF / JPG / PNG"}
+                          </button>
+                        )}
+                        <input
+                          ref={editGstFileRef}
+                          type="file"
+                          accept=".pdf,.png,.jpg,.jpeg,.webp"
+                          className="hidden"
+                          onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleEditGstUpload(f); }}
+                        />
+                        {editGstUploadError && <p className="text-[10px] text-red-600">{editGstUploadError}</p>}
+                      </div>
+                      <div className="space-y-1 sm:col-span-2">
                         <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Company name</label>
                         <input value={editCompanyName} onChange={(e) => setEditCompanyName(e.target.value)} className="flex h-8 w-full rounded border border-slate-200 bg-white px-2.5 text-sm" />
                       </div>
@@ -1281,14 +1342,24 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                         <span className="text-sm font-medium text-slate-800">{new Date(order.customerOrderDate).toLocaleDateString()}</span>
                       </p>
                     ) : null}
-                    {order.gstCopyUrl ? (
-                      <p className="flex flex-col sm:col-span-2">
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">GST certificate</span>
-                        <a href={order.gstCopyUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-blue-600 underline underline-offset-2">
-                          View GST certificate ↗
-                        </a>
-                      </p>
-                    ) : null}
+                    {(() => {
+                      const gst = parseGstCopy(order.gstCopyUrl);
+                      if (!gst) return null;
+                      return (
+                        <div className="flex flex-col sm:col-span-2">
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">GST certificate</span>
+                          <div className="mt-1 flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                            <span className="flex-1 truncate text-sm font-medium text-slate-800">{gst.name}</span>
+                            <a href={gst.url} target="_blank" rel="noopener noreferrer" className="rounded bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-blue-700">
+                              View
+                            </a>
+                            <a href={gst.url} download={gst.name} className="rounded border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100">
+                              Download
+                            </a>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
               </div>
