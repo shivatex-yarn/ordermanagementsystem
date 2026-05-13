@@ -66,13 +66,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
   /**
    * SLA pause logic per spec:
-   * • EXISTING product → SLA timer continues running from creation; do NOT clear slaDeadline.
-   * • NEW development  → 48-hour SLA PAUSES. We clear `slaDeadline` (cron skips orders with
-   *                       null deadlines) and record `planningStartedAt`. The SLA timer is
-   *                       restarted by /api/orders/[id]/complete-planning, which sets
-   *                       `planningCompletedAt` and a fresh 48-hour `slaDeadline`. The
-   *                       difference between those two timestamps is the "planning duration"
-   *                       visible only to MD + Super Admin.
+   * • EXISTING product → SLA timer continues from creation; do NOT clear slaDeadline.
+   * • NEW development → pause the 48h SLA by clearing slaDeadline (cron skips null deadlines)
+   *   until planning is completed and the deadline is set again elsewhere in the workflow.
    */
   const isNewDev = kind === "NEW";
   const updated = await prisma.order.update({
@@ -81,13 +77,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       productKind: kind,
       existingProductRef: kind === "EXISTING" ? existingRef : null,
       newProductSpecs: isNewDev ? newSpecs : null,
-      // Only touch SLA / planning fields when classifying as NEW.
-      ...(isNewDev
-        ? {
-            planningStartedAt: new Date(),
-            slaDeadline: null, // pause the SLA clock until planning is marked complete
-          }
-        : {}),
+      ...(isNewDev ? { slaDeadline: null } : {}),
     },
     select: {
       id: true,
@@ -96,7 +86,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       productKind: true,
       existingProductRef: true,
       newProductSpecs: true,
-      planningStartedAt: true,
       slaDeadline: true,
     },
   });
