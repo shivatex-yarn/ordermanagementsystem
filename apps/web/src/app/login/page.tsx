@@ -43,16 +43,20 @@ export default function LoginPage() {
       };
 
       let { res, data } = await doLogin();
-      // If DB is temporarily unavailable, do one quick retry so users don't need to click twice.
+      // If the server is still warming up after its internal retries, do one final client-side retry.
       if (res.status === 503) {
-        await new Promise((r) => setTimeout(r, 900));
+        await new Promise((r) => setTimeout(r, 2000));
         ({ res, data } = await doLogin());
       }
       if (!res.ok) {
-        const msg =
+        const rawMsg =
           typeof (data as Record<string, unknown>)?.error === "string"
             ? String((data as Record<string, unknown>).error)
             : "Login failed";
+        const msg =
+          res.status === 503
+            ? "Service is starting up. Please wait a moment and try again."
+            : rawMsg;
         setError(msg);
         return;
       }

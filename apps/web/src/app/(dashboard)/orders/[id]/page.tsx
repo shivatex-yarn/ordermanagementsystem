@@ -596,7 +596,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         order.status === "IN_PROGRESS" &&
         !order.enquiryHandoff &&
         showInteractiveUi &&
-        (user.role === "MANAGER" || user.role === "SUPER_ADMIN" || user.role === "MANAGING_DIRECTOR")
+        (user.role === "MANAGER" || user.role === "DIVISION_HEAD" || user.role === "SUPER_ADMIN" || user.role === "MANAGING_DIRECTOR")
     );
 
   // Auto-open planning dialog when "New development" is selected
@@ -827,7 +827,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const mightManageSample =
     user &&
     order &&
-    ["MANAGER", "SUPER_ADMIN", "MANAGING_DIRECTOR"].includes(user.role) &&
+    ["MANAGER", "DIVISION_HEAD", "SUPER_ADMIN", "MANAGING_DIRECTOR"].includes(user.role) &&
     !isClosedStatus;
   const assignedSupervisorMe =
     Boolean(user && order?.assignedSupervisorId && Number(user.id) === order.assignedSupervisorId);
@@ -845,7 +845,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   );
   const isEnquirySubmitter = Boolean(order && user && Number(user.id) === order.createdById);
   const canSeeSampleDetails =
-    Boolean(user && ["SUPER_ADMIN", "MANAGING_DIRECTOR", "MANAGER"].includes(user.role)) ||
+    Boolean(user && ["SUPER_ADMIN", "MANAGING_DIRECTOR", "MANAGER", "DIVISION_HEAD"].includes(user.role)) ||
     assignedSupervisorMe ||
     (isEnquirySubmitter && Boolean(order?.sampleApprovedAt));
   const mightSubmitFeedback =
@@ -2337,7 +2337,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                   <p className="text-xs font-bold uppercase tracking-widest text-indigo-700">Division Head Actions</p>
                 </div>
 
-                {order.sampleRequested && !order.headSampleRequestApprovedAt && mightManageSample && order.enquiryHandoff ? (
+                {order.sampleRequested && !order.headSampleRequestApprovedAt && mightManageSample ? (
                   <div className="rounded-xl border border-indigo-200 bg-white/90 p-4 shadow-sm space-y-3">
                     <div>
                       <p className="text-sm font-semibold text-slate-900">Approve sample request</p>

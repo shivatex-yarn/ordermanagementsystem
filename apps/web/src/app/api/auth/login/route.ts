@@ -83,20 +83,36 @@ export async function POST(req: Request) {
     const isMockCreds = emailNorm === MOCK_EMAIL && password === MOCK_PASSWORD;
 
     let user;
-    try {
-      user = await prisma.user.findUnique({
-        where: { email: emailNorm },
-        include: { division: true },
-      });
-    } catch (err) {
-      console.error("[login] prisma user lookup failed:", err);
-      if (isMockCreds) {
-        return await respondOfflineMockLogin(remaining);
+    {
+      const MAX_ATTEMPTS = 3;
+      const RETRY_DELAYS_MS = [800, 1500];
+      let lastErr: unknown;
+      let succeeded = false;
+      for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+        try {
+          user = await prisma.user.findUnique({
+            where: { email: emailNorm },
+            include: { division: true },
+          });
+          succeeded = true;
+          break;
+        } catch (err) {
+          lastErr = err;
+          if (attempt < RETRY_DELAYS_MS.length) {
+            await new Promise((r) => setTimeout(r, RETRY_DELAYS_MS[attempt]));
+          }
+        }
       }
-      return NextResponse.json(
-        { error: "Database unavailable. Check DATABASE_URL and run db:push / db:seed." },
-        { status: 503 }
-      );
+      if (!succeeded) {
+        console.error("[login] prisma user lookup failed after retries:", lastErr);
+        if (isMockCreds) {
+          return await respondOfflineMockLogin(remaining);
+        }
+        return NextResponse.json(
+          { error: "Service temporarily unavailable. Please try again in a moment." },
+          { status: 503 }
+        );
+      }
     }
 
     if (!user) {
