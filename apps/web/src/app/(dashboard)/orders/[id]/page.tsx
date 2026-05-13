@@ -126,6 +126,8 @@ type OrderDetail = {
   headSampleRequestApprovedAt?: string | null;
   assignedSupervisor?: { id: number; name: string; email: string } | null;
   headSampleRequestApprovedBy?: { name?: string | null; email?: string | null } | null;
+  sampleSpecsAcknowledgedAt?: string | null;
+  sampleSpecsAcknowledgedBy?: { name?: string | null; email?: string | null } | null;
   transfers?: Array<{
     id?: number;
     createdAt: string;
@@ -779,13 +781,51 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     },
   });
   const completeMutation = useMutation({
-    mutationFn: () => fetch(`/api/orders/${orderId}/complete`, { method: "POST", credentials: "include" }),
+    mutationFn: async () => {
+      const res = await fetch(`/api/orders/${orderId}/complete`, { method: "POST", credentials: "include" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          typeof (data as { error?: string }).error === "string"
+            ? (data as { error: string }).error
+            : "Could not complete enquiry"
+        );
+      }
+      return data;
+    },
     onSuccess: () => {
+      setActionError("");
       queryClient.invalidateQueries({ queryKey: ["order", orderId] });
       queryClient.invalidateQueries({ queryKey: ["order-audit", orderId] });
       queryClient.invalidateQueries({ queryKey: ["orders"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     },
+    onError: (err: Error) => setActionError(err.message),
+  });
+
+  const acknowledgeSpecsMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/orders/${orderId}/acknowledge-sample-specs`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          typeof (data as { error?: string }).error === "string"
+            ? (data as { error: string }).error
+            : "Could not record confirmation"
+        );
+      }
+      return data;
+    },
+    onSuccess: () => {
+      setSampleError("");
+      queryClient.invalidateQueries({ queryKey: ["order", orderId] });
+      queryClient.invalidateQueries({ queryKey: ["enquiry-timeline", orderId] });
+      queryClient.invalidateQueries({ queryKey: ["order-audit", orderId] });
+    },
+    onError: (err: Error) => setSampleError(err.message),
   });
 
   const cancelMutation = useMutation({
@@ -838,6 +878,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       order?.sampleQuantity?.trim() ||
       order?.sampleWeight?.trim()
   );
+  /** Matches `approveHeadSampleRequest` in order-engine: handoff or legacy sample work must exist first. */
+  const sampleRequestApprovalPrereqMet =
+    Boolean(order?.enquiryHandoff) || legacySampleProgress;
   const sampleGateOk = Boolean(
     !order?.sampleRequested ||
       order.headSampleRequestApprovedAt ||
@@ -854,6 +897,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     !isClosedStatus &&
     (order.createdById === user.id ||
       ["SUPER_ADMIN", "MANAGING_DIRECTOR"].includes(user.role));
+
+  /** When a sample was requested, division cannot complete until specs are head-approved and the submitter confirms they reviewed them. */
+  const enquiryCompleteSampleGateOk =
+    !order?.sampleRequested ||
+    (Boolean(order.sampleApprovedAt) && Boolean(order.sampleSpecsAcknowledgedAt));
 
   const sampleMutation = useMutation({
     mutationFn: async (body: Record<string, unknown>) => {
@@ -1148,8 +1196,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                   <Button
                     size="sm"
                     variant="secondary"
-                    onClick={() => completeMutation.mutate()}
-                    disabled={completeMutation.isPending}
+                    onClick={() => {
+                      setActionError("");
+                      completeMutation.mutate();
+                    }}
+                    disabled={completeMutation.isPending || !enquiryCompleteSampleGateOk}
                   >
                     Complete
                   </Button>
@@ -1170,6 +1221,13 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 Cancel enquiry
               </Button>
             )}
+            {canAct && showInteractiveUi && order.status === "IN_PROGRESS" && order.sampleRequested && !enquiryCompleteSampleGateOk ? (
+              <p className="basis-full w-full text-xs text-amber-900">
+                {!order.sampleApprovedAt
+                  ? "Complete stays disabled until the division approves the submitted sample specifications."
+                  : "Complete stays disabled until the enquiry submitter confirms they reviewed the approved specifications (sample workflow below)."}
+              </p>
+            ) : null}
           </div>
           {actionError ? (
             <p className="px-6 pb-3 pt-0 text-sm text-red-600 sm:px-6">{actionError}</p>
@@ -2041,7 +2099,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             ) : order.sampleRequested && !legacySampleProgress ? (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 ring-1 ring-amber-200">
                 <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400" />
-                Awaiting head approval
+                {sampleRequestApprovalPrereqMet
+                  ? "Awaiting head approval"
+                  : "Supervisor assignment required first"}
               </span>
             ) : null}
             {order.sampleApprovedAt && (
@@ -2056,7 +2116,39 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 Shipped · {new Date(order.sampleShippedAt).toLocaleDateString()}
               </span>
             )}
+            {order.sampleSpecsAcknowledgedAt && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-800 ring-1 ring-sky-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />
+                Submitter reviewed specs
+                {order.sampleSpecsAcknowledgedBy?.name ? ` · ${order.sampleSpecsAcknowledgedBy.name}` : ""}
+              </span>
+            )}
           </div>
+
+          {showInteractiveUi &&
+          order.sampleApprovedAt &&
+          !order.sampleSpecsAcknowledgedAt &&
+          isEnquirySubmitter &&
+          !isClosedStatus ? (
+            <div className="border-b border-sky-200 bg-sky-50/90 px-5 py-4">
+              <p className="text-sm font-semibold text-sky-950">Confirm you have seen the approved sample specifications</p>
+              <p className="mt-1 text-xs text-sky-900/90 leading-relaxed">
+                The division has approved the sample details. After you confirm here, the division can mark this enquiry complete.
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                className="mt-3 bg-sky-700 hover:bg-sky-800"
+                disabled={acknowledgeSpecsMutation.isPending}
+                onClick={() => {
+                  setSampleError("");
+                  acknowledgeSpecsMutation.mutate();
+                }}
+              >
+                {acknowledgeSpecsMutation.isPending ? "Saving…" : "I have reviewed the specifications"}
+              </Button>
+            </div>
+          ) : null}
 
           <CardContent className="p-0">
 
@@ -2343,9 +2435,15 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                       <p className="text-sm font-semibold text-slate-900">Approve sample request</p>
                       <p className="mt-0.5 text-xs text-slate-500">Salesperson has requested a sample. Approve so the assigned supervisor can submit sample specifications.</p>
                     </div>
-                    <Button type="button" size="sm" disabled={sampleMutation.isPending} onClick={() => sampleMutation.mutate({ action: "approveSampleRequest" })}>
-                      Approve sample request
-                    </Button>
+                    {sampleRequestApprovalPrereqMet ? (
+                      <Button type="button" size="sm" disabled={sampleMutation.isPending} onClick={() => sampleMutation.mutate({ action: "approveSampleRequest" })}>
+                        Approve sample request
+                      </Button>
+                    ) : (
+                      <p className="rounded-lg border border-amber-200 bg-amber-50/90 px-3 py-2 text-xs text-amber-900">
+                        Submit <span className="font-semibold">supervisor assignment</span> in the enquiry handoff section above first (including planning details for new development). The server requires that before this approval step.
+                      </p>
+                    )}
                   </div>
                 ) : null}
 
