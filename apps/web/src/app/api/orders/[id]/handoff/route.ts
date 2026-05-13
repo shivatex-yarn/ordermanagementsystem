@@ -15,7 +15,22 @@ export async function POST(
   if (!Number.isInteger(id)) {
     return NextResponse.json({ error: "Invalid enquiry id" }, { status: 400 });
   }
-  const body = await req.json().catch(() => ({}));
+  const rawBody = await req.json().catch(() => ({}));
+  let body = rawBody as Record<string, unknown>;
+  /** Supervisor-only reassignment: allow omitting `newDevPlan` when full planning is already stored. */
+  if (body?.developmentKind === "new" && body?.newDevPlan == null) {
+    const existing = await prisma.order.findUnique({
+      where: { id },
+      select: { enquiryHandoff: true, newDevPlan: true },
+    });
+    const h = existing?.enquiryHandoff as Record<string, unknown> | null | undefined;
+    const fromHandoff = h?.planning;
+    if (existing?.newDevPlan && typeof existing.newDevPlan === "object") {
+      body = { ...body, newDevPlan: existing.newDevPlan };
+    } else if (fromHandoff && typeof fromHandoff === "object") {
+      body = { ...body, newDevPlan: fromHandoff };
+    }
+  }
   const parsed = enquiryHandoffSchema.safeParse({
     orderId: id,
     supervisorId: body?.supervisorId,
@@ -57,7 +72,7 @@ export async function POST(
     return NextResponse.json(
       {
         error:
-          "Cannot submit handoff (enquiry must be accepted, handoff not already done, supervisor must belong to this division, and details must meet requirements).",
+          "Cannot update assignment (enquiry must be in progress, not shipped yet, supervisor must belong to this division, and planning/details must meet requirements).",
       },
       { status: 400 }
     );
