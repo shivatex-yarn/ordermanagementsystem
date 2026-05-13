@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# user-uploaded artifacts — must never be committed.
+# All uploads (GST certificates, sample proofs, etc.) are stored as JSON/base64
+# in the database. If any code path ever writes to disk under public/uploads/
+# again it is considered a bug; this rule keeps stray files out of the repo.
+/public/uploads/
