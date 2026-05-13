@@ -212,18 +212,19 @@ export default function DashboardPage() {
 
   const metricCards = isAccountsView
     ? [
-        { title: "Placed", value: placedCount, icon: Package },
-        { title: "In progress", value: inProgressCount, icon: CheckCircle },
-        { title: "Completed", value: completedCount, icon: CheckCircle },
+        { title: "Placed", value: placedCount, icon: Package, color: "blue" as const },
+        { title: "In progress", value: inProgressCount, icon: CheckCircle, color: "indigo" as const },
+        { title: "Completed", value: completedCount, icon: CheckCircle, color: "emerald" as const },
       ]
     : [
-        { title: "Total enquiries", value: data.total, icon: Package },
-        { title: "SLA breaches", value: data.slaBreaches, icon: AlertTriangle, alert: data.slaBreaches > 0 },
+        { title: "Total enquiries", value: data.total, icon: Package, color: "blue" as const },
+        { title: "SLA breaches", value: data.slaBreaches, icon: AlertTriangle, alert: data.slaBreaches > 0, color: "red" as const },
         {
           title: "Enquiries at risk",
           value: data.enquiriesAtRisk,
           icon: CheckCircle,
           alert: data.enquiriesAtRisk > 0,
+          color: "amber" as const,
         },
       ];
 
@@ -247,19 +248,30 @@ export default function DashboardPage() {
         {metricCards.map((card) => {
           const Icon = card.icon;
           const isAlert = "alert" in card && card.alert;
+          const colorMap = {
+            blue:   { border: "border-blue-200",   bg: "bg-blue-50",   icon: "bg-blue-500",   iconText: "text-white", label: "text-blue-600",   value: "text-blue-900",   stripe: "bg-blue-500"   },
+            indigo: { border: "border-indigo-200", bg: "bg-indigo-50", icon: "bg-indigo-500", iconText: "text-white", label: "text-indigo-600", value: "text-indigo-900", stripe: "bg-indigo-500" },
+            emerald:{ border: "border-emerald-200",bg: "bg-emerald-50",icon: "bg-emerald-500",iconText: "text-white", label: "text-emerald-600",value: "text-emerald-900",stripe: "bg-emerald-500"},
+            red:    { border: isAlert ? "border-red-300"   : "border-slate-200", bg: isAlert ? "bg-red-50"    : "bg-white", icon: isAlert ? "bg-red-500"    : "bg-slate-100", iconText: isAlert ? "text-white" : "text-slate-500", label: isAlert ? "text-red-600"    : "text-slate-500", value: isAlert ? "text-red-900"    : "text-slate-900", stripe: isAlert ? "bg-red-500"    : "bg-slate-200" },
+            amber:  { border: isAlert ? "border-amber-300" : "border-slate-200", bg: isAlert ? "bg-amber-50"  : "bg-white", icon: isAlert ? "bg-amber-500"  : "bg-slate-100", iconText: isAlert ? "text-white" : "text-slate-500", label: isAlert ? "text-amber-600"  : "text-slate-500", value: isAlert ? "text-amber-900"  : "text-slate-900", stripe: isAlert ? "bg-amber-500"  : "bg-slate-200" },
+          };
+          const c = colorMap[card.color];
           return (
-            <Card key={card.title} className={`overflow-hidden border shadow-sm ${isAlert ? "border-slate-300" : "border-slate-200"} bg-white`}>
-              <CardHeader className="flex flex-row items-center justify-between pb-2 pt-5 px-5">
-                <CardTitle className="text-xs font-semibold uppercase tracking-wide text-slate-500">{card.title}</CardTitle>
-                <div className={`rounded-md p-1.5 ${isAlert ? "bg-slate-900" : "bg-slate-100"}`}>
-                  <Icon className={`h-3.5 w-3.5 ${isAlert ? "text-white" : "text-slate-500"}`} />
+            <Card key={card.title} className={`relative overflow-hidden border shadow-sm ${c.border} ${c.bg}`}>
+              <div className={`absolute left-0 top-0 h-full w-1 ${c.stripe}`} />
+              <CardHeader className="flex flex-row items-center justify-between pb-2 pl-6 pr-5 pt-5">
+                <CardTitle className={`text-xs font-semibold uppercase tracking-wide ${c.label}`}>{card.title}</CardTitle>
+                <div className={`rounded-lg p-2 ${c.icon}`}>
+                  <Icon className={`h-4 w-4 ${c.iconText}`} />
                 </div>
               </CardHeader>
-              <CardContent className="px-5 pb-5">
-                <div className="text-3xl font-bold tabular-nums text-slate-900">{card.value}</div>
+              <CardContent className="pb-5 pl-6 pr-5">
+                <div className={`text-3xl font-bold tabular-nums ${c.value}`}>{card.value}</div>
                 {isAlert && (card.value as number) > 0 ? (
-                  <p className="mt-1 text-xs font-medium text-slate-500">Requires attention</p>
-                ) : null}
+                  <p className={`mt-1 text-xs font-semibold ${c.label}`}>Requires attention</p>
+                ) : (
+                  <p className="mt-1 text-xs text-slate-400">Total count</p>
+                )}
               </CardContent>
             </Card>
           );
@@ -370,7 +382,8 @@ export default function DashboardPage() {
       )}
 
       <Card className="overflow-hidden border border-slate-200 shadow-sm">
-        <CardHeader className="border-b border-slate-100 bg-slate-50 px-5 py-4">
+        <div className="h-1 w-full bg-gradient-to-r from-slate-400 via-blue-500 to-indigo-500" />
+        <CardHeader className="border-b border-slate-100 bg-slate-50/60 px-5 py-4">
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="text-sm font-semibold text-slate-800">
@@ -379,7 +392,7 @@ export default function DashboardPage() {
               <p className="mt-0.5 text-xs text-slate-500">{pipelineSubtitle}</p>
             </div>
             {data.total > 0 && (
-              <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
+              <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
                 {data.total} total
               </span>
             )}
@@ -404,22 +417,22 @@ export default function DashboardPage() {
                 }) => {
                   const statusBar: Record<string, string> = {
                     PLACED: "bg-slate-400",
-                    IN_PROGRESS: "bg-slate-700",
-                    TRANSFERRED: "bg-slate-500",
-                    REJECTED: "bg-slate-900",
-                    COMPLETED: "bg-slate-600",
-                    CANCELLED: "bg-slate-300",
+                    IN_PROGRESS: "bg-blue-500",
+                    TRANSFERRED: "bg-amber-500",
+                    REJECTED: "bg-red-500",
+                    COMPLETED: "bg-emerald-500",
+                    CANCELLED: "bg-stone-400",
                   };
                   return (
                     <Link
                       key={order.id}
                       href={`/orders/${order.id}`}
-                      className="flex items-center gap-4 px-5 py-3.5 transition-colors hover:bg-slate-50"
+                      className="flex items-center gap-4 px-5 py-3.5 transition-colors hover:bg-blue-50/40"
                     >
-                      <div className={`h-8 w-1 shrink-0 rounded-full ${statusBar[order.status] ?? "bg-slate-300"}`} />
+                      <div className={`h-9 w-1.5 shrink-0 rounded-full ${statusBar[order.status] ?? "bg-slate-300"}`} />
                       <div className="min-w-0 flex-1">
                         <p className="flex flex-wrap items-center gap-2">
-                          <span className="font-mono text-xs font-semibold text-slate-800">
+                          <span className="rounded-md border border-blue-100 bg-blue-50 px-1.5 py-0.5 font-mono text-xs font-semibold text-blue-800">
                             {formatEnquiryNumber(order.orderNumber)}
                           </span>
                           {!hideDivision && order.currentDivision?.name ? (

@@ -201,11 +201,11 @@ export default function OrdersPage() {
                 }) => {
                   const statusBar: Record<string, string> = {
                     PLACED: "bg-slate-400",
-                    IN_PROGRESS: "bg-slate-700",
-                    TRANSFERRED: "bg-slate-500",
-                    REJECTED: "bg-slate-900",
-                    COMPLETED: "bg-slate-600",
-                    CANCELLED: "bg-slate-300",
+                    IN_PROGRESS: "bg-blue-500",
+                    TRANSFERRED: "bg-amber-500",
+                    REJECTED: "bg-red-500",
+                    COMPLETED: "bg-emerald-500",
+                    CANCELLED: "bg-stone-400",
                   };
                   return (
                     <Link
