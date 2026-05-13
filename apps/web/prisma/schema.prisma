@@ -78,6 +78,7 @@ model User {
   multiDivisionRequestsApproved MultiDivisionAccessRequest[] @relation("MultiDivisionRequestApprover")
   sampleApprovals Order[] @relation("SampleApprovedBy")
   headSampleRequestApprovals Order[] @relation("OrderHeadSampleRequestApprovedBy")
+  sampleSpecsAcknowledgments Order[] @relation("OrderSampleSpecsAcknowledgedBy")
   assignedSupervisedOrders Order[] @relation("OrderAssignedSupervisor")
   cancelledOrders Order[] @relation("OrderCancelledBy")
   loginSessions   UserLoginSession[]
@@ -203,6 +204,10 @@ model Order {
   /// New development planning payload — filled by Division Head before handoff when developmentKind="new".
   newDevPlan                      Json?     @map("new_dev_plan")
   headSampleRequestApprovedAt     DateTime? @map("head_sample_request_approved_at")
+  /// Enquiry submitter confirms they have reviewed head-approved sample specifications; gates division "Complete" when a sample was requested.
+  sampleSpecsAcknowledgedAt       DateTime? @map("sample_specs_acknowledged_at")
+  sampleSpecsAcknowledgedById     Int?      @map("sample_specs_acknowledged_by_id")
+  sampleSpecsAcknowledgedBy       User?     @relation("OrderSampleSpecsAcknowledgedBy", fields: [sampleSpecsAcknowledgedById], references: [id])
 
   // Enquiry workflow extensions (Enquiry Management Application spec)
   /// Existing vs new product development. Set by Division Head during classification.

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { publish } from "@/lib/events";
 import { registerEventHandlers } from "@/lib/event-handlers";
+import { appendTimeline } from "@/lib/timeline";
 const SLA_HOURS = 48;
 
 registerEventHandlers();
@@ -446,6 +447,9 @@ export async function completeOrder(orderId: number, completedById: number) {
   const order = await prisma.order.findUnique({ where: { id: orderId } });
   if (!order) return null;
   if (order.status !== "IN_PROGRESS") return null;
+  if (order.sampleRequested) {
+    if (!order.sampleApprovedAt || !order.sampleSpecsAcknowledgedAt) return null;
+  }
   const completedAt = new Date();
   const durationMs = completedAt.getTime() - order.createdAt.getTime();
   const updated = await prisma.order.update({
@@ -465,6 +469,39 @@ export async function completeOrder(orderId: number, completedById: number) {
     timestamp: completedAt.toISOString(),
     userId: completedById,
     durationMs,
+  });
+  return updated;
+}
+
+/** Enquiry submitter confirms they reviewed head-approved sample specifications (gates division Complete). */
+export async function acknowledgeSampleSpecsBySales(orderId: number, userId: number) {
+  const order = await prisma.order.findUnique({ where: { id: orderId } });
+  if (!order) return null;
+  if (order.createdById !== userId) return null;
+  if (!order.sampleRequested || !order.sampleApprovedAt) return null;
+  if (order.sampleSpecsAcknowledgedAt) return null;
+  if (order.status === "REJECTED" || order.status === "COMPLETED" || order.status === "CANCELLED") return null;
+
+  const now = new Date();
+  const updated = await prisma.order.update({
+    where: { id: orderId },
+    data: {
+      sampleSpecsAcknowledgedAt: now,
+      sampleSpecsAcknowledgedById: userId,
+    },
+    include: {
+      createdBy: { select: { id: true, name: true, email: true } },
+      currentDivision: { select: { id: true, name: true } },
+      sampleSpecsAcknowledgedBy: { select: { id: true, name: true, email: true } },
+    },
+  });
+  await appendTimeline({
+    orderId,
+    type: "SAMPLE_SPECS_ACKNOWLEDGED_BY_SALES",
+    title: "Sales confirmed review of sample specifications",
+    detail: null,
+    actorId: userId,
+    metadata: { acknowledgedAt: now.toISOString() },
   });
   return updated;
 }
@@ -490,6 +527,9 @@ export async function updateOrderSampleDetails(
       ...(sampleDetails !== undefined && { sampleDetails }),
       ...(sampleQuantity !== undefined && { sampleQuantity }),
       ...(sampleWeight !== undefined && { sampleWeight }),
+      ...(order.sampleApprovedAt
+        ? { sampleSpecsAcknowledgedAt: null, sampleSpecsAcknowledgedById: null }
+        : {}),
     },
     include: {
       createdBy: { select: { id: true, name: true, email: true } },

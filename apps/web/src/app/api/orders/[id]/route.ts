@@ -23,6 +23,7 @@ const fullInclude = {
   sampleApprovedBy: { select: { id: true, name: true, email: true } },
   assignedSupervisor: { select: { id: true, name: true, email: true } },
   headSampleRequestApprovedBy: { select: { id: true, name: true, email: true } },
+  sampleSpecsAcknowledgedBy: { select: { id: true, name: true, email: true } },
   slaBreaches: {
     where: { resolvedAt: null },
     orderBy: { breachedAt: "desc" as const },
@@ -182,6 +183,7 @@ export async function PATCH(
       createdById: true,
       currentDivisionId: true,
       assignedSupervisorId: true,
+      sampleApprovedAt: true,
     },
   });
   if (!order) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -273,6 +275,15 @@ export async function PATCH(
     if (str(body.sampleDeliveryDate) !== undefined) {
       const d = body.sampleDeliveryDate ? new Date(String(body.sampleDeliveryDate)) : null;
       data.sampleDeliveryDate = d && !isNaN(d.getTime()) ? d : null;
+    }
+    const touchesSampleSpecsContent =
+      str(body.sampleDetails) !== undefined ||
+      str(body.sampleQuantity) !== undefined ||
+      str(body.sampleWeight) !== undefined ||
+      str(body.sampleRemarks) !== undefined;
+    if (touchesSampleSpecsContent && order.sampleApprovedAt) {
+      data.sampleSpecsAcknowledgedAt = null;
+      data.sampleSpecsAcknowledgedById = null;
     }
     if (Object.keys(data).length === 0) {
       return NextResponse.json({ error: "No editable fields provided" }, { status: 400 });

@@ -27,10 +27,26 @@ export async function POST(
   }
   const order = await completeOrder(parsed.data.orderId, Number(auth.payload.sub));
   if (!order) {
-    return NextResponse.json(
-      { error: "Order not found or not in IN_PROGRESS state" },
-      { status: 400 }
-    );
+    const row = await prisma.order.findUnique({
+      where: { id: parsed.data.orderId },
+      select: {
+        status: true,
+        sampleRequested: true,
+        sampleApprovedAt: true,
+        sampleSpecsAcknowledgedAt: true,
+      },
+    });
+    let message = "Enquiry not found or not in progress.";
+    if (row?.status === "IN_PROGRESS" && row.sampleRequested) {
+      if (!row.sampleApprovedAt) {
+        message =
+          "Complete the sample workflow first: head-approved sample specifications are required before closing this enquiry.";
+      } else if (!row.sampleSpecsAcknowledgedAt) {
+        message =
+          "The enquiry submitter must confirm they have reviewed the approved sample specifications on this page before you can mark the enquiry complete.";
+      }
+    }
+    return NextResponse.json({ error: message }, { status: 400 });
   }
   return NextResponse.json(order);
 }

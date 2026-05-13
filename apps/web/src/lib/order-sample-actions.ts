@@ -145,7 +145,10 @@ export async function runSampleAction(
       const order = await approveHeadSampleRequest(orderId, userId);
       if (!order) {
         return NextResponse.json(
-          { error: "Cannot approve sample request (not requested, already approved, or not permitted)" },
+          {
+            error:
+              "Cannot approve sample request. Submit supervisor assignment and enquiry handoff first, or the request was already approved — division head permission is required.",
+          },
           { status: 400 }
         );
       }
