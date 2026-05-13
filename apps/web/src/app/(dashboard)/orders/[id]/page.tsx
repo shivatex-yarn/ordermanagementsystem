@@ -53,6 +53,27 @@ function placedDateClass(
   return "font-medium text-indigo-700";
 }
 
+/** Values from `<input type="date" />` (YYYY-MM-DD). Noon avoids DST off-by-one when formatting. */
+function parsePlanDate(isoDay: string): Date | null {
+  const t = isoDay.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(t)) return null;
+  const d = new Date(`${t}T12:00:00`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function formatStoredPlanDate(value: string): string {
+  const d = parsePlanDate(value);
+  if (!d) return value;
+  return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+}
+
+/** Ask browser extensions (e.g. Grammarly) not to inject into our fields — avoids DOM/React sync issues. */
+const noGrammarlyTextarea = {
+  "data-gramm": "false",
+  "data-gramm_editor": "false",
+  "data-enable-grammarly": "false",
+} as const;
+
 type AuditLogRow = {
   id: number;
   action: string;
@@ -601,13 +622,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         (user.role === "MANAGER" || user.role === "DIVISION_HEAD" || user.role === "SUPER_ADMIN" || user.role === "MANAGING_DIRECTOR")
     );
 
-  // Auto-open planning dialog when "New development" is selected
+  // Auto-open planning dialog when "New development" is selected and handoff is needed (include needsHandoff so it runs after order load).
   useEffect(() => {
     if (handoffDevKind === "new" && needsHandoff && !pendingNewDevPlan) {
       setNewDevDialogOpen(true);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [handoffDevKind]);
+  }, [handoffDevKind, needsHandoff, pendingNewDevPlan]);
 
   const { data: supervisorsData } = useQuery({
     queryKey: ["order-supervisors", orderId],
@@ -777,7 +797,14 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         return;
       }
       const data = await res.json().catch(() => ({}));
-      setHandoffError((data as { error?: string }).error || "Could not submit assignment");
+      let msg = (data as { error?: string }).error || "Could not submit assignment";
+      const details = (data as { details?: { fieldErrors?: Record<string, string[] | string[][]> } }).details;
+      const fe = details?.fieldErrors;
+      if (fe && typeof fe === "object") {
+        const first = Object.values(fe).flat().find((x) => typeof x === "string" && x.length);
+        if (typeof first === "string") msg = `${msg}: ${first}`;
+      }
+      setHandoffError(msg);
     },
   });
   const completeMutation = useMutation({
@@ -1559,10 +1586,14 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                       };
                       const val = (order.newDevPlan as Record<string,unknown>)[key];
                       if (typeof val !== "string" || !val.trim()) return null;
+                      const displayText =
+                        (key === "estimatedTimeline" || key === "expectedCompletionDuration")
+                          ? formatStoredPlanDate(val)
+                          : val;
                       return (
                         <div key={key}>
                           <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{labels[key]}</p>
-                          <p className="text-sm text-slate-800 whitespace-pre-wrap">{val}</p>
+                          <p className="text-sm text-slate-800 whitespace-pre-wrap">{displayText}</p>
                         </div>
                       );
                     })}
@@ -3008,7 +3039,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
       {/* ── New Development Planning Dialog ── */}
       <Dialog open={newDevDialogOpen} onOpenChange={(open) => { setNewDevDialogOpen(open); setNewDevDialogError(""); if (!open) setIsEditingDevPlan(false); }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent
+          className="max-w-2xl max-h-[90vh] overflow-y-auto"
+          data-gramm="false"
+          data-gramm_editor="false"
+          data-enable-grammarly="false"
+        >
           <DialogHeader>
             <DialogTitle>{isEditingDevPlan ? "Edit Development Plan" : "New Development Planning"}</DialogTitle>
             <DialogDescription>
@@ -3020,52 +3056,97 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           <div className="space-y-4 py-1">
             <div className="space-y-1.5">
               <Label>Development description <span className="text-red-500">*</span></Label>
-              <textarea value={newDevDescription} onChange={(e) => setNewDevDescription(e.target.value)} rows={3}
+              <textarea
+                value={newDevDescription}
+                onChange={(e) => setNewDevDescription(e.target.value)}
+                rows={3}
                 className="flex min-h-[72px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs"
-                placeholder="Describe the new development in detail (min 10 characters)" />
+                placeholder="Describe the new development in detail (min 10 characters)"
+                {...noGrammarlyTextarea}
+              />
             </div>
             <div className="space-y-1.5">
               <Label>Required resources / materials <span className="text-red-500">*</span></Label>
-              <textarea value={newDevResources} onChange={(e) => setNewDevResources(e.target.value)} rows={3}
+              <textarea
+                value={newDevResources}
+                onChange={(e) => setNewDevResources(e.target.value)}
+                rows={3}
                 className="flex min-h-[72px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs"
-                placeholder="List materials, equipment, or resources needed" />
+                placeholder="List materials, equipment, or resources needed"
+                {...noGrammarlyTextarea}
+              />
             </div>
             <div className="space-y-1.5">
               <Label>Research requirements <span className="text-slate-400 text-xs">(optional)</span></Label>
-              <textarea value={newDevResearch} onChange={(e) => setNewDevResearch(e.target.value)} rows={2}
+              <textarea
+                value={newDevResearch}
+                onChange={(e) => setNewDevResearch(e.target.value)}
+                rows={2}
                 className="flex min-h-[56px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs"
-                placeholder="Any R&D or technical research needed" />
+                placeholder="Any R&D or technical research needed"
+                {...noGrammarlyTextarea}
+              />
             </div>
             <div className="space-y-1.5">
               <Label>Planning notes <span className="text-slate-400 text-xs">(optional)</span></Label>
-              <textarea value={newDevPlanningNotes} onChange={(e) => setNewDevPlanningNotes(e.target.value)} rows={2}
+              <textarea
+                value={newDevPlanningNotes}
+                onChange={(e) => setNewDevPlanningNotes(e.target.value)}
+                rows={2}
                 className="flex min-h-[56px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs"
-                placeholder="Additional internal planning notes" />
+                placeholder="Additional internal planning notes"
+                {...noGrammarlyTextarea}
+              />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label>Estimated timeline <span className="text-red-500">*</span></Label>
-                <Input value={newDevTimeline} onChange={(e) => setNewDevTimeline(e.target.value)}
-                  placeholder='e.g. "2 weeks", "10 working days"' />
+                <Input
+                  type="date"
+                  value={parsePlanDate(newDevTimeline.trim()) ? newDevTimeline.trim() : ""}
+                  onChange={(e) => setNewDevTimeline(e.target.value)}
+                  data-gramm="false"
+                  data-gramm_editor="false"
+                  data-enable-grammarly="false"
+                />
+                <p className="text-xs text-slate-500">Target date for the estimated timeline (calendar).</p>
               </div>
               <div className="space-y-1.5">
-                <Label>Expected completion duration <span className="text-red-500">*</span></Label>
-                <Input value={newDevCompletionDuration} onChange={(e) => setNewDevCompletionDuration(e.target.value)}
-                  placeholder='e.g. "3 weeks from approval"' />
+                <Label>Expected completion <span className="text-red-500">*</span></Label>
+                <Input
+                  type="date"
+                  value={parsePlanDate(newDevCompletionDuration.trim()) ? newDevCompletionDuration.trim() : ""}
+                  onChange={(e) => setNewDevCompletionDuration(e.target.value)}
+                  min={parsePlanDate(newDevTimeline.trim()) ? newDevTimeline.trim() : undefined}
+                  data-gramm="false"
+                  data-gramm_editor="false"
+                  data-enable-grammarly="false"
+                />
+                <p className="text-xs text-slate-500">Expected completion date (must be on or after timeline date).</p>
               </div>
             </div>
             <div className="space-y-1.5">
               <Label>Reason for new development <span className="text-red-500">*</span></Label>
-              <textarea value={newDevReason} onChange={(e) => setNewDevReason(e.target.value)} rows={2}
+              <textarea
+                value={newDevReason}
+                onChange={(e) => setNewDevReason(e.target.value)}
+                rows={2}
                 className="flex min-h-[56px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs"
-                placeholder="Why is this a new development rather than an existing product?" />
+                placeholder="Why is this a new development rather than an existing product?"
+                {...noGrammarlyTextarea}
+              />
             </div>
             {user && ["MANAGING_DIRECTOR", "SUPER_ADMIN"].includes(user.role) ? (
               <div className="space-y-1.5 rounded-lg border border-amber-100 bg-amber-50 p-3">
                 <Label>Internal notes <span className="text-xs text-amber-700 font-normal">(visible to MD & Super Admin only)</span></Label>
-                <textarea value={newDevInternalNotes} onChange={(e) => setNewDevInternalNotes(e.target.value)} rows={2}
+                <textarea
+                  value={newDevInternalNotes}
+                  onChange={(e) => setNewDevInternalNotes(e.target.value)}
+                  rows={2}
                   className="flex min-h-[56px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs"
-                  placeholder="Confidential planning notes" />
+                  placeholder="Confidential planning notes"
+                  {...noGrammarlyTextarea}
+                />
               </div>
             ) : null}
             {newDevDialogError ? <p className="text-sm text-red-600">{newDevDialogError}</p> : null}
@@ -3074,15 +3155,39 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             <Button variant="outline" onClick={() => { setNewDevDialogOpen(false); setNewDevDialogError(""); setIsEditingDevPlan(false); }}>Cancel</Button>
             <Button
               type="button"
-              disabled={editDevPlanSaving || newDevDescription.trim().length < 10 || !newDevResources.trim() || !newDevTimeline.trim() || !newDevCompletionDuration.trim() || !newDevReason.trim()}
+              disabled={(() => {
+                const td = parsePlanDate(newDevTimeline.trim());
+                const cd = parsePlanDate(newDevCompletionDuration.trim());
+                return (
+                  editDevPlanSaving ||
+                  newDevDescription.trim().length < 10 ||
+                  !newDevResources.trim() ||
+                  !td ||
+                  !cd ||
+                  cd < td ||
+                  !newDevReason.trim()
+                );
+              })()}
               onClick={async () => {
+                const timeline = newDevTimeline.trim();
+                const completion = newDevCompletionDuration.trim();
+                const td = parsePlanDate(timeline);
+                const cd = parsePlanDate(completion);
+                if (!td || !cd) {
+                  setNewDevDialogError("Please choose a valid date for both timeline and expected completion.");
+                  return;
+                }
+                if (cd < td) {
+                  setNewDevDialogError("Expected completion date must be on or after the estimated timeline date.");
+                  return;
+                }
                 const planPayload = {
                   description: newDevDescription.trim(),
                   resourcesRequired: newDevResources.trim(),
                   researchRequirements: newDevResearch.trim() || undefined,
                   planningNotes: newDevPlanningNotes.trim() || undefined,
-                  estimatedTimeline: newDevTimeline.trim(),
-                  expectedCompletionDuration: newDevCompletionDuration.trim(),
+                  estimatedTimeline: timeline,
+                  expectedCompletionDuration: completion,
                   internalNotes: newDevInternalNotes.trim() || undefined,
                   reasonForNewDevelopment: newDevReason.trim(),
                 };
