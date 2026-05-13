@@ -105,11 +105,17 @@ export async function createOrder(
     customFields?: Record<string, unknown>;
     sampleRequested?: boolean;
     sampleRequestNotes?: string | null;
+    customerName?: string;
+    customerPhone?: string;
+    gstNumber?: string;
+    gstCopyUrl?: string;
+    customerOrderDate?: string;
   }
 ) {
   const orderNumber = `Enq-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
   const slaDeadline = computeSlaDeadline(new Date());
   const sampleRequested = Boolean(data.sampleRequested);
+  const parsedCustomerOrderDate = data.customerOrderDate ? new Date(data.customerOrderDate) : null;
   const order = await prisma.order.create({
     data: {
       orderNumber,
@@ -123,6 +129,11 @@ export async function createOrder(
       createdById,
       currentDivisionId: divisionId,
       slaDeadline,
+      customerName: data.customerName?.trim() || null,
+      customerPhone: data.customerPhone?.trim() || null,
+      gstNumber: data.gstNumber?.trim() || null,
+      gstCopyUrl: data.gstCopyUrl?.trim() || null,
+      customerOrderDate: parsedCustomerOrderDate && !isNaN(parsedCustomerOrderDate.getTime()) ? parsedCustomerOrderDate : null,
     },
     include: {
       createdBy: { select: { id: true, name: true, email: true } },

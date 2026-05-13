@@ -146,6 +146,21 @@ type OrderDetail = {
     createdAt: string;
   }>;
   slaBreaches?: unknown;
+  // Customer identity fields
+  customerName?: string | null;
+  customerPhone?: string | null;
+  gstNumber?: string | null;
+  gstCopyUrl?: string | null;
+  customerOrderDate?: string | null;
+  // Customer feedback extension fields
+  customerFeedback?: string | null;
+  customerFeedbackAt?: string | null;
+  customerResponseStatus?: string | null;
+  customerFeedbackRemarks?: string | null;
+  sampleReceivedAt?: string | null;
+  // Sample extension fields
+  sampleDeliveryDate?: string | null;
+  sampleRemarks?: string | null;
 };
 
 async function fetchOrder(id: number): Promise<OrderDetail> {
@@ -458,6 +473,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [trackingId, setTrackingId] = useState("");
   const [sampleProofFile, setSampleProofFile] = useState<File | null>(null);
   const [salesFeedback, setSalesFeedback] = useState("");
+  const [feedbackResponseStatus, setFeedbackResponseStatus] = useState("");
+  const [feedbackRemarks, setFeedbackRemarks] = useState("");
+  const [feedbackReceivedDate, setFeedbackReceivedDate] = useState("");
   const [sampleError, setSampleError] = useState("");
   const [approveSampleOpen, setApproveSampleOpen] = useState(false);
   const [sampleDevType, setSampleDevType] = useState<"existing" | "new">("existing");
@@ -770,6 +788,24 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
   const sampleMutation = useMutation({
     mutationFn: async (body: Record<string, unknown>) => {
+      const action = (body as { action?: string }).action;
+      // Customer feedback goes to the dedicated endpoint
+      if (action === "salesFeedback") {
+        const res = await fetch(`/api/orders/${orderId}/customer-feedback`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            feedback: body.salesFeedback,
+            responseStatus: body.responseStatus,
+            remarks: body.remarks,
+            sampleReceivedAt: body.sampleReceivedAt,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error((data as { error?: string }).error || "Failed to submit feedback");
+        return data;
+      }
       const res = await fetch(`/api/orders/${orderId}/sample`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -790,6 +826,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         setSampleProofFile(null);
       } else if (action === "salesFeedback") {
         setSalesFeedback("");
+        setFeedbackResponseStatus("");
+        setFeedbackRemarks("");
+        setFeedbackReceivedDate("");
       } else if (action === "approve") {
         setApproveSampleOpen(false);
       } else if (action === "setDevelopment") {
@@ -1075,6 +1114,46 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             </span>
           </div>
           <div className="divide-y divide-slate-100">
+          {/* Customer identity fields */}
+          {(order.customerName || order.customerPhone || order.gstNumber || order.customerOrderDate) ? (
+            <div className="bg-blue-50/40 px-5 py-3 border-b border-blue-100">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-blue-700">Customer details</p>
+              <div className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
+                {order.customerName ? (
+                  <p className="flex flex-col">
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Customer name</span>
+                    <span className="text-sm font-medium text-slate-800">{order.customerName}</span>
+                  </p>
+                ) : null}
+                {order.customerPhone ? (
+                  <p className="flex flex-col">
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Phone</span>
+                    <span className="text-sm font-medium text-slate-800">{order.customerPhone}</span>
+                  </p>
+                ) : null}
+                {order.gstNumber ? (
+                  <p className="flex flex-col">
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">GST number</span>
+                    <span className="font-mono text-sm font-medium text-slate-800">{order.gstNumber}</span>
+                  </p>
+                ) : null}
+                {order.customerOrderDate ? (
+                  <p className="flex flex-col">
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Customer order date</span>
+                    <span className="text-sm font-medium text-slate-800">{new Date(order.customerOrderDate).toLocaleDateString()}</span>
+                  </p>
+                ) : null}
+                {order.gstCopyUrl ? (
+                  <p className="flex flex-col sm:col-span-2">
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">GST certificate</span>
+                    <a href={order.gstCopyUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-blue-600 underline underline-offset-2">
+                      View GST certificate ↗
+                    </a>
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
           <p className="flex flex-col gap-0.5 px-5 py-3.5 sm:flex-row sm:items-baseline sm:gap-3">
             <span className="min-w-[10rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">Company name</span>
             <span className="text-sm font-semibold text-slate-900">
@@ -1724,6 +1803,30 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 </span>
               </p>
             )}
+            {order.customerFeedback && (
+              <div className="rounded-lg border border-slate-100 bg-slate-50 p-3 space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Customer feedback</p>
+                {order.customerResponseStatus && (
+                  <p className="text-xs font-semibold">
+                    <span className={{
+                      POSITIVE: "text-emerald-600",
+                      NEUTRAL: "text-amber-600",
+                      NEGATIVE: "text-red-600",
+                      PENDING: "text-blue-600",
+                    }[order.customerResponseStatus] ?? "text-slate-600"}>
+                      {order.customerResponseStatus}
+                    </span>
+                  </p>
+                )}
+                <p className="text-sm text-slate-800">{order.customerFeedback}</p>
+                {order.customerFeedbackRemarks && (
+                  <p className="text-xs text-slate-500">Remarks: {order.customerFeedbackRemarks}</p>
+                )}
+                {order.customerFeedbackAt && (
+                  <p className="text-xs text-slate-400">{new Date(order.customerFeedbackAt).toLocaleString()}</p>
+                )}
+              </div>
+            )}
 
             {sampleError && (
               <div className="rounded-lg border border-red-100 bg-red-50 text-red-700 text-sm p-3">{sampleError}</div>
@@ -1917,25 +2020,68 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             )}
 
             {showInteractiveUi && mightSubmitFeedback && (
-              <div className="space-y-2 border-t border-slate-100 pt-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Sales feedback</p>
-                <textarea
-                  value={salesFeedback}
-                  onChange={(e) => setSalesFeedback(e.target.value)}
-                  placeholder="Customer reaction, follow-up needed…"
-                  rows={3}
-                  className="flex min-h-[72px] w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                />
+              <div className="space-y-3 border-t border-slate-100 pt-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Customer feedback</p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-slate-500">Sample received date</label>
+                    <input
+                      type="date"
+                      value={feedbackReceivedDate}
+                      onChange={(e) => setFeedbackReceivedDate(e.target.value)}
+                      className="flex h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-slate-500">Response status</label>
+                    <select
+                      value={feedbackResponseStatus}
+                      onChange={(e) => setFeedbackResponseStatus(e.target.value)}
+                      className="flex h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+                    >
+                      <option value="">Select status…</option>
+                      <option value="POSITIVE">Positive — customer interested</option>
+                      <option value="NEUTRAL">Neutral — under consideration</option>
+                      <option value="NEGATIVE">Negative — not proceeding</option>
+                      <option value="PENDING">Pending — awaiting response</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-500">Customer feedback <span className="text-red-500">*</span></label>
+                  <textarea
+                    value={salesFeedback}
+                    onChange={(e) => setSalesFeedback(e.target.value)}
+                    placeholder="Customer reaction, sample quality remarks, follow-up needed…"
+                    rows={3}
+                    className="flex min-h-[72px] w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-500">Additional remarks (optional)</label>
+                  <textarea
+                    value={feedbackRemarks}
+                    onChange={(e) => setFeedbackRemarks(e.target.value)}
+                    placeholder="Any additional notes for Division Head…"
+                    rows={2}
+                    className="flex min-h-[56px] w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+                  />
+                </div>
                 <Button
                   type="button"
-                  variant="outline"
                   size="sm"
-                  disabled={sampleMutation.isPending || !salesFeedback.trim()}
+                  disabled={sampleMutation.isPending || salesFeedback.trim().length < 5}
                   onClick={() =>
-                    sampleMutation.mutate({ action: "salesFeedback", salesFeedback: salesFeedback.trim() })
+                    sampleMutation.mutate({
+                      action: "salesFeedback",
+                      salesFeedback: salesFeedback.trim(),
+                      responseStatus: feedbackResponseStatus || undefined,
+                      remarks: feedbackRemarks.trim() || undefined,
+                      sampleReceivedAt: feedbackReceivedDate || undefined,
+                    })
                   }
                 >
-                  Submit feedback
+                  Submit customer feedback
                 </Button>
               </div>
             )}

@@ -43,12 +43,16 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     feedback?: unknown;
     sampleStatus?: unknown;
     sampleReceivedAt?: unknown;
+    responseStatus?: unknown;
+    remarks?: unknown;
   };
   const feedback = typeof body.feedback === "string" ? body.feedback.trim() : "";
   if (feedback.length < 5) {
-    return NextResponse.json({ error: "Customer feedback is required" }, { status: 400 });
+    return NextResponse.json({ error: "Customer feedback is required (min 5 chars)" }, { status: 400 });
   }
   const sampleStatus = typeof body.sampleStatus === "string" ? body.sampleStatus.trim() : null;
+  const responseStatus = typeof body.responseStatus === "string" ? body.responseStatus.trim() : null;
+  const remarks = typeof body.remarks === "string" ? body.remarks.trim() : null;
   const parsedReceived = body.sampleReceivedAt ? new Date(String(body.sampleReceivedAt)) : null;
   const sampleReceivedAt =
     parsedReceived && !Number.isNaN(parsedReceived.getTime()) ? parsedReceived : null;
@@ -58,29 +62,18 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     data: {
       customerFeedback: feedback,
       customerFeedbackAt: new Date(),
-      // Salesperson can also update the sample-received date in this single submission.
+      ...(responseStatus ? { customerResponseStatus: responseStatus } : {}),
+      ...(remarks ? { customerFeedbackRemarks: remarks } : {}),
       ...(sampleReceivedAt ? { sampleReceivedAt } : {}),
-      // Stash sample status update into customFields["sampleStatusUpdates"][] for audit.
-      ...(sampleStatus
-        ? {
-            customFields: {
-              ...(((await prisma.order.findUnique({ where: { id: orderId }, select: { customFields: true } }))?.customFields as Record<string, unknown> | null) ?? {}),
-              sampleStatusUpdates: [
-                ...(((await prisma.order.findUnique({ where: { id: orderId }, select: { customFields: true } }))?.customFields as Record<string, unknown> | null)?.sampleStatusUpdates as unknown[] ?? []),
-                { status: sampleStatus, at: new Date().toISOString(), by: userId },
-              ],
-            } as object,
-          }
-        : {}),
     },
-    select: { id: true, orderNumber: true, customerFeedback: true, customerFeedbackAt: true, sampleReceivedAt: true },
+    select: { id: true, orderNumber: true, customerFeedback: true, customerFeedbackAt: true, sampleReceivedAt: true, customerResponseStatus: true, customerFeedbackRemarks: true },
   });
 
   await appendTimeline({
     orderId,
     type: "CUSTOMER_FEEDBACK",
     title: "Customer feedback submitted",
-    detail: sampleStatus ? `Sample status: ${sampleStatus}` : null,
+    detail: responseStatus ? `Response: ${responseStatus}${sampleStatus ? ` · ${sampleStatus}` : ""}` : (sampleStatus ?? null),
     actorId: userId,
     metadata: { feedbackLength: feedback.length, sampleStatus, sampleReceivedAt: sampleReceivedAt?.toISOString() ?? null },
   });
