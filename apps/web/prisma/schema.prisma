@@ -142,6 +142,7 @@ model Order {
   customFields       Json?       @map("custom_fields")
 
   // Customer identity fields (captured at enquiry creation)
+  customerId         String?     @map("customer_id")
   customerName       String?     @map("customer_name")
   customerPhone      String?     @map("customer_phone")
   gstNumber          String?     @map("gst_number")
