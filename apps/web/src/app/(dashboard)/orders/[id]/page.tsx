@@ -394,12 +394,20 @@ function EnquiryPipelineStrip({
       {steps.map((s) => {
         const doneClass =
           s.label === "Rejected" && s.done
-            ? "bg-rose-50 text-rose-900 border-rose-200"
+            ? "bg-red-50 text-red-700 border-red-200 ring-1 ring-red-100"
             : s.done
-              ? "bg-emerald-50 text-emerald-900 border-emerald-200"
-              : "bg-slate-50 text-slate-500 border-slate-100";
+              ? "bg-emerald-50 text-emerald-700 border-emerald-200 ring-1 ring-emerald-100"
+              : "bg-white text-slate-400 border-slate-200";
         return (
-          <span key={s.label} className={`rounded-full px-3 py-1 text-xs font-medium border ${doneClass}`}>
+          <span
+            key={s.label}
+            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-all ${doneClass}`}
+          >
+            {s.done && s.label !== "Rejected" ? (
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" aria-hidden />
+            ) : s.label === "Rejected" && s.done ? (
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-500" aria-hidden />
+            ) : null}
             {s.label}
           </span>
         );
@@ -885,8 +893,27 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <Button variant="ghost" asChild><Link href={backHref}>{backLabel}</Link></Button>
-        <div className="text-slate-500">Loading enquiry...</div>
+        <Link href={backHref} className="inline-flex items-center gap-1 text-xs font-medium text-slate-400">
+          {backLabel}
+        </Link>
+        <div className="space-y-3">
+          <div className="flex items-center gap-3">
+            <div className="h-8 w-36 animate-pulse rounded-lg bg-slate-100" />
+            <div className="h-6 w-24 animate-pulse rounded-full bg-slate-100" />
+          </div>
+          <div className="h-4 w-56 animate-pulse rounded bg-slate-100" />
+        </div>
+        <div className="overflow-hidden rounded-xl border border-slate-200">
+          <div className="h-12 animate-pulse bg-slate-50" />
+          <div className="divide-y divide-slate-100">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="flex items-center gap-4 px-5 py-4">
+                <div className="h-4 w-32 animate-pulse rounded bg-slate-100" />
+                <div className="h-4 w-48 animate-pulse rounded bg-slate-100" />
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
@@ -915,51 +942,50 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
   return (
     <div className="space-y-6">
-      <header className="space-y-2">
+      {/* Page header */}
+      <header className="space-y-3">
         <Link
           href={backHref}
-          className="inline-block text-sm text-slate-500 hover:text-slate-800 transition-colors"
+          className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 transition-colors hover:text-indigo-600"
         >
           {backLabel}
         </Link>
-        <h1
-          className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-2xl font-bold tracking-tight text-slate-900"
-          aria-label={`${order.orderNumber ? formatEnquiryNumber(order.orderNumber) : "—"}, ${order.currentDivision?.name ?? "—"}, ${new Date(order.createdAt).toLocaleString()}, ${order.status.replace("_", " ")}`}
-        >
-          <span
-            title={order.orderNumber ? formatEnquiryNumber(order.orderNumber) : "—"}
-            className="rounded-md border-2 border-indigo-500/60 bg-indigo-50 px-2.5 py-1 font-mono text-lg text-indigo-950 shadow-sm ring-1 ring-indigo-200/80 sm:text-xl"
-          >
-            {order.orderNumber ? formatEnquiryNumberShort(order.orderNumber) : "—"}
-          </span>
-          <span className="font-normal text-slate-400" aria-hidden>
-            →
-          </span>
-          <span className="font-semibold text-slate-800">
-            {order.currentDivision?.name?.trim() ? order.currentDivision.name : "—"}
-          </span>
-          <span className="font-normal text-slate-400" aria-hidden>
-            →
-          </span>
-          <time
-            dateTime={order.createdAt}
-            className={`font-semibold tabular-nums ${placedDateClass(order, clientClockMs)}`}
-            suppressHydrationWarning
-          >
-            {new Date(order.createdAt).toLocaleString()}
-          </time>
-          <span className="font-normal text-slate-400" aria-hidden>
-            →
-          </span>
-          <Badge variant={statusVariant[order.status] ?? "secondary"} className="text-xs font-semibold uppercase tracking-wide">
-            {order.status.replace("_", " ")}
-          </Badge>
-        </h1>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <span
+                title={order.orderNumber ? formatEnquiryNumber(order.orderNumber) : "—"}
+                className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 font-mono text-sm font-bold text-indigo-800 shadow-sm"
+              >
+                {order.orderNumber ? formatEnquiryNumberShort(order.orderNumber) : "—"}
+              </span>
+              <Badge
+                variant={statusVariant[order.status] ?? "secondary"}
+                className="text-xs font-semibold uppercase tracking-wide"
+              >
+                {order.status.replace("_", " ")}
+              </Badge>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-500">
+              {order.currentDivision?.name?.trim() ? (
+                <span className="font-medium text-slate-700">{order.currentDivision.name}</span>
+              ) : null}
+              <span className="text-slate-300" aria-hidden>·</span>
+              <time
+                dateTime={order.createdAt}
+                className={`tabular-nums ${placedDateClass(order, clientClockMs)}`}
+                suppressHydrationWarning
+              >
+                {new Date(order.createdAt).toLocaleString()}
+              </time>
+            </div>
+          </div>
+        </div>
       </header>
 
-      <Card className="border-2 border-slate-400/50 shadow-md ring-1 ring-slate-200/60">
-        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
-          <CardTitle>Enquiry details</CardTitle>
+      <Card className="overflow-hidden border border-slate-200 shadow-sm">
+        <CardHeader className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/60 px-5 py-4 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+          <CardTitle className="text-base font-semibold text-slate-800">Enquiry details</CardTitle>
           <div className="flex flex-wrap items-center gap-2 sm:justify-end">
             {canAct && showInteractiveUi ? (
               <>
@@ -1041,53 +1067,53 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             <p className="px-6 pb-3 pt-0 text-sm text-red-600 sm:px-6">{actionError}</p>
           ) : null}
         </CardHeader>
-        <CardContent className="space-y-0 overflow-hidden rounded-lg border-2 border-slate-300/60 bg-white shadow-inner">
-          <div className="flex flex-col gap-1 border-b-2 border-indigo-300/70 bg-gradient-to-r from-indigo-50 to-violet-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wide text-indigo-900">Enquiry number</span>
-            <span className="font-mono text-base font-bold tracking-tight text-indigo-950 sm:text-lg">
+        <CardContent className="p-0">
+          <div className="flex flex-col gap-1 border-b border-indigo-100 bg-gradient-to-r from-indigo-50/80 to-violet-50/50 px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-indigo-700">Enquiry number</span>
+            <span className="font-mono text-sm font-bold tracking-tight text-indigo-900">
               {order.orderNumber ? formatEnquiryNumber(order.orderNumber) : "—"}
             </span>
           </div>
-          <div className="divide-y divide-slate-200">
-          <p className="flex flex-col gap-0.5 px-4 py-3 sm:flex-row sm:items-baseline sm:gap-3">
-            <span className="min-w-[10rem] shrink-0 text-sm font-medium text-slate-500">Company name</span>
+          <div className="divide-y divide-slate-100">
+          <p className="flex flex-col gap-0.5 px-5 py-3.5 sm:flex-row sm:items-baseline sm:gap-3">
+            <span className="min-w-[10rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">Company name</span>
             <span className="text-sm font-semibold text-slate-900">
             {order.companyName?.trim() ? order.companyName : "—"}
             </span>
           </p>
-          <p className="flex flex-col gap-0.5 px-4 py-3 sm:flex-row sm:items-baseline sm:gap-3">
-            <span className="min-w-[10rem] shrink-0 text-sm font-medium text-slate-500">Product description</span>
-            <span className="text-sm font-semibold text-slate-900">
+          <p className="flex flex-col gap-0.5 px-5 py-3.5 sm:flex-row sm:items-baseline sm:gap-3">
+            <span className="min-w-[10rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">Product description</span>
+            <span className="text-sm font-medium text-slate-800">
             {order.description?.trim() ? order.description : "—"}
             </span>
           </p>
-          <p className="flex flex-col gap-0.5 px-4 py-3 sm:flex-row sm:items-baseline sm:gap-3">
-            <span className="min-w-[10rem] shrink-0 text-sm font-medium text-slate-500">Created by</span>
-            <span className="text-sm font-semibold text-slate-900">{order.createdBy?.name} ({order.createdBy?.email})</span>
+          <p className="flex flex-col gap-0.5 px-5 py-3.5 sm:flex-row sm:items-baseline sm:gap-3">
+            <span className="min-w-[10rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">Created by</span>
+            <span className="text-sm font-semibold text-slate-900">{order.createdBy?.name} <span className="font-normal text-slate-500">({order.createdBy?.email})</span></span>
           </p>
           {order.acceptanceReason?.trim() ? (
-            <p className="flex flex-col gap-0.5 border-t border-slate-200 px-4 py-3 sm:flex-row sm:items-baseline sm:gap-3">
-              <span className="min-w-[10rem] shrink-0 text-sm font-medium text-slate-500">Acceptance reason</span>
-              <span className="text-sm text-slate-800 whitespace-pre-wrap">{order.acceptanceReason}</span>
+            <p className="flex flex-col gap-0.5 px-5 py-3.5 sm:flex-row sm:items-baseline sm:gap-3">
+              <span className="min-w-[10rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">Acceptance reason</span>
+              <span className="text-sm text-slate-700 whitespace-pre-wrap">{order.acceptanceReason}</span>
             </p>
           ) : null}
           {order.receiveReason?.trim() ? (
-            <p className="flex flex-col gap-0.5 border-t border-slate-200 px-4 py-3 sm:flex-row sm:items-baseline sm:gap-3">
-              <span className="min-w-[10rem] shrink-0 text-sm font-medium text-slate-500">Receive reason</span>
-              <span className="text-sm text-slate-800 whitespace-pre-wrap">{order.receiveReason}</span>
+            <p className="flex flex-col gap-0.5 px-5 py-3.5 sm:flex-row sm:items-baseline sm:gap-3">
+              <span className="min-w-[10rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">Receive reason</span>
+              <span className="text-sm text-slate-700 whitespace-pre-wrap">{order.receiveReason}</span>
             </p>
           ) : null}
           {order.assignedSupervisor ? (
-            <p className="flex flex-col gap-0.5 border-t border-slate-200 px-4 py-3 sm:flex-row sm:items-baseline sm:gap-3">
-              <span className="min-w-[10rem] shrink-0 text-sm font-medium text-slate-500">Assigned supervisor</span>
+            <p className="flex flex-col gap-0.5 px-5 py-3.5 sm:flex-row sm:items-baseline sm:gap-3">
+              <span className="min-w-[10rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">Assigned supervisor</span>
               <span className="text-sm font-semibold text-slate-900">
-                {order.assignedSupervisor.name} ({order.assignedSupervisor.email})
+                {order.assignedSupervisor.name} <span className="font-normal text-slate-500">({order.assignedSupervisor.email})</span>
               </span>
             </p>
           ) : null}
           {order.enquiryHandoff && typeof order.enquiryHandoff === "object" ? (
-            <div className="border-t border-slate-200 px-4 py-3 space-y-1 text-sm">
-              <p className="font-medium text-slate-500">Development classification</p>
+            <div className="px-5 py-3.5 space-y-1 text-sm">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Development classification</p>
               <p className="text-slate-900">
                 {order.enquiryHandoff.developmentKind === "existing" ? "Existing development" : "New development"}
               </p>
@@ -1103,30 +1129,30 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           ) : null}
           </div>
           {order.status === "CANCELLED" && order.cancellationReason ? (
-            <div className="mx-4 mb-4 mt-3 rounded-lg border border-stone-200 bg-stone-50/90 p-3 text-sm">
-              <p className="font-medium text-stone-900">This enquiry was cancelled</p>
-              <p className="mt-1 text-stone-700">
-                <span className="text-slate-500">Reason:</span> {order.cancellationReason}
+            <div className="mx-5 mb-4 mt-1 rounded-xl border border-stone-200 bg-stone-50 p-4 text-sm">
+              <p className="font-semibold text-stone-800">This enquiry was cancelled</p>
+              <p className="mt-1.5 text-stone-700">
+                <span className="font-medium text-stone-500">Reason: </span>{order.cancellationReason}
               </p>
               {order.cancelledAt ? (
-                <p className="mt-2 text-xs text-slate-500">
+                <p className="mt-2 text-xs text-stone-400">
                   {order.cancelledBy?.name ? `${order.cancelledBy.name} · ` : ""}
                   {new Date(order.cancelledAt).toLocaleString()}
                 </p>
               ) : null}
             </div>
           ) : null}
-          <p className="flex flex-col gap-0.5 border-t border-slate-200 px-4 py-3 sm:flex-row sm:items-baseline sm:gap-3">
-            <span className="min-w-[10rem] shrink-0 text-sm font-medium text-slate-500">Sample requested</span>
+          <p className="flex flex-col gap-0.5 px-5 py-3.5 sm:flex-row sm:items-baseline sm:gap-3">
+            <span className="min-w-[10rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">Sample requested</span>
             <span className="text-sm font-semibold text-slate-900">
             {order.sampleRequested ? "Yes" : "No"}
             {order.sampleRequested && !order.sampleRequestNotes?.trim() ? " (no notes)" : null}
             </span>
           </p>
           {order.sampleRequested && order.sampleRequestNotes?.trim() ? (
-            <p className="flex flex-col gap-0.5 border-t border-slate-200 px-4 py-3 sm:flex-row sm:items-baseline sm:gap-3">
-              <span className="min-w-[10rem] shrink-0 text-sm font-medium text-slate-500">Sample request notes</span>
-              <span className="text-sm font-semibold text-slate-900">{order.sampleRequestNotes}</span>
+            <p className="flex flex-col gap-0.5 px-5 py-3.5 sm:flex-row sm:items-baseline sm:gap-3">
+              <span className="min-w-[10rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">Sample request notes</span>
+              <span className="text-sm font-medium text-slate-800">{order.sampleRequestNotes}</span>
             </p>
           ) : null}
           {order.customFields && typeof order.customFields === "object" && Object.keys(order.customFields).length > 0 && (
@@ -1140,16 +1166,16 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             </div>
           )}
           {order.slaDeadline ? (
-            <p className="flex flex-col gap-0.5 border-t border-slate-200 px-4 py-3 sm:flex-row sm:items-baseline sm:gap-3">
-              <span className="min-w-[10rem] shrink-0 text-sm font-medium text-slate-500">SLA deadline</span>
+            <p className="flex flex-col gap-0.5 px-5 py-3.5 sm:flex-row sm:items-baseline sm:gap-3">
+              <span className="min-w-[10rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">SLA deadline</span>
               <time className="text-sm font-semibold text-slate-900" dateTime={order.slaDeadline} suppressHydrationWarning>
                 {new Date(order.slaDeadline).toLocaleString()}
               </time>
             </p>
           ) : null}
           {openSlaBreach ? (
-            <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-3 text-sm">
-              <p className="font-medium text-amber-950">SLA breach recorded</p>
+            <div className="mx-5 mb-4 mt-1 rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50/60 p-4 text-sm">
+              <p className="font-semibold text-amber-900">⚠ SLA breach recorded</p>
               <p className="mt-1 text-xs text-amber-900/80">
                 Breached at {new Date(openSlaBreach.breachedAt).toLocaleString()} · Division{" "}
                 {openSlaBreach.division?.name ?? order.currentDivision?.name ?? "—"}
@@ -1202,7 +1228,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             </div>
           ) : null}
           {!isAuditView ? (
-            <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1 border-t border-slate-200 px-4 py-3 text-sm">
+            <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1 px-5 py-3.5 text-sm">
               <span className="font-medium text-slate-500">Transfers</span>
               <span className="font-semibold tabular-nums text-slate-900">{order.transferCount}</span>
               <span className="text-slate-300" aria-hidden>
@@ -1325,12 +1351,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       </Card>
 
       {!isAuditView && needsHandoff ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Assign supervisor &amp; development</CardTitle>
-            <p className="text-sm text-slate-500 font-normal">
+        <Card className="overflow-hidden border border-indigo-100 shadow-sm ring-1 ring-indigo-50">
+          <CardHeader className="border-b border-indigo-100 bg-gradient-to-r from-indigo-50/80 to-violet-50/50 px-5 py-4">
+            <CardTitle className="text-base font-semibold text-indigo-900">Assign supervisor &amp; development</CardTitle>
+            <p className="mt-0.5 text-xs text-indigo-700/70">
               Choose an ASM / supervisor from this division only, then classify the enquiry as new or existing
-              development. The supervisor receives an email with the enquiry summary.
+              development.
             </p>
           </CardHeader>
           <CardContent className="space-y-4 text-sm">
@@ -1425,19 +1451,19 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
       {!isAuditView && userMayViewEnquiryExecInsights(user?.role) && (
         <>
-          <Card>
-            <CardHeader>
-              <CardTitle>Enquiry pipeline</CardTitle>
-              <p className="text-sm text-slate-500 font-normal">Stages for this enquiry at a glance.</p>
+          <Card className="overflow-hidden border border-slate-200 shadow-sm">
+            <CardHeader className="border-b border-slate-100 bg-slate-50/60 px-5 py-4">
+              <CardTitle className="text-base font-semibold text-slate-800">Enquiry pipeline</CardTitle>
+              <p className="mt-0.5 text-xs text-slate-500">Stages for this enquiry at a glance.</p>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-5 py-4">
               <EnquiryPipelineStrip order={order} />
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Detailed timestamps</CardTitle>
-              <p className="text-sm text-slate-500 font-normal">
+          <Card className="overflow-hidden border border-slate-200 shadow-sm">
+            <CardHeader className="border-b border-slate-100 bg-slate-50/60 px-5 py-4">
+              <CardTitle className="text-base font-semibold text-slate-800">Detailed timestamps</CardTitle>
+              <p className="mt-0.5 text-xs text-slate-500">
                 Placed, accept, transfer, rejection, sample, and responses — from the activity log (oldest first).
               </p>
             </CardHeader>
@@ -1556,12 +1582,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       )}
 
       {order.sampleRequested && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Sample workflow</CardTitle>
-            <p className="text-sm text-slate-500 font-normal">
-              First submit and save sample details. After they are saved, approve the sample in a separate step.
-              Shipment requires courier and tracking ID. Sales can add feedback anytime before rejection.
+        <Card className="overflow-hidden border border-slate-200 shadow-sm">
+          <CardHeader className="border-b border-slate-100 bg-slate-50/60 px-5 py-4">
+            <CardTitle className="text-base font-semibold text-slate-800">Sample workflow</CardTitle>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Submit and save sample details, then approve in a separate step. Shipment requires courier and tracking ID.
             </p>
           </CardHeader>
           <CardContent className="space-y-4 text-sm">
