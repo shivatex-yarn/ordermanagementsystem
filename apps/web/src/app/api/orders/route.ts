@@ -201,6 +201,11 @@ export async function POST(req: Request) {
     customFields: parsed.data.customFields,
     sampleRequested: parsed.data.sampleRequested,
     sampleRequestNotes: parsed.data.sampleRequestNotes,
+    customerName: parsed.data.customerName,
+    customerPhone: parsed.data.customerPhone,
+    gstNumber: parsed.data.gstNumber,
+    gstCopyUrl: parsed.data.gstCopyUrl,
+    customerOrderDate: parsed.data.customerOrderDate,
   });
   return NextResponse.json(order, { status: 201 });
 }

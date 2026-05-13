@@ -44,6 +44,12 @@ export const createOrderSchema = z.object({
   customFields: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
   sampleRequested: z.boolean().optional(),
   sampleRequestNotes: z.string().max(10000).optional(),
+  // Mandatory customer identity fields
+  customerName: z.string().min(1, "Customer name is required").max(500),
+  customerPhone: z.string().min(7, "Phone number is required").max(20),
+  gstNumber: z.string().min(1, "GST number is required").max(50),
+  gstCopyUrl: z.string().min(1, "GST certificate upload is required").max(500),
+  customerOrderDate: z.string().min(1, "Customer order date is required"),
 });
 
 const setSampleDetailsBody = z
