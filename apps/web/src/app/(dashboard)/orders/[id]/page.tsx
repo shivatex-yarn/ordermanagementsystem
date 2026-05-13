@@ -432,6 +432,7 @@ function EnquiryPipelineStrip({
   );
 }
 
+
 function parseGstCopy(value: string | null | undefined): { url: string; name: string } | null {
   if (!value) return null;
   try {
@@ -471,6 +472,18 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [handoffNewDetails, setHandoffNewDetails] = useState("");
   const [handoffExistingDetails, setHandoffExistingDetails] = useState("");
   const [handoffError, setHandoffError] = useState("");
+  // New development planning dialog
+  const [newDevDialogOpen, setNewDevDialogOpen] = useState(false);
+  const [newDevDescription, setNewDevDescription] = useState("");
+  const [newDevResources, setNewDevResources] = useState("");
+  const [newDevResearch, setNewDevResearch] = useState("");
+  const [newDevPlanningNotes, setNewDevPlanningNotes] = useState("");
+  const [newDevTimeline, setNewDevTimeline] = useState("");
+  const [newDevCompletionDuration, setNewDevCompletionDuration] = useState("");
+  const [newDevInternalNotes, setNewDevInternalNotes] = useState("");
+  const [newDevReason, setNewDevReason] = useState("");
+  const [newDevDialogError, setNewDevDialogError] = useState("");
+  const [pendingNewDevPlan, setPendingNewDevPlan] = useState<Record<string, string | undefined> | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [cancelError, setCancelError] = useState("");
@@ -727,8 +740,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         body: JSON.stringify({
           supervisorId: Number(handoffSupervisorId),
           developmentKind: handoffDevKind,
-          newDevelopmentDetails: handoffDevKind === "new" ? handoffNewDetails : undefined,
+          newDevelopmentDetails: handoffDevKind === "new" ? pendingNewDevPlan?.description : undefined,
           existingProductDetails: handoffDevKind === "existing" ? handoffExistingDetails : undefined,
+          newDevPlan: handoffDevKind === "new" ? pendingNewDevPlan : undefined,
         }),
       }),
     onSuccess: async (res) => {
@@ -1345,15 +1359,25 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                     {(() => {
                       const gst = parseGstCopy(order.gstCopyUrl);
                       if (!gst) return null;
+                      const gstServeUrl = `/api/orders/${order.id}/gst-certificate`;
                       return (
                         <div className="flex flex-col sm:col-span-2">
                           <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">GST certificate</span>
                           <div className="mt-1 flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
                             <span className="flex-1 truncate text-sm font-medium text-slate-800">{gst.name}</span>
-                            <a href={gst.url} target="_blank" rel="noopener noreferrer" className="rounded bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-blue-700">
+                            <a
+                              href={gstServeUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="rounded bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-blue-700"
+                            >
                               View
                             </a>
-                            <a href={gst.url} download={gst.name} className="rounded border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100">
+                            <a
+                              href={gstServeUrl}
+                              download={gst.name}
+                              className="rounded border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                            >
                               Download
                             </a>
                           </div>

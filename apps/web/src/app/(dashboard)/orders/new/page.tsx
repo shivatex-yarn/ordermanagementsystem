@@ -277,9 +277,22 @@ export default function NewOrderPage() {
                   <CheckCircle className="h-4 w-4 shrink-0 text-emerald-600" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium text-emerald-800">{gstFileName || "GST certificate uploaded"}</p>
-                    <a href={gstFileUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-emerald-600 underline">
+                    <button
+                      type="button"
+                      className="text-xs text-emerald-600 underline"
+                      onClick={() => {
+                        if (!gstFileUrl.startsWith("data:")) { window.open(gstFileUrl, "_blank", "noopener,noreferrer"); return; }
+                        const [meta, b64] = gstFileUrl.split(",");
+                        const mime = meta.split(":")[1].split(";")[0];
+                        const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+                        const blob = new Blob([bytes], { type: mime });
+                        const blobUrl = URL.createObjectURL(blob);
+                        window.open(blobUrl, "_blank", "noopener,noreferrer");
+                        setTimeout(() => URL.revokeObjectURL(blobUrl), 10_000);
+                      }}
+                    >
                       View uploaded file
-                    </a>
+                    </button>
                   </div>
                   <Button
                     type="button"
