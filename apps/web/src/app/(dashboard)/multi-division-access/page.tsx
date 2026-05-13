@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { userMayCreateEnquiry } from "@/lib/enquiry-access";
 
 type Division = { id: number; name: string; active?: boolean };
 
@@ -41,19 +42,19 @@ export default function MultiDivisionAccessPage() {
   const [reason, setReason] = useState("");
   const [submitError, setSubmitError] = useState("");
 
-  const isManager = user?.role === "MANAGER";
+  const canAccess = Boolean(user && (userMayCreateEnquiry(user.role) || user.role === "MANAGER" || user.role === "DIVISION_HEAD"));
 
   const { data: divisionsData, isLoading: divisionsLoading } = useQuery({
     queryKey: ["divisions", "all-active"],
     queryFn: fetchDivisions,
-    enabled: Boolean(user && isManager),
+    enabled: canAccess,
     staleTime: 5 * 60_000,
   });
 
   const { data: requestsData, isLoading: requestsLoading } = useQuery({
     queryKey: ["multi-division-requests", "me"],
     queryFn: fetchMyRequests,
-    enabled: Boolean(user && isManager),
+    enabled: canAccess,
     staleTime: 30_000,
   });
 
@@ -106,14 +107,14 @@ export default function MultiDivisionAccessPage() {
     return null;
   }
 
-  if (!isManager) {
+  if (!canAccess) {
     return (
       <Card>
         <CardHeader>
           <CardTitle>Multi-division access</CardTitle>
         </CardHeader>
         <CardContent className="text-sm text-slate-600">
-          This page is only available to Division Heads (Managers).
+          This page is not available for your role.
         </CardContent>
       </Card>
     );
@@ -124,34 +125,39 @@ export default function MultiDivisionAccessPage() {
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Multi-division access</h1>
         <p className="mt-1 text-slate-500">
-          Request access to additional divisions. A Super Admin will review and approve or reject.
+          Request access to raise enquiries for additional divisions. A Super Admin will review and approve or reject your request.
         </p>
       </div>
 
       <Card>
         <CardHeader>
           <CardTitle>Submit a request</CardTitle>
+          <p className="text-sm text-slate-500 font-normal">
+            Select the division(s) you need access to and explain why.
+          </p>
         </CardHeader>
-        <CardContent className="space-y-4 text-sm">
-          <div className="rounded-lg border border-slate-100 bg-slate-50/60 p-3 text-slate-700">
-            <span className="text-slate-500">Your current division:</span>{" "}
-            {user.division?.name ?? "—"}
-          </div>
+        <CardContent className="space-y-5 text-sm">
+          {user.division?.name ? (
+            <div className="rounded-lg border border-slate-100 bg-slate-50/60 p-3 text-slate-700">
+              <span className="text-slate-500">Your primary division:</span>{" "}
+              <span className="font-medium">{user.division.name}</span>
+            </div>
+          ) : null}
 
           {divisionsLoading ? (
             <p className="text-slate-500">Loading divisions…</p>
           ) : selectableDivisions.length === 0 ? (
-            <p className="text-slate-500">No divisions available to request.</p>
+            <p className="text-slate-500">No other divisions available to request.</p>
           ) : (
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                Select divisions
+                Select additional divisions
               </p>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {selectableDivisions.map((d) => (
                   <label
                     key={d.id}
-                    className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 hover:bg-slate-50"
+                    className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2.5 hover:bg-slate-50"
                   >
                     <input
                       type="checkbox"
@@ -159,6 +165,7 @@ export default function MultiDivisionAccessPage() {
                       onChange={(e) =>
                         setSelected((prev) => ({ ...prev, [d.id]: e.target.checked }))
                       }
+                      className="h-4 w-4 rounded border-slate-300"
                     />
                     <span className="text-slate-800">{d.name}</span>
                   </label>
@@ -168,11 +175,11 @@ export default function MultiDivisionAccessPage() {
           )}
 
           <div className="space-y-2">
-            <Label>Reason (min 10 characters)</Label>
+            <Label>Reason <span className="text-slate-400">(min 10 characters)</span></Label>
             <textarea
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="Why do you need access to these divisions?"
+              placeholder="Why do you need access to raise enquiries for these divisions?"
               rows={4}
               className="flex min-h-[96px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-xs placeholder:text-slate-400 focus-visible:border-slate-300 focus-visible:ring-slate-200/50 focus-visible:ring-[3px] outline-none"
             />
@@ -181,6 +188,12 @@ export default function MultiDivisionAccessPage() {
           {hasPending ? (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
               You already have a pending request. Please wait for approval before submitting another.
+            </div>
+          ) : null}
+
+          {submitMutation.isSuccess ? (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+              Request submitted successfully. A Super Admin will review it shortly.
             </div>
           ) : null}
 
@@ -227,7 +240,7 @@ export default function MultiDivisionAccessPage() {
           {requestsLoading ? (
             <div className="py-8 text-center text-slate-500">Loading…</div>
           ) : requests.length === 0 ? (
-            <div className="py-8 text-center text-slate-500">No requests yet.</div>
+            <div className="py-8 text-center text-slate-500">No requests submitted yet.</div>
           ) : (
             <ul className="space-y-4">
               {requests.map((r) => (
@@ -249,18 +262,27 @@ export default function MultiDivisionAccessPage() {
                     </Badge>
                   </div>
                   <p className="text-sm text-slate-600">
-                    <span className="font-medium">Divisions:</span>{" "}
+                    <span className="font-medium">Requested divisions:</span>{" "}
                     {r.divisions.map((d) => d.division.name).join(", ")}
                   </p>
                   <p className="text-sm text-slate-600">
                     <span className="font-medium">Reason:</span> {r.reason}
                   </p>
-                  {r.approvedBy ? (
-                    <p className="text-xs text-slate-500">
-                      Processed by {r.approvedBy.name}
+                  {r.status === "APPROVED" ? (
+                    <p className="text-xs text-emerald-700 font-medium">
+                      ✓ Approved — you can now raise enquiries for these divisions.
+                      {r.approvedBy ? ` Approved by ${r.approvedBy.name}` : ""}
                       {r.approvedAt ? ` · ${new Date(r.approvedAt).toLocaleString()}` : ""}
                     </p>
-                  ) : null}
+                  ) : r.status === "REJECTED" ? (
+                    <p className="text-xs text-red-600 font-medium">
+                      ✗ Rejected — please contact a Super Admin for more information.
+                    </p>
+                  ) : (
+                    <p className="text-xs text-amber-700">
+                      Pending review by Super Admin.
+                    </p>
+                  )}
                 </li>
               ))}
             </ul>
@@ -270,4 +292,3 @@ export default function MultiDivisionAccessPage() {
     </div>
   );
 }
-

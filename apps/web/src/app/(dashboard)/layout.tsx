@@ -123,7 +123,7 @@ export default function DashboardLayout({
       return item.href === "/md" || item.href === "/accounts" || item.href === "/notifications";
     }
     if ("accountsOnly" in item && item.accountsOnly && user.role !== "ACCOUNTS" && user.role !== "SUPER_ADMIN" && user.role !== "MANAGING_DIRECTOR") return false;
-    if ("managerOnly" in item && item.managerOnly && user.role !== "MANAGER" && user.role !== "DIVISION_HEAD") return false;
+    if ("managerOnly" in item && item.managerOnly && !["MANAGER", "DIVISION_HEAD", "USER", "SUPERVISOR", "ASM"].includes(user.role)) return false;
     if ("superAdminOnly" in item && item.superAdminOnly && user.role !== "SUPER_ADMIN" && user.role !== "MANAGING_DIRECTOR") {
       return false;
     }
