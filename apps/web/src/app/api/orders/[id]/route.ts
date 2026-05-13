@@ -251,9 +251,25 @@ export async function PATCH(
       const d = body.customerOrderDate ? new Date(String(body.customerOrderDate)) : null;
       data.customerOrderDate = d && !isNaN(d.getTime()) ? d : null;
     }
-    // New dev plan editing (replaces entire plan object)
+    // New dev plan editing (replaces entire plan object); keep `enquiryHandoff.planning` in sync for list/detail views.
     if (body.newDevPlan !== undefined) {
       data.newDevPlan = (typeof body.newDevPlan === "object" ? body.newDevPlan : null) as unknown;
+      if (typeof body.newDevPlan === "object" && body.newDevPlan) {
+        const row = await prisma.order.findUnique({
+          where: { id: orderId },
+          select: { enquiryHandoff: true },
+        });
+        const eh = row?.enquiryHandoff as Record<string, unknown> | null;
+        if (eh && eh.developmentKind === "new") {
+          const plan = body.newDevPlan as Record<string, unknown>;
+          const desc = typeof plan.description === "string" ? plan.description.trim() : "";
+          data.enquiryHandoff = {
+            ...eh,
+            planning: body.newDevPlan as object,
+            ...(desc ? { newDevelopmentDetails: desc } : {}),
+          };
+        }
+      }
     }
     if (Object.keys(data).length === 0) {
       return NextResponse.json({ error: "No editable fields provided" }, { status: 400 });

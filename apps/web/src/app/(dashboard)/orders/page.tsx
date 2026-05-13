@@ -60,8 +60,6 @@ export default function OrdersPage() {
   const isAccountsView = user?.role === "ACCOUNTS";
   const canCreate = Boolean(user && userMayCreateEnquiry(user.role) && !isAccountsView);
   const hideDivision = user?.role === "MANAGER";
-  // HEAD and SUPERVISOR open enquiry detail in a new tab (they review, not navigate away)
-  const openInNewTab = Boolean(user && ["MANAGER", "SUPERVISOR", "ASM"].includes(user.role));
 
   const { data: divisionsData } = useQuery({
     queryKey: ["divisions", "orders-filter"],
@@ -213,8 +211,6 @@ export default function OrdersPage() {
                     <Link
                       key={order.id}
                       href={`/orders/${order.id}`}
-                      target={openInNewTab ? "_blank" : undefined}
-                      rel={openInNewTab ? "noopener noreferrer" : undefined}
                       className="group flex items-center gap-4 px-5 py-4 transition-colors hover:bg-slate-50"
                     >
                       <div className={`h-9 w-1 shrink-0 rounded-full ${statusBar[order.status] ?? "bg-slate-300"}`} />

@@ -67,6 +67,21 @@ function formatStoredPlanDate(value: string): string {
   return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
+/** Full planning payload: prefer dedicated column, fall back to snapshot stored on `enquiryHandoff` (survives schema drift). */
+function getEffectiveNewDevPlan(order: {
+  enquiryHandoff?: Record<string, unknown> | null;
+  newDevPlan?: Record<string, unknown> | null;
+}): Record<string, unknown> | null {
+  if (order.newDevPlan && typeof order.newDevPlan === "object") {
+    return order.newDevPlan as Record<string, unknown>;
+  }
+  const h = order.enquiryHandoff;
+  if (h && h.developmentKind === "new" && h.planning && typeof h.planning === "object") {
+    return h.planning as Record<string, unknown>;
+  }
+  return null;
+}
+
 /** Ask browser extensions (e.g. Grammarly) not to inject into our fields — avoids DOM/React sync issues. */
 const noGrammarlyTextarea = {
   "data-gramm": "false",
@@ -510,6 +525,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [pendingNewDevPlan, setPendingNewDevPlan] = useState<Record<string, string | undefined> | null>(null);
   const [isEditingDevPlan, setIsEditingDevPlan] = useState(false);
   const [editDevPlanSaving, setEditDevPlanSaving] = useState(false);
+  const handoffPrefilledForOrderRef = useRef<number | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [cancelError, setCancelError] = useState("");
@@ -607,7 +623,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       if (!res.ok) throw new Error("Failed to fetch divisions");
       return res.json();
     },
-    enabled: Boolean(user && ["MANAGER", "SUPER_ADMIN"].includes(user.role) && showInteractiveUi),
+    enabled: Boolean(
+      user && ["MANAGER", "DIVISION_HEAD", "SUPER_ADMIN"].includes(user.role) && showInteractiveUi
+    ),
     staleTime: 5 * 60_000,
   });
   const divisions = divisionsData?.divisions ?? [];
@@ -621,6 +639,35 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         showInteractiveUi &&
         (user.role === "MANAGER" || user.role === "DIVISION_HEAD" || user.role === "SUPER_ADMIN" || user.role === "MANAGING_DIRECTOR")
     );
+
+  const isDivisionHead = useMemo(
+    () =>
+      Boolean(
+        user &&
+          order?.currentDivision?.managers &&
+          Array.isArray(order.currentDivision.managers) &&
+          order.currentDivision.managers.some((m: DivisionManagerWithUser) => Number(m.user?.id) === Number(user.id))
+      ),
+    [user, order?.currentDivision?.managers, order?.id]
+  );
+
+  const mayManageHandoffReassign = Boolean(
+    user && (isDivisionHead || ["SUPER_ADMIN", "MANAGING_DIRECTOR"].includes(user.role))
+  );
+  const canReassignHandoff = Boolean(
+    showInteractiveUi &&
+      user &&
+      order &&
+      order.status === "IN_PROGRESS" &&
+      order.enquiryHandoff &&
+      !order.sampleShippedAt &&
+      (user.role === "MANAGER" ||
+        user.role === "DIVISION_HEAD" ||
+        user.role === "SUPER_ADMIN" ||
+        user.role === "MANAGING_DIRECTOR") &&
+      mayManageHandoffReassign
+  );
+  const showHandoffCard = needsHandoff || canReassignHandoff;
 
   // Auto-open planning dialog when "New development" is selected and handoff is needed (include needsHandoff so it runs after order load).
   useEffect(() => {
@@ -636,10 +683,54 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       if (!res.ok) throw new Error("Failed to load supervisors");
       return res.json() as Promise<{ supervisors: { id: number; name: string; email: string }[] }>;
     },
-    enabled: Boolean(Number.isInteger(orderId) && needsHandoff),
+    enabled: Boolean(Number.isInteger(orderId) && showHandoffCard),
     staleTime: 60_000,
   });
   const divisionSupervisors = supervisorsData?.supervisors ?? [];
+
+  useEffect(() => {
+    if (!order?.id) return;
+    if (!canReassignHandoff) {
+      if (handoffPrefilledForOrderRef.current === order.id) handoffPrefilledForOrderRef.current = null;
+      return;
+    }
+    if (handoffPrefilledForOrderRef.current === order.id) return;
+    handoffPrefilledForOrderRef.current = order.id;
+    const supId = order.assignedSupervisorId;
+    setHandoffSupervisorId(supId != null ? String(supId) : "");
+    const h = order.enquiryHandoff as Record<string, unknown>;
+    if (h.developmentKind === "existing") {
+      setHandoffDevKind("existing");
+      setHandoffExistingDetails(typeof h.existingProductDetails === "string" ? h.existingProductDetails : "");
+      setPendingNewDevPlan(null);
+    } else if (h.developmentKind === "new") {
+      setHandoffDevKind("new");
+      const plan = getEffectiveNewDevPlan(order);
+      if (plan) {
+        setPendingNewDevPlan({
+          description: typeof plan.description === "string" ? plan.description : "",
+          resourcesRequired: typeof plan.resourcesRequired === "string" ? plan.resourcesRequired : "",
+          researchRequirements:
+            typeof plan.researchRequirements === "string" && plan.researchRequirements.trim()
+              ? (plan.researchRequirements as string)
+              : undefined,
+          planningNotes:
+            typeof plan.planningNotes === "string" && plan.planningNotes.trim()
+              ? (plan.planningNotes as string)
+              : undefined,
+          estimatedTimeline: typeof plan.estimatedTimeline === "string" ? plan.estimatedTimeline : "",
+          expectedCompletionDuration:
+            typeof plan.expectedCompletionDuration === "string" ? plan.expectedCompletionDuration : "",
+          internalNotes:
+            typeof plan.internalNotes === "string" && plan.internalNotes.trim()
+              ? (plan.internalNotes as string)
+              : undefined,
+          reasonForNewDevelopment:
+            typeof plan.reasonForNewDevelopment === "string" ? plan.reasonForNewDevelopment : "",
+        });
+      }
+    }
+  }, [canReassignHandoff, order?.id, order?.enquiryHandoff, order?.assignedSupervisorId, order?.newDevPlan]);
 
   const acceptMutation = useMutation({
     mutationFn: () =>
@@ -789,6 +880,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         setNewDevDescription(""); setNewDevResources(""); setNewDevResearch("");
         setNewDevPlanningNotes(""); setNewDevTimeline(""); setNewDevCompletionDuration("");
         setNewDevInternalNotes(""); setNewDevReason("");
+        handoffPrefilledForOrderRef.current = null;
         queryClient.invalidateQueries({ queryKey: ["order", orderId] });
         queryClient.invalidateQueries({ queryKey: ["order-audit", orderId] });
         queryClient.invalidateQueries({ queryKey: ["orders"] });
@@ -883,10 +975,14 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     onError: (err: Error) => setCancelError(err.message),
   });
 
-  const isManager = user && ["MANAGER", "SUPER_ADMIN"].includes(user.role);
   const status = order?.status;
   const hasStatus = typeof status === "string";
-  const canAct = Boolean(order && isManager && hasStatus && ["PLACED", "TRANSFERRED", "IN_PROGRESS"].includes(status));
+  const isDivisionReviewerRole = Boolean(
+    user && ["MANAGER", "DIVISION_HEAD", "SUPER_ADMIN", "MANAGING_DIRECTOR"].includes(user.role)
+  );
+  const canAct = Boolean(
+    order && isDivisionReviewerRole && hasStatus && ["PLACED", "TRANSFERRED", "IN_PROGRESS"].includes(status)
+  );
   /** Division-side reject — not shown to the person who raised the enquiry (they use Cancel enquiry instead). */
   const canRejectEnquiry =
     canAct && order && user && Number(user.id) !== order.createdById;
@@ -1016,12 +1112,6 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     order?.slaBreaches && Array.isArray(order.slaBreaches) && order.slaBreaches.length
       ? (order.slaBreaches[0] as OrderOpenSlaBreach)
       : null;
-  const isDivisionHead = Boolean(
-    user &&
-      order?.currentDivision?.managers &&
-      Array.isArray(order.currentDivision.managers) &&
-      order.currentDivision.managers.some((m: DivisionManagerWithUser) => Number(m.user?.id) === Number(user.id))
-  );
   const awaitingHeadRejection = Boolean(openSlaBreach && !openSlaBreach.headRejectedAt);
   const canCancel =
     showInteractiveUi &&
@@ -1051,6 +1141,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     if (Number.isNaN(d.getTime())) return "";
     return d.toLocaleString();
   }, [sampleDevelopment]);
+
+  const effectiveNewDevPlan = useMemo(
+    () => (order ? getEffectiveNewDevPlan(order) : null),
+    [order?.id, order?.newDevPlan, order?.enquiryHandoff]
+  );
 
   const hasSampleDevelopmentSaved = useMemo(() => {
     if (!sampleDevelopment) return false;
@@ -1278,7 +1373,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 // Salesperson can edit while order is still PLACED
                 (["USER", "SUPERVISOR", "ASM"].includes(user.role) && order.createdById === user.id && order.status === "PLACED") ||
                 // Division Head / Admin can edit customer details at any non-closed status
-                (["MANAGER", "SUPER_ADMIN", "MANAGING_DIRECTOR"].includes(user.role) && isDivisionHead)
+                (["MANAGER", "DIVISION_HEAD", "SUPER_ADMIN", "MANAGING_DIRECTOR"].includes(user.role) && isDivisionHead)
               );
 
             const handleEditGstUpload = async (file: File) => {
@@ -1472,7 +1567,6 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                             <span className="flex-1 truncate text-sm font-medium text-slate-800">{gst.name}</span>
                             <a
                               href={gstServeUrl}
-                              target="_blank"
                               rel="noopener noreferrer"
                               className="rounded bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-blue-700"
                             >
@@ -1534,11 +1628,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             <div className="px-5 py-3.5">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Development classification</p>
-                {showInteractiveUi && user && ["MANAGER", "SUPER_ADMIN", "MANAGING_DIRECTOR"].includes(user.role) && isDivisionHead && !isClosedStatus ? (
+                {showInteractiveUi && user && ["MANAGER", "DIVISION_HEAD", "SUPER_ADMIN", "MANAGING_DIRECTOR"].includes(user.role) && isDivisionHead && !isClosedStatus ? (
                   <button
                     type="button"
                     onClick={() => {
-                      const plan = order.newDevPlan as Record<string, unknown> | null | undefined;
+                      const plan = effectiveNewDevPlan;
                       const handoff = order.enquiryHandoff as Record<string, unknown>;
                       if (handoff.developmentKind === "new" && plan) {
                         setNewDevDescription(typeof plan.description === "string" ? plan.description : "");
@@ -1572,7 +1666,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                   <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{order.enquiryHandoff.existingProductDetails}</p>
                 ) : null}
                 {/* New Development Plan details */}
-                {order.enquiryHandoff.developmentKind === "new" && order.newDevPlan && typeof order.newDevPlan === "object" ? (
+                {order.enquiryHandoff.developmentKind === "new" && effectiveNewDevPlan ? (
                   <div className="mt-2 space-y-2 border-t border-slate-100 pt-2">
                     {(["description","resourcesRequired","researchRequirements","planningNotes","estimatedTimeline","expectedCompletionDuration","reasonForNewDevelopment"] as const).map((key) => {
                       const labels: Record<string, string> = {
@@ -1584,7 +1678,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                         expectedCompletionDuration: "Expected completion",
                         reasonForNewDevelopment: "Reason for new development",
                       };
-                      const val = (order.newDevPlan as Record<string,unknown>)[key];
+                      const val = effectiveNewDevPlan[key];
                       if (typeof val !== "string" || !val.trim()) return null;
                       const displayText =
                         (key === "estimatedTimeline" || key === "expectedCompletionDuration")
@@ -1598,15 +1692,15 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                       );
                     })}
                     {/* Internal notes — MD / Super Admin only */}
-                    {user && ["MANAGING_DIRECTOR", "SUPER_ADMIN"].includes(user.role) && typeof (order.newDevPlan as Record<string,unknown>).internalNotes === "string" && ((order.newDevPlan as Record<string,unknown>).internalNotes as string).trim() ? (
+                    {user && ["MANAGING_DIRECTOR", "SUPER_ADMIN"].includes(user.role) && typeof effectiveNewDevPlan.internalNotes === "string" && effectiveNewDevPlan.internalNotes.trim() ? (
                       <div className="rounded-lg border border-amber-100 bg-amber-50 p-2.5">
                         <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-600">Internal notes (MD / Super Admin only)</p>
-                        <p className="text-sm text-amber-900 whitespace-pre-wrap">{(order.newDevPlan as Record<string,unknown>).internalNotes as string}</p>
+                        <p className="text-sm text-amber-900 whitespace-pre-wrap">{effectiveNewDevPlan.internalNotes}</p>
                       </div>
                     ) : null}
                     {/* Planning timing — MD / Super Admin only */}
                     {user && ["MANAGING_DIRECTOR", "SUPER_ADMIN"].includes(user.role) ? (() => {
-                      const p = order.newDevPlan as Record<string,unknown>;
+                      const p = effectiveNewDevPlan;
                       const recvAt = typeof p.enquiryReceivedAt === "string" ? new Date(p.enquiryReceivedAt) : null;
                       const subAt = typeof p.planningSubmittedAt === "string" ? new Date(p.planningSubmittedAt) : null;
                       const durationHrs = recvAt && subAt ? Math.round((subAt.getTime() - recvAt.getTime()) / 36e5) : null;
@@ -1619,6 +1713,16 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                         </div>
                       );
                     })() : null}
+                  </div>
+                ) : order.enquiryHandoff.developmentKind === "new" &&
+                  typeof order.enquiryHandoff.newDevelopmentDetails === "string" &&
+                  order.enquiryHandoff.newDevelopmentDetails.trim() ? (
+                  <div className="mt-2 space-y-1 border-t border-slate-100 pt-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Development description</p>
+                    <p className="text-sm text-slate-800 whitespace-pre-wrap">{order.enquiryHandoff.newDevelopmentDetails}</p>
+                    <p className="text-xs text-amber-800">
+                      Full planning fields are being restored from stored handoff data. Use &quot;Edit development plan&quot; if anything is missing.
+                    </p>
                   </div>
                 ) : null}
               </div>
@@ -1709,7 +1813,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 </p>
               )}
 
-              {showInteractiveUi && awaitingHeadRejection && isDivisionHead && user?.role === "MANAGER" ? (
+              {showInteractiveUi && awaitingHeadRejection && isDivisionHead && ["MANAGER", "DIVISION_HEAD"].includes(user?.role ?? "") ? (
                 <div className="mt-3 space-y-2">
                   <Label className="text-xs uppercase tracking-wide text-amber-900/70">
                     Division Head rejection message (delay / breach)
@@ -1857,13 +1961,16 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         </CardContent>
       </Card>
 
-      {!isAuditView && needsHandoff ? (
+      {!isAuditView && showHandoffCard ? (
         <Card className="overflow-hidden border border-indigo-100 shadow-sm ring-1 ring-indigo-50">
           <CardHeader className="border-b border-indigo-100 bg-gradient-to-r from-indigo-50/80 to-violet-50/50 px-5 py-4">
-            <CardTitle className="text-base font-semibold text-indigo-900">Assign supervisor &amp; development</CardTitle>
+            <CardTitle className="text-base font-semibold text-indigo-900">
+              {canReassignHandoff && !needsHandoff ? "Update supervisor & development" : "Assign supervisor & development"}
+            </CardTitle>
             <p className="mt-0.5 text-xs text-indigo-700/70">
-              Choose an ASM / supervisor from this division only, then classify the enquiry as new or existing
-              development.
+              {canReassignHandoff && !needsHandoff
+                ? "Change the assigned ASM / supervisor or update development classification. Blocked after the sample has been marked shipped."
+                : "Choose an ASM / supervisor from this division only, then classify the enquiry as new or existing development."}
             </p>
           </CardHeader>
           <CardContent className="space-y-4 text-sm">
@@ -1966,7 +2073,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                     handoffMutation.mutate();
                   }}
                 >
-                  {handoffMutation.isPending ? "Submitting…" : "Submit assignment"}
+                  {handoffMutation.isPending ? "Submitting…" : canReassignHandoff && !needsHandoff ? "Save assignment" : "Submit assignment"}
                 </Button>
               </>
             )}

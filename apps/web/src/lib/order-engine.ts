@@ -740,7 +740,6 @@ export async function submitEnquiryHandoff(
 ) {
   const order = await prisma.order.findUnique({ where: { id: orderId } });
   if (!order || order.status !== "IN_PROGRESS") return null;
-  if (order.enquiryHandoff != null) return null;
 
   if (!opts?.bypassHeadCheck) {
     const okHead = await userIsDivisionHead(headUserId, order.currentDivisionId);
@@ -759,51 +758,77 @@ export async function submitEnquiryHandoff(
   if (!supervisor) return null;
 
   const now = new Date();
+  const existingHandoff =
+    order.enquiryHandoff != null && typeof order.enquiryHandoff === "object"
+      ? (order.enquiryHandoff as Record<string, unknown>)
+      : null;
+  const isUpdate = existingHandoff != null;
+
+  if (isUpdate && order.sampleShippedAt) return null;
+
   let handoff: Record<string, unknown>;
   let extraData: Record<string, unknown> = {};
 
   if (input.developmentKind === "new") {
-    if (!input.newDevPlan) return null;
-    const desc = input.newDevPlan.description.trim();
-    if (desc.length < 10) return null;
+    let planPayload: Record<string, unknown> | null = null;
+    if (input.newDevPlan) {
+      const desc = input.newDevPlan.description.trim();
+      if (desc.length < 10) return null;
+      planPayload = {
+        description: desc,
+        resourcesRequired: input.newDevPlan.resourcesRequired.trim(),
+        researchRequirements: input.newDevPlan.researchRequirements?.trim() || null,
+        planningNotes: input.newDevPlan.planningNotes?.trim() || null,
+        estimatedTimeline: input.newDevPlan.estimatedTimeline.trim(),
+        expectedCompletionDuration: input.newDevPlan.expectedCompletionDuration.trim(),
+        internalNotes: input.newDevPlan.internalNotes?.trim() || null,
+        reasonForNewDevelopment: input.newDevPlan.reasonForNewDevelopment.trim(),
+        enquiryReceivedAt: order.createdAt.toISOString(),
+        planningSubmittedAt: now.toISOString(),
+      };
+    } else if (isUpdate) {
+      if (order.newDevPlan && typeof order.newDevPlan === "object") {
+        planPayload = { ...(order.newDevPlan as Record<string, unknown>) };
+      } else if (existingHandoff && typeof existingHandoff.planning === "object") {
+        planPayload = { ...(existingHandoff.planning as Record<string, unknown>) };
+      }
+    }
+    const descStr =
+      planPayload && typeof planPayload.description === "string" ? planPayload.description.trim() : "";
+    if (!planPayload || descStr.length < 10) return null;
 
-    // Build planning payload with internal timing data
-    const planPayload: Record<string, unknown> = {
-      description: desc,
-      resourcesRequired: input.newDevPlan.resourcesRequired.trim(),
-      researchRequirements: input.newDevPlan.researchRequirements?.trim() || null,
-      planningNotes: input.newDevPlan.planningNotes?.trim() || null,
-      estimatedTimeline: input.newDevPlan.estimatedTimeline.trim(),
-      expectedCompletionDuration: input.newDevPlan.expectedCompletionDuration.trim(),
-      internalNotes: input.newDevPlan.internalNotes?.trim() || null,
-      reasonForNewDevelopment: input.newDevPlan.reasonForNewDevelopment.trim(),
-      enquiryReceivedAt: order.createdAt.toISOString(),
-      planningSubmittedAt: now.toISOString(),
-    };
-
+    const prev = existingHandoff ?? {};
     handoff = {
       developmentKind: "new",
-      newDevelopmentDetails: desc, // backward compat
+      newDevelopmentDetails: descStr,
       existingProductDetails: null,
-      submittedAt: now.toISOString(),
-      submittedById: headUserId,
+      planning: planPayload,
+      submittedAt: typeof prev.submittedAt === "string" ? prev.submittedAt : now.toISOString(),
+      submittedById: typeof prev.submittedById === "number" ? (prev.submittedById as number) : headUserId,
+      ...(isUpdate ? { lastHandoffUpdateAt: now.toISOString(), lastHandoffUpdateById: headUserId } : {}),
     };
 
-    // For new development: SLA starts now (planning submission), not at order creation
+    const wasNew = existingHandoff?.developmentKind === "new";
     extraData = {
       newDevPlan: planPayload as object,
       productKind: "NEW",
-      slaDeadline: computeSlaDeadline(now),
+      ...(!isUpdate || !wasNew ? { slaDeadline: computeSlaDeadline(now) } : {}),
     };
   } else {
     const t = input.existingProductDetails?.trim() ?? "";
     if (t.length < 10) return null;
+    const prev = existingHandoff ?? {};
     handoff = {
       developmentKind: "existing",
       newDevelopmentDetails: null,
       existingProductDetails: t,
-      submittedAt: now.toISOString(),
-      submittedById: headUserId,
+      submittedAt: typeof prev.submittedAt === "string" ? prev.submittedAt : now.toISOString(),
+      submittedById: typeof prev.submittedById === "number" ? (prev.submittedById as number) : headUserId,
+      ...(isUpdate ? { lastHandoffUpdateAt: now.toISOString(), lastHandoffUpdateById: headUserId } : {}),
+    };
+    extraData = {
+      newDevPlan: null,
+      productKind: "EXISTING",
     };
   }
 
