@@ -485,6 +485,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [newDevReason, setNewDevReason] = useState("");
   const [newDevDialogError, setNewDevDialogError] = useState("");
   const [pendingNewDevPlan, setPendingNewDevPlan] = useState<Record<string, string | undefined> | null>(null);
+  const [isEditingDevPlan, setIsEditingDevPlan] = useState(false);
+  const [editDevPlanSaving, setEditDevPlanSaving] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [cancelError, setCancelError] = useState("");
@@ -1186,9 +1188,13 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             const canEditEnquiry =
               showInteractiveUi &&
               user &&
-              ["USER", "SUPERVISOR", "ASM"].includes(user.role) &&
-              order.createdById === user.id &&
-              order.status === "PLACED";
+              !isClosedStatus &&
+              (
+                // Salesperson can edit while order is still PLACED
+                (["USER", "SUPERVISOR", "ASM"].includes(user.role) && order.createdById === user.id && order.status === "PLACED") ||
+                // Division Head / Admin can edit customer details at any non-closed status
+                (["MANAGER", "SUPER_ADMIN", "MANAGING_DIRECTOR"].includes(user.role) && isDivisionHead)
+              );
 
             const handleEditGstUpload = async (file: File) => {
               setEditGstUploadError("");
@@ -1441,7 +1447,37 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           ) : null}
           {order.enquiryHandoff && typeof order.enquiryHandoff === "object" ? (
             <div className="px-5 py-3.5">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Development classification</p>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Development classification</p>
+                {showInteractiveUi && user && ["MANAGER", "SUPER_ADMIN", "MANAGING_DIRECTOR"].includes(user.role) && isDivisionHead && !isClosedStatus ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const plan = order.newDevPlan as Record<string, unknown> | null | undefined;
+                      const handoff = order.enquiryHandoff as Record<string, unknown>;
+                      if (handoff.developmentKind === "new" && plan) {
+                        setNewDevDescription(typeof plan.description === "string" ? plan.description : "");
+                        setNewDevResources(typeof plan.resourcesRequired === "string" ? plan.resourcesRequired : "");
+                        setNewDevResearch(typeof plan.researchRequirements === "string" ? plan.researchRequirements : "");
+                        setNewDevPlanningNotes(typeof plan.planningNotes === "string" ? plan.planningNotes : "");
+                        setNewDevTimeline(typeof plan.estimatedTimeline === "string" ? plan.estimatedTimeline : "");
+                        setNewDevCompletionDuration(typeof plan.expectedCompletionDuration === "string" ? plan.expectedCompletionDuration : "");
+                        setNewDevInternalNotes(typeof plan.internalNotes === "string" ? plan.internalNotes : "");
+                        setNewDevReason(typeof plan.reasonForNewDevelopment === "string" ? plan.reasonForNewDevelopment : "");
+                        setIsEditingDevPlan(true);
+                        setNewDevDialogError("");
+                        setNewDevDialogOpen(true);
+                      } else if (handoff.developmentKind === "existing") {
+                        // For existing development, re-open handoff (no dialog needed — handled by handoff form re-show)
+                        // Not applicable here; just a safeguard
+                      }
+                    }}
+                    className="rounded-md border border-violet-200 bg-white/60 px-2.5 py-1 text-xs font-medium text-violet-700 transition-colors hover:bg-white hover:text-violet-900"
+                  >
+                    Edit development plan
+                  </button>
+                ) : null}
+              </div>
               <div className="rounded-xl border border-slate-100 bg-gradient-to-br from-slate-50/80 to-white p-3 space-y-2">
                 <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ring-1 ${order.enquiryHandoff.developmentKind === "existing" ? "bg-blue-50 text-blue-700 ring-blue-200" : "bg-violet-50 text-violet-700 ring-violet-200"}`}>
                   <span className={`h-1.5 w-1.5 rounded-full ${order.enquiryHandoff.developmentKind === "existing" ? "bg-blue-500" : "bg-violet-500"}`} />
@@ -2390,6 +2426,43 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                     <p className="text-sm font-medium text-amber-900">Awaiting head approval</p>
                     <p className="mt-0.5 text-xs text-amber-700">The division head must approve the sample request before you can enter details.</p>
                   </div>
+                ) : hasSampleDetailsSaved ? (
+                  // Details already submitted — show edit shortcut instead of a blank form
+                  <div className="rounded-xl border border-violet-200 bg-white/90 p-4 shadow-sm space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">Sample details submitted</p>
+                        <p className="mt-0.5 text-xs text-slate-500">Details have been saved. Use the Edit button to update them.</p>
+                      </div>
+                      {!editingSample && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditSampleDetails(order.sampleDetails ?? "");
+                            setEditSampleQuantity(order.sampleQuantity ?? "");
+                            setEditSampleWeight(order.sampleWeight ?? "");
+                            setEditSampleRemarks((order as { sampleRemarks?: string | null }).sampleRemarks ?? "");
+                            setEditCourierName(order.courierName ?? "");
+                            setEditTrackingId(order.trackingId ?? "");
+                            setEditSampleByCourier(order.sampleShippedByCourier ?? true);
+                            setEditSampleDeliveryDate(
+                              (order as { sampleDeliveryDate?: string | null }).sampleDeliveryDate
+                                ? new Date((order as { sampleDeliveryDate: string }).sampleDeliveryDate).toISOString().split("T")[0]
+                                : ""
+                            );
+                            setEditSampleError("");
+                            setEditingSample(true);
+                          }}
+                          className="rounded-md border border-violet-200 bg-white/60 px-2.5 py-1 text-xs font-medium text-violet-700 transition-colors hover:bg-white hover:text-violet-900"
+                        >
+                          Edit details
+                        </button>
+                      )}
+                    </div>
+                    {editingSample ? (
+                      <p className="text-xs text-slate-400">Use the edit form in the Sample details section above to update your details.</p>
+                    ) : null}
+                  </div>
                 ) : (
                   <div className="rounded-xl border border-violet-200 bg-white/90 p-4 shadow-sm space-y-3">
                     <div>
@@ -2836,12 +2909,14 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       </Dialog>
 
       {/* ── New Development Planning Dialog ── */}
-      <Dialog open={newDevDialogOpen} onOpenChange={(open) => { setNewDevDialogOpen(open); setNewDevDialogError(""); }}>
+      <Dialog open={newDevDialogOpen} onOpenChange={(open) => { setNewDevDialogOpen(open); setNewDevDialogError(""); if (!open) setIsEditingDevPlan(false); }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>New Development Planning</DialogTitle>
+            <DialogTitle>{isEditingDevPlan ? "Edit Development Plan" : "New Development Planning"}</DialogTitle>
             <DialogDescription>
-              Complete planning details before assigning. SLA timer starts only after this form is submitted.
+              {isEditingDevPlan
+                ? "Update the development planning details for this enquiry."
+                : "Complete planning details before assigning. SLA timer starts only after this form is submitted."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-1">
@@ -2898,12 +2973,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             {newDevDialogError ? <p className="text-sm text-red-600">{newDevDialogError}</p> : null}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setNewDevDialogOpen(false); setNewDevDialogError(""); }}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setNewDevDialogOpen(false); setNewDevDialogError(""); setIsEditingDevPlan(false); }}>Cancel</Button>
             <Button
               type="button"
-              disabled={newDevDescription.trim().length < 10 || !newDevResources.trim() || !newDevTimeline.trim() || !newDevCompletionDuration.trim() || !newDevReason.trim()}
-              onClick={() => {
-                setPendingNewDevPlan({
+              disabled={editDevPlanSaving || newDevDescription.trim().length < 10 || !newDevResources.trim() || !newDevTimeline.trim() || !newDevCompletionDuration.trim() || !newDevReason.trim()}
+              onClick={async () => {
+                const planPayload = {
                   description: newDevDescription.trim(),
                   resourcesRequired: newDevResources.trim(),
                   researchRequirements: newDevResearch.trim() || undefined,
@@ -2912,12 +2987,38 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                   expectedCompletionDuration: newDevCompletionDuration.trim(),
                   internalNotes: newDevInternalNotes.trim() || undefined,
                   reasonForNewDevelopment: newDevReason.trim(),
-                });
-                setNewDevDialogError("");
-                setNewDevDialogOpen(false);
+                };
+                if (isEditingDevPlan) {
+                  // Save via PATCH (editing existing plan)
+                  setEditDevPlanSaving(true);
+                  setNewDevDialogError("");
+                  try {
+                    const res = await fetch(`/api/orders/${orderId}`, {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      credentials: "include",
+                      body: JSON.stringify({ newDevPlan: planPayload }),
+                    });
+                    const data = await res.json().catch(() => ({}));
+                    if (!res.ok) throw new Error((data as { error?: string }).error || "Save failed");
+                    setNewDevDialogOpen(false);
+                    setIsEditingDevPlan(false);
+                    setNewDevDialogError("");
+                    queryClient.invalidateQueries({ queryKey: ["order", orderId] });
+                  } catch (e) {
+                    setNewDevDialogError(e instanceof Error ? e.message : "Save failed");
+                  } finally {
+                    setEditDevPlanSaving(false);
+                  }
+                } else {
+                  // Store pending plan (initial handoff creation)
+                  setPendingNewDevPlan(planPayload);
+                  setNewDevDialogError("");
+                  setNewDevDialogOpen(false);
+                }
               }}
             >
-              Confirm planning details
+              {editDevPlanSaving ? "Saving…" : isEditingDevPlan ? "Save changes" : "Confirm planning details"}
             </Button>
           </DialogFooter>
         </DialogContent>
