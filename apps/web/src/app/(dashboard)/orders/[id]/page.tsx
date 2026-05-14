@@ -2609,6 +2609,47 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                   </div>
                 )}
 
+                {sampleGateOk && order.sampleShippedAt && (
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-4 shadow-sm space-y-3">
+                    <div className="flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                      <p className="text-sm font-semibold text-emerald-900">Shipment recorded</p>
+                      <span className="ml-auto text-xs text-slate-400">{new Date(order.sampleShippedAt).toLocaleString()}</span>
+                    </div>
+                    <div className="rounded-lg border border-emerald-100 bg-white px-4 py-3 space-y-2 text-sm">
+                      <div className="flex items-center gap-2">
+                        <span className="w-20 text-xs font-medium text-slate-500">Method</span>
+                        <span className="text-slate-800">{order.sampleShippedByCourier === false ? "Hand delivery" : "By courier"}</span>
+                      </div>
+                      {order.courierName && (
+                        <div className="flex items-center gap-2">
+                          <span className="w-20 text-xs font-medium text-slate-500">Courier</span>
+                          <span className="text-slate-800">{order.courierName}</span>
+                        </div>
+                      )}
+                      {order.trackingId && (
+                        <div className="flex items-center gap-2">
+                          <span className="w-20 text-xs font-medium text-slate-500">Tracking</span>
+                          <span className="font-mono text-slate-800">{order.trackingId}</span>
+                        </div>
+                      )}
+                      {order.sampleProofUrl && (
+                        <div className="flex items-center gap-2">
+                          <span className="w-20 text-xs font-medium text-slate-500">Proof</span>
+                          <a
+                            href={`/api/orders/${orderId}/sample-proof`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-sm font-medium text-blue-600 underline underline-offset-2"
+                          >
+                            View proof ↗
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {sampleGateOk && order.sampleApprovedAt && !order.sampleShippedAt && (
                   <div className="rounded-xl border border-indigo-200 bg-white/90 p-4 shadow-sm space-y-3">
                     <p className="text-sm font-semibold text-slate-900">Mark sample shipped</p>
