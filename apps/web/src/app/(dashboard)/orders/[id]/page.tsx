@@ -189,6 +189,8 @@ type OrderDetail = {
   customerId?: string | null;
   customerName?: string | null;
   customerPhone?: string | null;
+  customerEmail?: string | null;
+  customerAddress?: string | null;
   gstNumber?: string | null;
   gstCopyUrl?: string | null;
   customerOrderDate?: string | null;
@@ -547,6 +549,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [editingEnquiry, setEditingEnquiry] = useState(false);
   const [editCustomerName, setEditCustomerName] = useState("");
   const [editCustomerPhone, setEditCustomerPhone] = useState("");
+  const [editCustomerEmail, setEditCustomerEmail] = useState("");
+  const [editCustomerAddress, setEditCustomerAddress] = useState("");
   const [editGstNumber, setEditGstNumber] = useState("");
   const [editGstCopyUrl, setEditGstCopyUrl] = useState("");
   const [editGstFileName, setEditGstFileName] = useState("");
@@ -980,8 +984,10 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const isDivisionReviewerRole = Boolean(
     user && ["MANAGER", "DIVISION_HEAD", "SUPER_ADMIN", "MANAGING_DIRECTOR"].includes(user.role)
   );
+  // MD is view-only — no Accept / Transfer / Reject / Complete actions
   const canAct = Boolean(
-    order && isDivisionReviewerRole && hasStatus && ["PLACED", "TRANSFERRED", "IN_PROGRESS"].includes(status)
+    order && isDivisionReviewerRole && hasStatus && ["PLACED", "TRANSFERRED", "IN_PROGRESS"].includes(status) &&
+    user?.role !== "MANAGING_DIRECTOR"
   );
   /** Division-side reject — not shown to the person who raised the enquiry (they use Cancel enquiry instead). */
   const canRejectEnquiry =
@@ -1405,6 +1411,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             const openEdit = () => {
               setEditCustomerName(order.customerName ?? "");
               setEditCustomerPhone(order.customerPhone ?? "");
+              setEditCustomerEmail(order.customerEmail ?? "");
+              setEditCustomerAddress(order.customerAddress ?? "");
               setEditGstNumber(order.gstNumber ?? "");
               setEditGstCopyUrl(order.gstCopyUrl ?? "");
               const existing = parseGstCopy(order.gstCopyUrl);
@@ -1431,6 +1439,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                   body: JSON.stringify({
                     customerName: editCustomerName,
                     customerPhone: editCustomerPhone,
+                    customerEmail: editCustomerEmail,
+                    customerAddress: editCustomerAddress,
                     gstNumber: editGstNumber,
                     gstCopyUrl: editGstCopyUrl,
                     companyName: editCompanyName,
@@ -1484,15 +1494,27 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                         <input value={editCustomerPhone} onChange={(e) => setEditCustomerPhone(e.target.value)} className="flex h-8 w-full rounded border border-slate-200 bg-white px-2.5 text-sm" />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">GST number</label>
-                        <input value={editGstNumber} onChange={(e) => setEditGstNumber(e.target.value.toUpperCase())} className="flex h-8 w-full rounded border border-slate-200 bg-white px-2.5 font-mono text-sm" />
+                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Email ID</label>
+                        <input type="email" value={editCustomerEmail} onChange={(e) => setEditCustomerEmail(e.target.value)} className="flex h-8 w-full rounded border border-slate-200 bg-white px-2.5 text-sm" />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Company name</label>
+                        <input value={editCompanyName} onChange={(e) => setEditCompanyName(e.target.value)} className="flex h-8 w-full rounded border border-slate-200 bg-white px-2.5 text-sm" />
+                      </div>
+                      <div className="space-y-1 sm:col-span-2">
+                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Address</label>
+                        <textarea value={editCustomerAddress} onChange={(e) => setEditCustomerAddress(e.target.value)} rows={2} className="flex min-h-[52px] w-full rounded border border-slate-200 bg-white px-2.5 py-1.5 text-sm" />
                       </div>
                       <div className="space-y-1">
                         <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Customer order date</label>
                         <input type="date" value={editCustomerOrderDate} onChange={(e) => setEditCustomerOrderDate(e.target.value)} className="flex h-8 w-full rounded border border-slate-200 bg-white px-2.5 text-sm" />
                       </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">GST number <span className="font-normal text-slate-300">(optional)</span></label>
+                        <input value={editGstNumber} onChange={(e) => setEditGstNumber(e.target.value.toUpperCase())} className="flex h-8 w-full rounded border border-slate-200 bg-white px-2.5 font-mono text-sm" />
+                      </div>
                       <div className="space-y-1 sm:col-span-2">
-                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">GST certificate</label>
+                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">GST certificate <span className="font-normal text-slate-300">(optional)</span></label>
                         {editGstCopyUrl ? (
                           <div className="flex items-center gap-2 rounded border border-emerald-200 bg-emerald-50 px-2.5 py-1.5">
                             <span className="flex-1 truncate text-xs font-medium text-emerald-800">{editGstFileName || "File uploaded"}</span>
@@ -1516,10 +1538,6 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                           onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleEditGstUpload(f); }}
                         />
                         {editGstUploadError && <p className="text-[10px] text-red-600">{editGstUploadError}</p>}
-                      </div>
-                      <div className="space-y-1 sm:col-span-2">
-                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Company name</label>
-                        <input value={editCompanyName} onChange={(e) => setEditCompanyName(e.target.value)} className="flex h-8 w-full rounded border border-slate-200 bg-white px-2.5 text-sm" />
                       </div>
                       <div className="space-y-1 sm:col-span-2">
                         <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Product description</label>
@@ -1550,10 +1568,22 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                         <span className="text-sm font-medium text-slate-800">{order.customerPhone}</span>
                       </p>
                     ) : null}
-                    {order.gstNumber ? (
+                    {order.customerEmail ? (
                       <p className="flex flex-col">
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">GST number</span>
-                        <span className="font-mono text-sm font-medium text-slate-800">{order.gstNumber}</span>
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Email ID</span>
+                        <span className="text-sm font-medium text-slate-800">{order.customerEmail}</span>
+                      </p>
+                    ) : null}
+                    {order.companyName ? (
+                      <p className="flex flex-col">
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Company name</span>
+                        <span className="text-sm font-semibold text-slate-900">{order.companyName}</span>
+                      </p>
+                    ) : null}
+                    {order.customerAddress ? (
+                      <p className="flex flex-col sm:col-span-2">
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Address</span>
+                        <span className="text-sm font-medium text-slate-800 whitespace-pre-wrap">{order.customerAddress}</span>
                       </p>
                     ) : null}
                     {order.customerOrderDate ? (
@@ -1562,6 +1592,17 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                         <span className="text-sm font-medium text-slate-800">{new Date(order.customerOrderDate).toLocaleDateString()}</span>
                       </p>
                     ) : null}
+                    {order.gstNumber ? (
+                      <p className="flex flex-col">
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">GST number</span>
+                        <span className="font-mono text-sm font-medium text-slate-800">{order.gstNumber}</span>
+                      </p>
+                    ) : (
+                      <p className="flex flex-col">
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">GST</span>
+                        <span className="text-sm text-slate-400 italic">N/A</span>
+                      </p>
+                    )}
                     {(() => {
                       const gst = parseGstCopy(order.gstCopyUrl);
                       if (!gst) return null;
@@ -1594,12 +1635,6 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               </div>
             );
           })()}
-          <p className="flex flex-col gap-0.5 px-5 py-3.5 sm:flex-row sm:items-baseline sm:gap-3">
-            <span className="min-w-[10rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">Company name</span>
-            <span className="text-sm font-semibold text-slate-900">
-            {order.companyName?.trim() ? order.companyName : "—"}
-            </span>
-          </p>
           <p className="flex flex-col gap-0.5 px-5 py-3.5 sm:flex-row sm:items-baseline sm:gap-3">
             <span className="min-w-[10rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">Product description</span>
             <span className="text-sm font-medium text-slate-800">

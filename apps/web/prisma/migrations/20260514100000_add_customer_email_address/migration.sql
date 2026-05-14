@@ -1,0 +1,2 @@
+ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "customer_email" TEXT;
+ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "customer_address" TEXT;

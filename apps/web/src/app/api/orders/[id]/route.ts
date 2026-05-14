@@ -207,6 +207,8 @@ export async function PATCH(
     const data: Record<string, unknown> = {};
     if (str(body.customerName) !== undefined) data.customerName = str(body.customerName) || null;
     if (str(body.customerPhone) !== undefined) data.customerPhone = str(body.customerPhone) || null;
+    if (str(body.customerEmail) !== undefined) data.customerEmail = str(body.customerEmail) || null;
+    if (str(body.customerAddress) !== undefined) data.customerAddress = str(body.customerAddress) || null;
     if (str(body.gstNumber) !== undefined) data.gstNumber = str(body.gstNumber)?.toUpperCase() || null;
     if (str(body.gstCopyUrl) !== undefined) data.gstCopyUrl = str(body.gstCopyUrl) || null;
     if (str(body.companyName) !== undefined) data.companyName = str(body.companyName) || null;
@@ -243,6 +245,8 @@ export async function PATCH(
     // Customer & product fields (HEAD can correct these in any non-closed status)
     if (str(body.customerName) !== undefined) data.customerName = str(body.customerName) || null;
     if (str(body.customerPhone) !== undefined) data.customerPhone = str(body.customerPhone) || null;
+    if (str(body.customerEmail) !== undefined) data.customerEmail = str(body.customerEmail) || null;
+    if (str(body.customerAddress) !== undefined) data.customerAddress = str(body.customerAddress) || null;
     if (str(body.gstNumber) !== undefined) data.gstNumber = str(body.gstNumber)?.toUpperCase() || null;
     if (str(body.gstCopyUrl) !== undefined) data.gstCopyUrl = str(body.gstCopyUrl) || null;
     if (str(body.companyName) !== undefined) data.companyName = str(body.companyName) || null;

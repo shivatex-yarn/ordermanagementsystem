@@ -149,6 +149,8 @@ model Order {
   gstNumber          String?     @map("gst_number")
   gstCopyUrl         String?     @map("gst_copy_url")
   customerOrderDate  DateTime?   @map("customer_order_date")
+  customerEmail      String?     @map("customer_email")
+  customerAddress    String?     @map("customer_address") @db.Text
   transferCount      Int         @default(0) @map("transfer_count")
   rejectionCount     Int         @default(0) @map("rejection_count")
   slaDeadline        DateTime?   @map("sla_deadline")

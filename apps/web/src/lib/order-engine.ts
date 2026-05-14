@@ -108,6 +108,8 @@ export async function createOrder(
     sampleRequestNotes?: string | null;
     customerName?: string;
     customerPhone?: string;
+    customerEmail?: string;
+    customerAddress?: string;
     gstNumber?: string;
     gstCopyUrl?: string;
     customerOrderDate?: string;
@@ -134,6 +136,8 @@ export async function createOrder(
       customerId,
       customerName: data.customerName?.trim() || null,
       customerPhone: data.customerPhone?.trim() || null,
+      customerEmail: data.customerEmail?.trim() || null,
+      customerAddress: data.customerAddress?.trim() || null,
       gstNumber: data.gstNumber?.trim() || null,
       gstCopyUrl: data.gstCopyUrl?.trim() || null,
       customerOrderDate: parsedCustomerOrderDate && !isNaN(parsedCustomerOrderDate.getTime()) ? parsedCustomerOrderDate : null,
