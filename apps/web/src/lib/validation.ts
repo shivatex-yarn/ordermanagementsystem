@@ -52,7 +52,7 @@ export const createOrderSchema = z.object({
   // GST fields are optional
   gstNumber: z.string().max(50).optional(),
   gstCopyUrl: z.string().max(8_000_000).optional(),
-  customerOrderDate: z.string().min(1, "Customer order date is required"),
+  customerOrderDate: z.string().min(1, "Customer enquiry date is required"),
 });
 
 const setSampleDetailsBody = z

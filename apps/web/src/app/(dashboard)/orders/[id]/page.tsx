@@ -1506,7 +1506,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                         <textarea value={editCustomerAddress} onChange={(e) => setEditCustomerAddress(e.target.value)} rows={2} className="flex min-h-[52px] w-full rounded border border-slate-200 bg-white px-2.5 py-1.5 text-sm" />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Customer order date</label>
+                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Customer enquiry date</label>
                         <input type="date" value={editCustomerOrderDate} onChange={(e) => setEditCustomerOrderDate(e.target.value)} className="flex h-8 w-full rounded border border-slate-200 bg-white px-2.5 text-sm" />
                       </div>
                       <div className="space-y-1">
@@ -1588,7 +1588,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                     ) : null}
                     {order.customerOrderDate ? (
                       <p className="flex flex-col">
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Customer order date</span>
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Customer enquiry date</span>
                         <span className="text-sm font-medium text-slate-800">{new Date(order.customerOrderDate).toLocaleDateString()}</span>
                       </p>
                     ) : null}

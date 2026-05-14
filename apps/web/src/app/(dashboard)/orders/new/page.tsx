@@ -133,7 +133,7 @@ export default function NewOrderPage() {
     if (!description.trim()) { setError("Product description is required."); return; }
     if (!customerName.trim()) { setError("Customer name is required."); return; }
     if (!customerPhone.trim()) { setError("Customer phone number is required."); return; }
-    if (!customerOrderDate) { setError("Customer order date is required."); return; }
+    if (!customerOrderDate) { setError("Customer enquiry date is required."); return; }
     if (hasGst && !gstNumber.trim()) { setError("GST number is required when GST details is enabled."); return; }
     setError("");
     setLoading(true);
@@ -290,10 +290,10 @@ export default function NewOrderPage() {
               />
             </div>
 
-            {/* Row 4: Customer order date */}
+            {/* Row 4: Customer enquiry date */}
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="customerOrderDate">Customer order date <span className="text-red-500">*</span></Label>
+                <Label htmlFor="customerOrderDate">Customer enquiry date <span className="text-red-500">*</span></Label>
                 <input
                   id="customerOrderDate"
                   type="date"
