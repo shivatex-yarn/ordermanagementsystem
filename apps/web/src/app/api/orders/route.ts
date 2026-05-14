@@ -203,6 +203,8 @@ export async function POST(req: Request) {
     sampleRequestNotes: parsed.data.sampleRequestNotes,
     customerName: parsed.data.customerName,
     customerPhone: parsed.data.customerPhone,
+    customerEmail: parsed.data.customerEmail,
+    customerAddress: parsed.data.customerAddress,
     gstNumber: parsed.data.gstNumber,
     gstCopyUrl: parsed.data.gstCopyUrl,
     customerOrderDate: parsed.data.customerOrderDate,

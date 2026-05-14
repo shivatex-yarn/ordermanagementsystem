@@ -38,17 +38,20 @@ export const divisionUpdateSchema = z.object({
 });
 
 export const createOrderSchema = z.object({
-  companyName: z.string().min(1, "Company name is required").max(500),
   description: z.string().min(1, "Product description is required").max(10000),
   divisionId: z.number().int().positive(),
   customFields: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
   sampleRequested: z.boolean().optional(),
   sampleRequestNotes: z.string().max(10000).optional(),
-  // Mandatory customer identity fields
+  // Customer identity fields
   customerName: z.string().min(1, "Customer name is required").max(500),
   customerPhone: z.string().min(7, "Phone number is required").max(20),
-  gstNumber: z.string().min(1, "GST number is required").max(50),
-  gstCopyUrl: z.string().min(1, "GST certificate upload is required").max(8_000_000),
+  customerEmail: z.string().email("Invalid email address").max(500).optional().or(z.literal("")),
+  customerAddress: z.string().max(2000).optional(),
+  companyName: z.string().min(1, "Company name is required").max(500),
+  // GST fields are optional
+  gstNumber: z.string().max(50).optional(),
+  gstCopyUrl: z.string().max(8_000_000).optional(),
   customerOrderDate: z.string().min(1, "Customer order date is required"),
 });
 
