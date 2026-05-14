@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -19,6 +19,8 @@ import {
 } from "lucide-react";
 import { performLogout } from "@/components/logout-button";
 import { useAuth } from "@/hooks/use-auth";
+import { useIdleLogout } from "@/hooks/use-idle-logout";
+import { IdleWarningDialog } from "@/components/idle-warning-dialog";
 import { SLAGate } from "@/components/sla-gate";
 import { Button } from "@/components/ui/button";
 import {
@@ -72,6 +74,15 @@ export default function DashboardLayout({
   const unreadCount = unreadData?.unreadCount ?? 0;
   /** Avoid hydration mismatch for notification copy/badge until client mount. */
   const showUnreadUi = mounted;
+
+  const handleIdleLogout = useCallback(async () => {
+    await performLogout(router, queryClient);
+  }, [router, queryClient]);
+
+  const { secondsLeft, stayLoggedIn } = useIdleLogout({
+    onLogout: handleIdleLogout,
+    enabled: mounted && !!user,
+  });
 
   /**
    * `useAuth()` intentionally does not fetch during SSR (relative `/api/...` URL),
@@ -199,9 +210,16 @@ export default function DashboardLayout({
               >
                 <Icon className="h-4 w-4 shrink-0" />
                 <span className="min-w-0 flex-1">{item.label}</span>
-                {isActive && (
+                {item.href === "/notifications" && showUnreadUi && unreadCount > 0 ? (
+                  <span className={cn(
+                    "flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1 text-[10px] font-bold",
+                    isActive ? "bg-white text-slate-900" : "bg-slate-900 text-white"
+                  )}>
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                ) : isActive ? (
                   <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-white/60" aria-hidden />
-                )}
+                ) : null}
               </Link>
             );
           })}
@@ -310,6 +328,11 @@ export default function DashboardLayout({
         <main className="flex-1 overflow-x-hidden overflow-y-auto p-4 sm:p-6 md:p-8">{children}</main>
       </div>
       <SLAGate />
+      <IdleWarningDialog
+        secondsLeft={secondsLeft}
+        onStayLoggedIn={stayLoggedIn}
+        onLogoutNow={() => void handleIdleLogout()}
+      />
     </div>
   );
 }
