@@ -2998,14 +2998,68 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       </Dialog>
 
       <Dialog open={approveSampleOpen} onOpenChange={setApproveSampleOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Approve sample</DialogTitle>
             <DialogDescription>
-              This confirms the saved sample details and allows shipment to be recorded next. This step is separate
-              from saving details.
+              Review the submitted sample details below, then confirm to allow shipment to be recorded.
             </DialogDescription>
           </DialogHeader>
+
+          {/* Sample details review */}
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 space-y-3 text-sm">
+            {/* Development type */}
+            {sampleDevelopment && (
+              <div className="flex items-start gap-2">
+                <span className="w-28 shrink-0 text-xs font-medium text-slate-500 pt-0.5">Dev type</span>
+                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ${sampleDevelopment.type === "existing" ? "bg-blue-50 text-blue-700 ring-blue-200" : "bg-violet-50 text-violet-700 ring-violet-200"}`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${sampleDevelopment.type === "existing" ? "bg-blue-500" : "bg-violet-500"}`} />
+                  {sampleDevelopment.type === "existing" ? "Existing development" : "New development"}
+                </span>
+              </div>
+            )}
+            {sampleDevelopment?.type === "existing" && typeof sampleDevelopment.existingReference === "string" && sampleDevelopment.existingReference.trim() && (
+              <div className="flex items-start gap-2">
+                <span className="w-28 shrink-0 text-xs font-medium text-slate-500 pt-0.5">Reference</span>
+                <span className="text-slate-800">{sampleDevelopment.existingReference}</span>
+              </div>
+            )}
+            {sampleDevelopment?.type === "new" && typeof sampleDevelopment.whyNewDevelopment === "string" && sampleDevelopment.whyNewDevelopment.trim() && (
+              <div className="flex items-start gap-2">
+                <span className="w-28 shrink-0 text-xs font-medium text-slate-500 pt-0.5">Why new</span>
+                <span className="text-slate-800 whitespace-pre-wrap">{sampleDevelopment.whyNewDevelopment}</span>
+              </div>
+            )}
+            {sampleDevelopment?.type === "new" && typeof sampleDevelopment.technicalDetails === "string" && sampleDevelopment.technicalDetails.trim() && (
+              <div className="flex items-start gap-2">
+                <span className="w-28 shrink-0 text-xs font-medium text-slate-500 pt-0.5">Technical</span>
+                <span className="text-slate-800 whitespace-pre-wrap">{sampleDevelopment.technicalDetails}</span>
+              </div>
+            )}
+            {/* Physical sample fields */}
+            {order?.sampleDetails?.trim() && (
+              <div className="flex items-start gap-2">
+                <span className="w-28 shrink-0 text-xs font-medium text-slate-500 pt-0.5">Details</span>
+                <span className="text-slate-800">{order.sampleDetails}</span>
+              </div>
+            )}
+            {order?.sampleQuantity?.trim() && (
+              <div className="flex items-start gap-2">
+                <span className="w-28 shrink-0 text-xs font-medium text-slate-500 pt-0.5">Quantity</span>
+                <span className="text-slate-800">{order.sampleQuantity}</span>
+              </div>
+            )}
+            {order?.sampleWeight?.trim() && (
+              <div className="flex items-start gap-2">
+                <span className="w-28 shrink-0 text-xs font-medium text-slate-500 pt-0.5">Weight</span>
+                <span className="text-slate-800">{order.sampleWeight}</span>
+              </div>
+            )}
+            {!sampleDevelopment && !order?.sampleDetails?.trim() && !order?.sampleQuantity?.trim() && !order?.sampleWeight?.trim() && (
+              <p className="text-xs text-slate-400 italic">No sample details on record.</p>
+            )}
+          </div>
+
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setApproveSampleOpen(false)}>
               Back
