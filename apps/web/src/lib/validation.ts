@@ -58,6 +58,11 @@ const setSampleDetailsBody = z
     sampleDetails: z.string().max(20000).optional(),
     sampleQuantity: z.string().max(500).optional(),
     sampleWeight: z.string().max(500).optional(),
+    // Supervisor captures courier intent at detail-submission time
+    sentByCourier: z.boolean().optional(),
+    courierName: z.string().max(255).optional(),
+    trackingId: z.string().max(500).optional(),
+    sampleProofUrl: z.string().max(2000).optional(),
   })
   .refine(
     (d) =>
@@ -65,6 +70,15 @@ const setSampleDetailsBody = z
       (d.sampleQuantity?.trim()?.length ?? 0) > 0 ||
       (d.sampleWeight?.trim()?.length ?? 0) > 0,
     { message: "Provide sample details and/or quantity and/or weight" }
+  )
+  .refine(
+    (d) => {
+      if (d.sentByCourier === true) {
+        return Boolean(d.courierName?.trim()) && Boolean(d.trackingId?.trim());
+      }
+      return true;
+    },
+    { message: "Courier name and tracking ID are required when sent by courier" }
   );
 
 const setSampleDevelopmentBody = z.object({

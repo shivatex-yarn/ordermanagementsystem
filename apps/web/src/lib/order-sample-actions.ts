@@ -116,6 +116,9 @@ export async function runSampleAction(
         sampleDetails: action.sampleDetails,
         sampleQuantity: action.sampleQuantity,
         sampleWeight: action.sampleWeight,
+        courierName: action.courierName,
+        trackingId: action.trackingId,
+        sampleProofUrl: action.sampleProofUrl,
       });
       if (!order) {
         return NextResponse.json(
