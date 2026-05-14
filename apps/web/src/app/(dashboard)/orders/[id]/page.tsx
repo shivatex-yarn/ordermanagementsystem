@@ -1059,12 +1059,18 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     onSuccess: (_data, variables) => {
       setSampleError("");
       const action = (variables as { action?: string }).action;
-      if (action === "ship") {
+      if (action === "ship" || action === "setDetails") {
         setSentByCourier(true);
         setCourierName("");
         setTrackingId("");
         setSampleProofFile(null);
-      } else if (action === "salesFeedback") {
+      }
+      if (action === "setDetails") {
+        setSampleDetails("");
+        setSampleQuantity("");
+        setSampleWeight("");
+      }
+      if (action === "salesFeedback") {
         setSalesFeedback("");
         setFeedbackResponseStatus("");
         setFeedbackRemarks("");
@@ -2605,44 +2611,42 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
                 {sampleGateOk && order.sampleApprovedAt && !order.sampleShippedAt && (
                   <div className="rounded-xl border border-indigo-200 bg-white/90 p-4 shadow-sm space-y-3">
-                    <p className="text-sm font-semibold text-slate-900">Record shipment</p>
-                    <label className="flex items-center gap-2 text-sm text-slate-700">
-                      <input type="checkbox" checked={sentByCourier} onChange={(e) => setSentByCourier(e.target.checked)} className="rounded" />
-                      Sent by courier (requires courier + tracking)
-                    </label>
-                    {sentByCourier && (
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        <Input value={courierName} onChange={(e) => setCourierName(e.target.value)} placeholder="Courier name" />
-                        <Input value={trackingId} onChange={(e) => setTrackingId(e.target.value)} placeholder="Tracking ID" />
+                    <p className="text-sm font-semibold text-slate-900">Mark sample shipped</p>
+                    {/* Shipment details were captured by the supervisor when they submitted sample details */}
+                    {order.courierName ? (
+                      <div className="rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 space-y-1 text-sm">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-medium text-slate-500 w-20">Method</span>
+                          <span className="text-slate-800">By courier</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-medium text-slate-500 w-20">Courier</span>
+                          <span className="text-slate-800">{order.courierName}</span>
+                        </div>
+                        {order.trackingId && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-medium text-slate-500 w-20">Tracking</span>
+                            <span className="font-mono text-slate-800">{order.trackingId}</span>
+                          </div>
+                        )}
                       </div>
+                    ) : (
+                      <p className="text-xs text-slate-500">Direct handover (no courier).</p>
                     )}
-                    <div className="space-y-1">
-                      <Label className="text-xs text-slate-500">Proof (optional · png/jpg/pdf, max 5MB)</Label>
-                      <input type="file" accept=".png,.jpg,.jpeg,.webp,.pdf" onChange={(e) => setSampleProofFile(e.target.files?.[0] ?? null)} className="text-xs" />
-                    </div>
                     <Button
                       type="button" size="sm"
-                      disabled={sampleMutation.isPending || (sentByCourier && (!courierName.trim() || !trackingId.trim()))}
-                      onClick={async () => {
-                        try {
-                          setSampleError("");
-                          let proofUrl: string | undefined;
-                          if (sampleProofFile) {
-                            const fd = new FormData();
-                            fd.append("file", sampleProofFile);
-                            const res = await fetch(`/api/orders/${orderId}/sample-proof`, { method: "POST", credentials: "include", body: fd });
-                            const contentType = res.headers.get("content-type") ?? "";
-                            const data = contentType.includes("application/json") ? await res.json().catch(() => ({})) : {};
-                            if (!res.ok) throw new Error((data as { error?: string; detail?: string }).detail || (data as { error?: string; detail?: string }).error || `Failed to upload proof (${res.status})`);
-                            proofUrl = typeof (data as { url?: unknown }).url === "string" ? (data as { url: string }).url : undefined;
-                          }
-                          sampleMutation.mutate({ action: "ship", sentByCourier, courierName: sentByCourier ? courierName.trim() : undefined, trackingId: sentByCourier ? trackingId.trim() : undefined, sampleProofUrl: proofUrl });
-                        } catch (e) {
-                          setSampleError(e instanceof Error ? e.message : String(e));
-                        }
-                      }}
+                      disabled={sampleMutation.isPending}
+                      onClick={() =>
+                        sampleMutation.mutate({
+                          action: "ship",
+                          sentByCourier: Boolean(order.courierName?.trim()),
+                          // Pass stored values so recordSampleShipment validation passes for courier orders
+                          courierName: order.courierName ?? undefined,
+                          trackingId: order.trackingId ?? undefined,
+                        })
+                      }
                     >
-                      Mark sample shipped
+                      {sampleMutation.isPending ? "Recording…" : "Mark sample shipped"}
                     </Button>
                   </div>
                 )}
@@ -2717,10 +2721,59 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                         <Input value={sampleQuantity} onChange={(e) => setSampleQuantity(e.target.value)} placeholder="Quantity (e.g. 2 meters)" />
                         <Input value={sampleWeight} onChange={(e) => setSampleWeight(e.target.value)} placeholder="Weight (e.g. 250 gsm)" />
                       </div>
+
+                      {/* Shipment method — captured here so head just approves and clicks ship */}
+                      <div className="pt-1 border-t border-violet-100 space-y-2">
+                        <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                          <input type="checkbox" checked={sentByCourier} onChange={(e) => setSentByCourier(e.target.checked)} className="rounded" />
+                          Sent by courier (requires courier name + tracking ID)
+                        </label>
+                        {sentByCourier && (
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            <Input value={courierName} onChange={(e) => setCourierName(e.target.value)} placeholder="Courier name" />
+                            <Input value={trackingId} onChange={(e) => setTrackingId(e.target.value)} placeholder="Tracking ID" />
+                          </div>
+                        )}
+                        <div className="space-y-0.5">
+                          <Label className="text-xs text-slate-500">Proof (optional · png/jpg/pdf, max 5MB)</Label>
+                          <input type="file" accept=".png,.jpg,.jpeg,.webp,.pdf" onChange={(e) => setSampleProofFile(e.target.files?.[0] ?? null)} className="text-xs" />
+                        </div>
+                      </div>
+
                       <Button
                         type="button" variant="default" size="sm"
-                        disabled={sampleMutation.isPending || (!sampleDetails.trim() && !sampleQuantity.trim() && !sampleWeight.trim())}
-                        onClick={() => sampleMutation.mutate({ action: "setDetails", sampleDetails: sampleDetails.trim() || undefined, sampleQuantity: sampleQuantity.trim() || undefined, sampleWeight: sampleWeight.trim() || undefined })}
+                        disabled={
+                          sampleMutation.isPending ||
+                          (!sampleDetails.trim() && !sampleQuantity.trim() && !sampleWeight.trim()) ||
+                          (sentByCourier && (!courierName.trim() || !trackingId.trim()))
+                        }
+                        onClick={async () => {
+                          try {
+                            setSampleError("");
+                            let proofUrl: string | undefined;
+                            if (sampleProofFile) {
+                              const fd = new FormData();
+                              fd.append("file", sampleProofFile);
+                              const res = await fetch(`/api/orders/${orderId}/sample-proof`, { method: "POST", credentials: "include", body: fd });
+                              const ct = res.headers.get("content-type") ?? "";
+                              const data = ct.includes("application/json") ? await res.json().catch(() => ({})) : {};
+                              if (!res.ok) throw new Error((data as { error?: string }).error || `Proof upload failed (${res.status})`);
+                              proofUrl = typeof (data as { url?: unknown }).url === "string" ? (data as { url: string }).url : undefined;
+                            }
+                            sampleMutation.mutate({
+                              action: "setDetails",
+                              sampleDetails: sampleDetails.trim() || undefined,
+                              sampleQuantity: sampleQuantity.trim() || undefined,
+                              sampleWeight: sampleWeight.trim() || undefined,
+                              sentByCourier,
+                              courierName: sentByCourier ? courierName.trim() : undefined,
+                              trackingId: sentByCourier ? trackingId.trim() : undefined,
+                              sampleProofUrl: proofUrl,
+                            });
+                          } catch (e) {
+                            setSampleError(e instanceof Error ? e.message : String(e));
+                          }
+                        }}
                       >
                         Save sample details
                       </Button>

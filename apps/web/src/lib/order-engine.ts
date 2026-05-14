@@ -509,7 +509,15 @@ export async function acknowledgeSampleSpecsBySales(orderId: number, userId: num
 export async function updateOrderSampleDetails(
   orderId: number,
   userId: number,
-  input: { sampleDetails?: string; sampleQuantity?: string; sampleWeight?: string }
+  input: {
+    sampleDetails?: string;
+    sampleQuantity?: string;
+    sampleWeight?: string;
+    // Supervisor captures courier intent at detail-submission time
+    courierName?: string;
+    trackingId?: string;
+    sampleProofUrl?: string;
+  }
 ) {
   const order = await prisma.order.findUnique({ where: { id: orderId } });
   if (!order?.sampleRequested) return null;
@@ -521,12 +529,18 @@ export async function updateOrderSampleDetails(
   const sampleWeight =
     input.sampleWeight !== undefined ? input.sampleWeight.trim() || null : undefined;
   if (sampleDetails === undefined && sampleQuantity === undefined && sampleWeight === undefined) return null;
+  const courierName = input.courierName !== undefined ? input.courierName.trim() || null : undefined;
+  const trackingId = input.trackingId !== undefined ? input.trackingId.trim() || null : undefined;
+  const sampleProofUrl = input.sampleProofUrl !== undefined ? input.sampleProofUrl.trim() || null : undefined;
   const updated = await prisma.order.update({
     where: { id: orderId },
     data: {
       ...(sampleDetails !== undefined && { sampleDetails }),
       ...(sampleQuantity !== undefined && { sampleQuantity }),
       ...(sampleWeight !== undefined && { sampleWeight }),
+      ...(courierName !== undefined && { courierName }),
+      ...(trackingId !== undefined && { trackingId }),
+      ...(sampleProofUrl !== undefined && { sampleProofUrl }),
       ...(order.sampleApprovedAt
         ? { sampleSpecsAcknowledgedAt: null, sampleSpecsAcknowledgedById: null }
         : {}),
@@ -661,10 +675,12 @@ export async function recordSampleShipment(
   if (!order?.sampleRequested || !order.sampleApprovedAt || order.sampleShippedAt) return null;
   if (order.status === "REJECTED" || order.status === "COMPLETED" || order.status === "CANCELLED") return null;
   const sentByCourier = input.sentByCourier !== false;
-  const courierName = input.courierName?.trim() || null;
-  const trackingId = input.trackingId?.trim() || null;
+  // Use passed courier details; fall back to what the supervisor already stored in the row.
+  const courierName = input.courierName !== undefined ? input.courierName.trim() || null : order.courierName;
+  const trackingId = input.trackingId !== undefined ? input.trackingId.trim() || null : order.trackingId;
   if (sentByCourier && (!courierName || !trackingId)) return null;
-  const sampleProofUrl = input.sampleProofUrl?.trim() || null;
+  // Only overwrite proof if a new URL was explicitly supplied; otherwise keep whatever the supervisor uploaded.
+  const sampleProofUrl = input.sampleProofUrl !== undefined ? input.sampleProofUrl.trim() || null : undefined;
   const updated = await prisma.order.update({
     where: { id: orderId },
     data: {
@@ -672,7 +688,7 @@ export async function recordSampleShipment(
       sampleShippedByCourier: sentByCourier,
       courierName: sentByCourier ? courierName : null,
       trackingId: sentByCourier ? trackingId : null,
-      sampleProofUrl,
+      ...(sampleProofUrl !== undefined && { sampleProofUrl }),
     },
     include: {
       createdBy: { select: { id: true, name: true, email: true } },
