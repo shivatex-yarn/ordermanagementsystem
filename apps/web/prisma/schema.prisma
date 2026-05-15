@@ -8,9 +8,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-  // Use a direct (non-pooler) connection for migrations when available.
-  // This reduces intermittent pooler disconnects in development.
-  directUrl = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
 }
 
 enum Role {
