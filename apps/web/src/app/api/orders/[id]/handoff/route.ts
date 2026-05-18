@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import { submitEnquiryHandoff } from "@/lib/order-engine";
 import { userCanViewOrder } from "@/lib/order-view-permission";
 import { enquiryHandoffSchema } from "@/lib/validation";
-import { withRole } from "@/lib/with-auth";
+import { withAuth, withRole } from "@/lib/with-auth";
 
 export async function POST(
   req: Request,
@@ -78,4 +78,34 @@ export async function POST(
     );
   }
   return NextResponse.json(order);
+}
+
+export async function DELETE(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const auth = await withAuth();
+  if (auth.response) return auth.response;
+  if (auth.payload.role !== "MANAGING_DIRECTOR") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  const id = Number((await params).id);
+  if (!Number.isInteger(id)) {
+    return NextResponse.json({ error: "Invalid enquiry id" }, { status: 400 });
+  }
+  const orderRow = await prisma.order.findUnique({
+    where: { id },
+    select: { id: true, createdById: true, currentDivisionId: true, previousDivisionId: true, status: true, sampleShippedAt: true },
+  });
+  if (!orderRow) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  const canView = await userCanViewOrder(auth.payload, orderRow);
+  if (!canView) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (orderRow.sampleShippedAt) {
+    return NextResponse.json({ error: "Cannot clear assignment after sample has been shipped." }, { status: 400 });
+  }
+  const updated = await prisma.order.update({
+    where: { id },
+    data: { assignedSupervisorId: null, enquiryHandoff: null },
+  });
+  return NextResponse.json({ ok: true, orderId: updated.id });
 }

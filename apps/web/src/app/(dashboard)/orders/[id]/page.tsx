@@ -641,7 +641,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         order.status === "IN_PROGRESS" &&
         !order.enquiryHandoff &&
         showInteractiveUi &&
-        (user.role === "MANAGER" || user.role === "DIVISION_HEAD" || user.role === "SUPER_ADMIN" || user.role === "MANAGING_DIRECTOR")
+        user.role === "MANAGING_DIRECTOR"
     );
 
   const isDivisionHead = useMemo(
@@ -665,11 +665,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       order.status === "IN_PROGRESS" &&
       order.enquiryHandoff &&
       !order.sampleShippedAt &&
-      (user.role === "MANAGER" ||
-        user.role === "DIVISION_HEAD" ||
-        user.role === "SUPER_ADMIN" ||
-        user.role === "MANAGING_DIRECTOR") &&
-      mayManageHandoffReassign
+      user.role === "MANAGING_DIRECTOR"
   );
   const showHandoffCard = needsHandoff || canReassignHandoff;
 
@@ -903,6 +899,31 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       setHandoffError(msg);
     },
   });
+  const deleteHandoffMutation = useMutation({
+    mutationFn: () =>
+      fetch(`/api/orders/${orderId}/handoff`, {
+        method: "DELETE",
+        credentials: "include",
+      }),
+    onSuccess: async (res) => {
+      if (res.ok) {
+        setHandoffError("");
+        setHandoffSupervisorId("");
+        setHandoffNewDetails("");
+        setHandoffExistingDetails("");
+        setPendingNewDevPlan(null);
+        handoffPrefilledForOrderRef.current = null;
+        queryClient.invalidateQueries({ queryKey: ["order", orderId] });
+        queryClient.invalidateQueries({ queryKey: ["order-audit", orderId] });
+        queryClient.invalidateQueries({ queryKey: ["orders"] });
+        queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      setHandoffError((data as { error?: string }).error || "Could not clear assignment");
+    },
+  });
+
   const completeMutation = useMutation({
     mutationFn: async () => {
       const res = await fetch(`/api/orders/${orderId}/complete`, { method: "POST", credentials: "include" });
@@ -2102,20 +2123,36 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                   </div>
                 )}
                 {handoffError ? <p className="text-sm text-red-600">{handoffError}</p> : null}
-                <Button
-                  type="button"
-                  disabled={
-                    handoffMutation.isPending ||
-                    !handoffSupervisorId ||
-                    (handoffDevKind === "new" ? !pendingNewDevPlan : handoffExistingDetails.trim().length < 10)
-                  }
-                  onClick={() => {
-                    setHandoffError("");
-                    handoffMutation.mutate();
-                  }}
-                >
-                  {handoffMutation.isPending ? "Submitting…" : canReassignHandoff && !needsHandoff ? "Save assignment" : "Submit assignment"}
-                </Button>
+                <div className="flex flex-wrap gap-3">
+                  <Button
+                    type="button"
+                    disabled={
+                      handoffMutation.isPending ||
+                      deleteHandoffMutation.isPending ||
+                      !handoffSupervisorId ||
+                      (handoffDevKind === "new" ? !pendingNewDevPlan : handoffExistingDetails.trim().length < 10)
+                    }
+                    onClick={() => {
+                      setHandoffError("");
+                      handoffMutation.mutate();
+                    }}
+                  >
+                    {handoffMutation.isPending ? "Submitting…" : canReassignHandoff && !needsHandoff ? "Save assignment" : "Submit assignment"}
+                  </Button>
+                  {canReassignHandoff && (
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      disabled={deleteHandoffMutation.isPending || handoffMutation.isPending}
+                      onClick={() => {
+                        setHandoffError("");
+                        deleteHandoffMutation.mutate();
+                      }}
+                    >
+                      {deleteHandoffMutation.isPending ? "Clearing…" : "Clear assignment"}
+                    </Button>
+                  )}
+                </div>
               </>
             )}
           </CardContent>
