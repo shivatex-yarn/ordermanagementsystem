@@ -2605,33 +2605,6 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               </div>
             )}
 
-            {/* Customer feedback display */}
-            {order.customerFeedback && (
-              <div className="border-b border-slate-100 px-5 py-4">
-                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Customer feedback</p>
-                  {order.customerResponseStatus && (
-                    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ${{
-                      POSITIVE: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-                      NEUTRAL: "bg-amber-50 text-amber-700 ring-amber-200",
-                      NEGATIVE: "bg-red-50 text-red-700 ring-red-200",
-                      PENDING: "bg-blue-50 text-blue-700 ring-blue-200",
-                    }[order.customerResponseStatus] ?? "bg-slate-50 text-slate-600 ring-slate-200"}`}>
-                      <span className={`h-1.5 w-1.5 rounded-full ${{
-                        POSITIVE: "bg-emerald-500",
-                        NEUTRAL: "bg-amber-500",
-                        NEGATIVE: "bg-red-500",
-                        PENDING: "bg-blue-500",
-                      }[order.customerResponseStatus] ?? "bg-slate-400"}`} />
-                      {order.customerResponseStatus}
-                    </span>
-                  )}
-                </div>
-                <p className="text-sm text-slate-800 leading-relaxed">{order.customerFeedback}</p>
-                {order.customerFeedbackRemarks && <p className="mt-1.5 text-xs text-slate-500">{order.customerFeedbackRemarks}</p>}
-                {order.customerFeedbackAt && <p className="mt-1 text-xs text-slate-400">{new Date(order.customerFeedbackAt).toLocaleString()}</p>}
-              </div>
-            )}
 
             {sampleError && (
               <div className="mx-5 my-3 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">{sampleError}</div>
@@ -2896,13 +2869,54 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               </div>
             )}
 
-            {/* ── Customer feedback form ── */}
-            {showInteractiveUi && mightSubmitFeedback && (
-              <div className="border-t-2 border-fuchsia-100 bg-gradient-to-br from-fuchsia-50/50 via-pink-50/20 to-slate-50/40 px-5 py-5 space-y-4">
-                <div className="flex items-center gap-2">
-                  <div className="h-6 w-1 rounded-full bg-fuchsia-500" />
-                  <p className="text-xs font-bold uppercase tracking-widest text-fuchsia-700">Customer Feedback</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Customer Feedback Card (always visible) ── */}
+      {(order.customerFeedback || (showInteractiveUi && mightSubmitFeedback)) && (
+        <Card className="overflow-hidden border border-slate-200 shadow-sm">
+          <CardHeader className="border-b border-fuchsia-100 bg-gradient-to-br from-fuchsia-50/70 via-pink-50/30 to-slate-50/50 px-5 py-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-fuchsia-100 text-sm font-bold text-fuchsia-700">CF</div>
+              <div className="min-w-0">
+                <CardTitle className="text-base font-semibold text-slate-800">Customer Feedback</CardTitle>
+                <p className="mt-0.5 text-xs text-fuchsia-700/70">Record and view customer response after sample delivery</p>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            {/* Customer feedback display */}
+            {order.customerFeedback && (
+              <div className="border-b border-slate-100 px-5 py-4">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Customer feedback</p>
+                  {order.customerResponseStatus && (
+                    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ${{
+                      POSITIVE: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+                      NEUTRAL: "bg-amber-50 text-amber-700 ring-amber-200",
+                      NEGATIVE: "bg-red-50 text-red-700 ring-red-200",
+                      PENDING: "bg-blue-50 text-blue-700 ring-blue-200",
+                    }[order.customerResponseStatus] ?? "bg-slate-50 text-slate-600 ring-slate-200"}`}>
+                      <span className={`h-1.5 w-1.5 rounded-full ${{
+                        POSITIVE: "bg-emerald-500",
+                        NEUTRAL: "bg-amber-500",
+                        NEGATIVE: "bg-red-500",
+                        PENDING: "bg-blue-500",
+                      }[order.customerResponseStatus] ?? "bg-slate-400"}`} />
+                      {order.customerResponseStatus}
+                    </span>
+                  )}
                 </div>
+                <p className="text-sm text-slate-800 leading-relaxed">{order.customerFeedback}</p>
+                {order.customerFeedbackRemarks && <p className="mt-1.5 text-xs text-slate-500">{order.customerFeedbackRemarks}</p>}
+                {order.customerFeedbackAt && <p className="mt-1 text-xs text-slate-400">{new Date(order.customerFeedbackAt).toLocaleString()}</p>}
+              </div>
+            )}
+
+            {/* Customer feedback form */}
+            {showInteractiveUi && mightSubmitFeedback && (
+              <div className="border-t border-fuchsia-100 bg-gradient-to-br from-fuchsia-50/50 via-pink-50/20 to-slate-50/40 px-5 py-5 space-y-4">
                 <div className="rounded-xl border border-fuchsia-100 bg-white/90 p-4 shadow-sm space-y-3">
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="space-y-1">
@@ -2938,7 +2952,6 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 </div>
               </div>
             )}
-
           </CardContent>
         </Card>
       )}
