@@ -513,6 +513,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [handoffNewDetails, setHandoffNewDetails] = useState("");
   const [handoffExistingDetails, setHandoffExistingDetails] = useState("");
   const [handoffError, setHandoffError] = useState("");
+  const [handoffSaved, setHandoffSaved] = useState(false);
   // New development planning dialog
   const [newDevDialogOpen, setNewDevDialogOpen] = useState(false);
   const [newDevDescription, setNewDevDescription] = useState("");
@@ -873,6 +874,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     onSuccess: async (res) => {
       if (res.ok) {
         setHandoffError("");
+        setHandoffSaved(true);
         setHandoffSupervisorId("");
         setHandoffNewDetails("");
         setHandoffExistingDetails("");
@@ -908,6 +910,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     onSuccess: async (res) => {
       if (res.ok) {
         setHandoffError("");
+        setHandoffSaved(true);
         setHandoffSupervisorId("");
         setHandoffNewDetails("");
         setHandoffExistingDetails("");
@@ -2045,7 +2048,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               <>
                 <div className="space-y-2">
                   <Label>Supervisor (this division only)</Label>
-                  <Select value={handoffSupervisorId} onValueChange={setHandoffSupervisorId}>
+                  <Select value={handoffSupervisorId} onValueChange={(v) => { setHandoffSaved(false); setHandoffSupervisorId(v); }}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select supervisor" />
                     </SelectTrigger>
@@ -2066,7 +2069,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                         type="radio"
                         name="handoff-dev"
                         checked={handoffDevKind === "new"}
-                        onChange={() => setHandoffDevKind("new")}
+                        onChange={() => { setHandoffSaved(false); setHandoffDevKind("new"); }}
                       />
                       New development
                     </label>
@@ -2075,7 +2078,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                         type="radio"
                         name="handoff-dev"
                         checked={handoffDevKind === "existing"}
-                        onChange={() => setHandoffDevKind("existing")}
+                        onChange={() => { setHandoffSaved(false); setHandoffDevKind("existing"); }}
                       />
                       Existing development
                     </label>
@@ -2115,13 +2118,18 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                     <Label>Existing product / reference details (min 10 characters)</Label>
                     <textarea
                       value={handoffExistingDetails}
-                      onChange={(e) => setHandoffExistingDetails(e.target.value)}
+                      onChange={(e) => { setHandoffSaved(false); setHandoffExistingDetails(e.target.value); }}
                       rows={4}
                       className="flex min-h-[96px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs"
                       placeholder="What was manufactured before (style code, prior enquiry, specs…)"
                     />
                   </div>
                 )}
+                {handoffSaved && !handoffError ? (
+                  <p className="text-sm font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md px-3 py-2">
+                    Assignment saved successfully.
+                  </p>
+                ) : null}
                 {handoffError ? <p className="text-sm text-red-600">{handoffError}</p> : null}
                 <div className="flex flex-wrap gap-3">
                   <Button
