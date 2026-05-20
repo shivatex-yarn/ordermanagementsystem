@@ -1635,6 +1635,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                             <span className="flex-1 truncate text-sm font-medium text-slate-800">{gst.name}</span>
                             <a
                               href={gstServeUrl}
+                              target="_blank"
                               rel="noopener noreferrer"
                               className="rounded bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-blue-700"
                             >
@@ -2400,7 +2401,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             {canSeeSampleDetails && (order.sampleDetails || order.sampleQuantity || order.sampleWeight || (order as { sampleRemarks?: string | null }).sampleRemarks || (order as { sampleDeliveryDate?: string | null }).sampleDeliveryDate) && (
               <div className="border-b border-slate-100 px-5 py-4">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Sample details</p>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-700">Sample details</p>
                   {showInteractiveUi && assignedSupervisorMe && !editingSample && (
                     <button
                       type="button"
@@ -2890,7 +2891,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             {order.customerFeedback && (
               <div className="border-b border-slate-100 px-5 py-4">
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Customer feedback</p>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-700">Customer feedback</p>
                   {order.customerResponseStatus && (
                     <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ${{
                       POSITIVE: "bg-emerald-50 text-emerald-700 ring-emerald-200",
