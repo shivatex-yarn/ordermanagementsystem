@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { submitEnquiryHandoff } from "@/lib/order-engine";
 import { userCanViewOrder } from "@/lib/order-view-permission";
@@ -105,7 +106,7 @@ export async function DELETE(
   }
   const updated = await prisma.order.update({
     where: { id },
-    data: { assignedSupervisorId: null, enquiryHandoff: null },
+    data: { assignedSupervisorId: null, enquiryHandoff: Prisma.DbNull },
   });
   return NextResponse.json({ ok: true, orderId: updated.id });
 }
