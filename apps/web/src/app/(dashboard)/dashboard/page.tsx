@@ -218,14 +218,7 @@ export default function DashboardPage() {
       ]
     : [
         { title: "Total enquiries", value: data.total, icon: Package, color: "blue" as const },
-        { title: "SLA breaches", value: data.slaBreaches, icon: AlertTriangle, alert: data.slaBreaches > 0, color: "red" as const },
-        {
-          title: "Enquiries at risk",
-          value: data.enquiriesAtRisk,
-          icon: CheckCircle,
-          alert: data.enquiriesAtRisk > 0,
-          color: "amber" as const,
-        },
+        { title: "Service level violations breaches", value: data.slaBreaches, icon: AlertTriangle, alert: data.slaBreaches > 0, color: "red" as const },
       ];
 
   const pipelineSubtitle =
