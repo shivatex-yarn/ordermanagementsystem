@@ -23,6 +23,14 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { formatEnquiryNumber, formatEnquiryNumberShort } from "@/lib/enquiry-display";
 import { userMayViewEnquiryExecInsights } from "@/lib/enquiry-access";
 import { EnquiryTimeline } from "@/components/enquiry-timeline";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ChevronDown, FileDown, FileSpreadsheet } from "lucide-react";
+import { downloadOrderExcel } from "@/lib/order-excel";
 
 const statusVariant: Record<string, "default" | "secondary" | "destructive" | "success" | "warning"> = {
   PLACED: "secondary",
@@ -1290,6 +1298,33 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 {new Date(order.createdAt).toLocaleString()}
               </time>
             </div>
+          </div>
+          <div className="shrink-0">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="outline" className="gap-1.5">
+                  <FileDown className="h-3.5 w-3.5" />
+                  Download
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44">
+                <DropdownMenuItem
+                  className="gap-2 cursor-pointer"
+                  onClick={() => window.open(`/orders/${order.id}/print`, "_blank")}
+                >
+                  <FileDown className="h-4 w-4 text-rose-500" />
+                  Download as PDF
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="gap-2 cursor-pointer"
+                  onClick={() => downloadOrderExcel(order)}
+                >
+                  <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
+                  Download as Excel
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </header>

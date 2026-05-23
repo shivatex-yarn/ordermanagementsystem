@@ -24,6 +24,55 @@ const orderListSelect = {
   createdBy: { select: { name: true, email: true } },
 } as const;
 
+/** Full-detail select used only when export=1 is requested. */
+const orderExportSelect = {
+  id: true,
+  orderNumber: true,
+  status: true,
+  priority: true,
+  companyName: true,
+  customerName: true,
+  customerPhone: true,
+  customerEmail: true,
+  customerAddress: true,
+  gstNumber: true,
+  description: true,
+  customFields: true,
+  customerOrderDate: true,
+  sampleRequested: true,
+  sampleRequestNotes: true,
+  sampleDetails: true,
+  sampleQuantity: true,
+  sampleWeight: true,
+  sampleShippedByCourier: true,
+  courierName: true,
+  trackingId: true,
+  sampleApprovedAt: true,
+  sampleShippedAt: true,
+  sampleReceivedAt: true,
+  sampleDeliveryDate: true,
+  sampleRemarks: true,
+  salesFeedback: true,
+  salesFeedbackAt: true,
+  customerFeedback: true,
+  customerFeedbackAt: true,
+  customerResponseStatus: true,
+  customerFeedbackRemarks: true,
+  acceptanceReason: true,
+  cancellationReason: true,
+  transferCount: true,
+  rejectionCount: true,
+  createdAt: true,
+  updatedAt: true,
+  completedAt: true,
+  cancelledAt: true,
+  currentDivision: { select: { name: true } },
+  createdBy: { select: { name: true, email: true } },
+  completedBy: { select: { name: true } },
+  cancelledBy: { select: { name: true } },
+  assignedSupervisor: { select: { name: true } },
+} as const;
+
 export async function GET(req: Request) {
   const marks: { name: string; durMs: number; desc?: string }[] = [];
   const auth = await withAuth();
@@ -51,6 +100,7 @@ export async function GET(req: Request) {
   const dateTo = searchParams.get("to")?.trim() || null;
   const customCreatedRange = parseCreatedAtRangeFromParams(dateFrom, dateTo);
   const wantStats = searchParams.get("stats") === "1";
+  const wantExport = searchParams.get("export") === "1";
 
   const where: Prisma.OrderWhereInput = {};
   if (status) where.status = status as OrderStatus;
@@ -99,7 +149,7 @@ export async function GET(req: Request) {
     const p1 = withTiming("db_findMany", () =>
       prisma.order.findMany({
         where,
-        select: orderListSelect,
+        select: wantExport ? orderExportSelect : orderListSelect,
         orderBy: { createdAt: "desc" },
         skip: (page - 1) * limit,
         take: limit,
