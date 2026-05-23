@@ -15,13 +15,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Package, AlertTriangle, CheckCircle, Download } from "lucide-react";
+import { Package, AlertTriangle, CheckCircle, ChevronDown, FileDown, FileSpreadsheet } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import type { EnquiryPeriodFilter } from "@/lib/date-period";
 import { PERIOD_LABELS } from "@/lib/date-period";
 import { formatEnquiryNumber } from "@/lib/enquiry-display";
 import { downloadEnquiriesExcel, fetchAllOrdersForExport } from "@/lib/enquiry-export";
 import type { DashboardChartDatum } from "./dashboard-charts";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const DashboardCharts = dynamic(() => import("./dashboard-charts").then((m) => m.DashboardCharts), {
   ssr: false,
@@ -354,10 +360,25 @@ export default function DashboardPage() {
             </div>
 
             <div className="lg:ml-auto">
-              <Button type="button" variant="outline" size="sm" disabled={exporting} onClick={() => void handleExport()}>
-                <Download className="h-4 w-4 mr-2" />
-                {exporting ? "Preparing…" : "Download Excel"}
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button type="button" variant="outline" size="sm" disabled={exporting} className="gap-1.5">
+                    <FileDown className="h-3.5 w-3.5" />
+                    {exporting ? "Preparing…" : "Download"}
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuItem
+                    className="gap-2 cursor-pointer"
+                    disabled={exporting}
+                    onClick={() => void handleExport()}
+                  >
+                    <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
+                    Download as Excel
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         </CardContent>
