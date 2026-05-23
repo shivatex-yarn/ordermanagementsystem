@@ -75,8 +75,10 @@ export default function LoginPage() {
       {/* Left: Branding */}
       <div className="hidden md:flex md:w-[46%] lg:w-1/2 xl:w-[55%] flex-col justify-between border-slate-100 bg-slate-100/80 p-8 md:border-r md:bg-slate-50 lg:p-12 xl:p-16">
         <div>
-          <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-slate-900" />
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
+              <img src="/company-logo.png" alt="Company Logo" className="h-full w-full object-contain" />
+            </div>
             <span className="text-xl font-semibold tracking-tight text-slate-900">
               Enquiry Management
             </span>
@@ -97,8 +99,10 @@ export default function LoginPage() {
       <div className="flex w-full flex-1 items-center justify-center p-5 sm:p-8 md:w-[54%] md:p-10 lg:w-1/2 lg:p-12 xl:w-[45%]">
         <div className="w-full max-w-[400px]">
           <div className="mb-8 md:hidden">
-            <div className="flex items-center gap-2">
-              <div className="h-8 w-8 rounded-lg bg-slate-900" />
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
+                <img src="/company-logo.png" alt="Company Logo" className="h-full w-full object-contain" />
+              </div>
               <span className="text-xl font-semibold tracking-tight text-slate-900">
                 Enquiry Management
               </span>
