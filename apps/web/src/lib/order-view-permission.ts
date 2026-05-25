@@ -17,19 +17,16 @@ export async function userCanViewOrder(payload: JWTPayload, order: OrderViewFiel
   if (role === "USER") return order.createdById === userId;
   if (role === "MANAGER" || role === "SUPERVISOR" || role === "DIVISION_HEAD" || role === "ASM") {
     if (order.createdById === userId) return true;
-    const managed = await prisma.divisionManager.findMany({
-      where: { userId },
-      select: { divisionId: true },
-    });
     /**
      * `payload.divisionId` may be missing for older sessions/tokens.
      * Fall back to the DB user's divisionId so division heads/supervisors
      * don't get incorrectly blocked with 403.
+     * Run both queries in parallel to avoid two sequential round-trips.
      */
-    const dbUser = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { divisionId: true },
-    });
+    const [managed, dbUser] = await Promise.all([
+      prisma.divisionManager.findMany({ where: { userId }, select: { divisionId: true } }),
+      prisma.user.findUnique({ where: { id: userId }, select: { divisionId: true } }),
+    ]);
     const accessible = new Set(
       [payload.divisionId ?? null, dbUser?.divisionId ?? null, ...managed.map((m) => m.divisionId)].filter(
         (v): v is number => typeof v === "number"

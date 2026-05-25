@@ -522,6 +522,10 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [handoffExistingDetails, setHandoffExistingDetails] = useState("");
   const [handoffError, setHandoffError] = useState("");
   const [showHandoffEditForm, setShowHandoffEditForm] = useState(false);
+  // Existing development quick-edit dialog
+  const [existingDevEditOpen, setExistingDevEditOpen] = useState(false);
+  const [existingDevEditText, setExistingDevEditText] = useState("");
+  const [existingDevEditError, setExistingDevEditError] = useState("");
   // New development planning dialog
   const [newDevDialogOpen, setNewDevDialogOpen] = useState(false);
   const [newDevDescription, setNewDevDescription] = useState("");
@@ -931,6 +935,33 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       }
       const data = await res.json().catch(() => ({}));
       setHandoffError((data as { error?: string }).error || "Could not clear assignment");
+    },
+  });
+
+  const updateExistingDevMutation = useMutation({
+    mutationFn: () =>
+      fetch(`/api/orders/${orderId}/handoff`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          supervisorId: order?.assignedSupervisorId,
+          developmentKind: "existing",
+          existingProductDetails: existingDevEditText,
+        }),
+      }),
+    onSuccess: async (res) => {
+      if (res.ok) {
+        setExistingDevEditOpen(false);
+        setExistingDevEditText("");
+        setExistingDevEditError("");
+        queryClient.invalidateQueries({ queryKey: ["order", orderId] });
+        queryClient.invalidateQueries({ queryKey: ["order-audit", orderId] });
+        queryClient.invalidateQueries({ queryKey: ["orders"] });
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      setExistingDevEditError((data as { error?: string }).error || "Failed to update details");
     },
   });
 
@@ -1747,10 +1778,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                         setNewDevDialogError("");
                         setNewDevDialogOpen(true);
                       } else if (handoff.developmentKind === "existing") {
-                        setShowHandoffEditForm(true);
-                        setTimeout(() => {
-                          document.getElementById("handoff-assignment-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
-                        }, 50);
+                        setExistingDevEditText(
+                          typeof handoff.existingProductDetails === "string" ? handoff.existingProductDetails : ""
+                        );
+                        setExistingDevEditError("");
+                        setExistingDevEditOpen(true);
                       }
                     }}
                     className="rounded-md border border-violet-200 bg-white/60 px-2.5 py-1 text-xs font-medium text-violet-700 transition-colors hover:bg-white hover:text-violet-900"
@@ -3487,6 +3519,43 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setNewDevViewOpen(false)}>
               Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Existing Development Quick-Edit Dialog ── */}
+      <Dialog open={existingDevEditOpen} onOpenChange={(open) => { setExistingDevEditOpen(open); if (!open) setExistingDevEditError(""); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit existing development details</DialogTitle>
+            <DialogDescription>Update the product / reference details for this enquiry.</DialogDescription>
+          </DialogHeader>
+          <div className="py-2 space-y-3">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Existing product / reference details</label>
+              <textarea
+                value={existingDevEditText}
+                onChange={(e) => setExistingDevEditText(e.target.value)}
+                rows={5}
+                className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs"
+                placeholder="Style code, prior enquiry reference, specifications…"
+                autoFocus
+              />
+              <p className="text-xs text-slate-400">Minimum 10 characters required.</p>
+            </div>
+            {existingDevEditError ? <p className="text-sm text-red-600">{existingDevEditError}</p> : null}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setExistingDevEditOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={existingDevEditText.trim().length < 10 || updateExistingDevMutation.isPending}
+              onClick={() => updateExistingDevMutation.mutate()}
+            >
+              {updateExistingDevMutation.isPending ? "Saving…" : "Save changes"}
             </Button>
           </DialogFooter>
         </DialogContent>
