@@ -62,7 +62,7 @@ export async function GET(
   const auth = await withAuth();
   if (auth.response) return auth.response;
   const id = Number((await params).id);
-  if (!Number.isInteger(id)) {
+  if (!Number.isInteger(id) || id < 1) {
     return NextResponse.json({ error: "Invalid enquiry id" }, { status: 400 });
   }
   /**

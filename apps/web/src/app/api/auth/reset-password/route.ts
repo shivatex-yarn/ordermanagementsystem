@@ -17,15 +17,20 @@ export async function GET(req: Request) {
   if (!token || token.length !== 64) {
     return NextResponse.json({ valid: false, reason: "invalid_token" });
   }
-  const user = await prisma.user.findFirst({
-    where: {
-      passwordResetToken: token,
-      passwordResetExpiresAt: { gt: new Date() },
-      active: true,
-    },
-    select: { id: true },
-  });
-  return NextResponse.json({ valid: Boolean(user) });
+  try {
+    const user = await prisma.user.findFirst({
+      where: {
+        passwordResetToken: token,
+        passwordResetExpiresAt: { gt: new Date() },
+        active: true,
+      },
+      select: { id: true },
+    });
+    return NextResponse.json({ valid: Boolean(user) });
+  } catch (err) {
+    console.error("[reset-password GET] DB error:", err);
+    return NextResponse.json({ valid: false, reason: "service_unavailable" }, { status: 503 });
+  }
 }
 
 /**
@@ -60,63 +65,65 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Passwords do not match." }, { status: 400 });
   }
 
-  // --- Look up the token -----------------------------------------------
-  const user = await prisma.user.findFirst({
-    where: {
-      passwordResetToken: token,
-      passwordResetExpiresAt: { gt: new Date() },
-      active: true,
-    },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      divisionId: true,
-      division: { select: { name: true } },
-    },
-  });
+  // --- Look up the token & reset password --------------------------------
+  try {
+    const user = await prisma.user.findFirst({
+      where: {
+        passwordResetToken: token,
+        passwordResetExpiresAt: { gt: new Date() },
+        active: true,
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        divisionId: true,
+        division: { select: { name: true } },
+      },
+    });
 
-  if (!user) {
+    if (!user) {
+      return NextResponse.json(
+        { error: "This reset link has expired or is invalid. Please request a new one." },
+        { status: 400 }
+      );
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash,
+        passwordResetToken: null,
+        passwordResetExpiresAt: null,
+      },
+    });
+
+    const changedAt = new Date();
+    const divisionName = user.division?.name ?? null;
+
+    // Fire emails in background — don't let email failures block the response.
+    Promise.all([
+      sendPasswordChangedNotification(user.email, user.name, divisionName, changedAt),
+      prisma.user
+        .findMany({ where: { role: "SUPER_ADMIN", active: true }, select: { email: true } })
+        .then((admins) =>
+          sendPasswordChangedAdminAlert(
+            admins.map((a) => a.email),
+            user.name,
+            user.email,
+            divisionName,
+            changedAt
+          )
+        ),
+    ]).catch((err) => console.error("[reset-password] Post-reset email error:", err));
+
+    return NextResponse.json({ ok: true, message: "Password updated successfully." });
+  } catch (err) {
+    console.error("[reset-password POST] DB error:", err);
     return NextResponse.json(
-      { error: "This reset link has expired or is invalid. Please request a new one." },
-      { status: 400 }
+      { error: "Service temporarily unavailable. Please try again in a moment." },
+      { status: 503 }
     );
   }
-
-  // --- Update password & clear token -----------------------------------
-  const passwordHash = await bcrypt.hash(password, 10);
-  await prisma.user.update({
-    where: { id: user.id },
-    data: {
-      passwordHash,
-      passwordResetToken: null,
-      passwordResetExpiresAt: null,
-    },
-  });
-
-  const changedAt = new Date();
-  const divisionName = user.division?.name ?? null;
-
-  // Fire emails in background — don't let email failures block the response.
-  Promise.all([
-    // 1. Confirmation to the user
-    sendPasswordChangedNotification(user.email, user.name, divisionName, changedAt),
-    // 2. Admin alert to all Super Admins
-    prisma.user
-      .findMany({
-        where: { role: "SUPER_ADMIN", active: true },
-        select: { email: true },
-      })
-      .then((admins) =>
-        sendPasswordChangedAdminAlert(
-          admins.map((a) => a.email),
-          user.name,
-          user.email,
-          divisionName,
-          changedAt
-        )
-      ),
-  ]).catch((err) => console.error("[reset-password] Post-reset email error:", err));
-
-  return NextResponse.json({ ok: true, message: "Password updated successfully." });
 }
