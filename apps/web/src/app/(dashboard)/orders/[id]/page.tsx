@@ -276,20 +276,22 @@ function auditActionLabel(action: string): string {
   const m: Record<string, string> = {
     OrderCreated: "Enquiry placed",
     OrderAccepted: "Accepted by division",
-    OrderTransferred: "Transferred",
-    OrderRejected: "Rejected",
+    OrderTransferred: "Transferred to another division",
+    OrderRejected: "Enquiry rejected",
     OrderCancelled: "Cancelled by submitter",
     OrderReceived: "Received in new division",
-    OrderCompleted: "Completed",
+    OrderCompleted: "Enquiry completed",
+    OrderEnquiryHandoffSubmitted: "Assigned to production team",
+    SampleHeadRequestApproved: "Sample request approved by head",
     SampleDetailsUpdated: "Sample details updated",
-    SampleDevelopmentUpdated: "Sample type / development details",
-    SampleApproved: "Sample approved",
-    SampleShipped: "Sample sent / shipped",
-    SalesFeedbackRecorded: "Sales / user response",
-    SLABreachDetected: "SLA breach",
-    SLABreachHeadRejectionSubmitted: "SLA head rejection submitted",
+    SampleDevelopmentUpdated: "Development plan updated",
+    SampleApproved: "Sample approved (final)",
+    SampleShipped: "Sample shipped to customer",
+    SalesFeedbackRecorded: "Customer feedback recorded",
+    SLABreachDetected: "SLA deadline missed",
+    SLABreachHeadRejectionSubmitted: "Delay reason submitted by head",
   };
-  return m[action] ?? action;
+  return m[action] ?? action.replace(/([A-Z])/g, " $1").trim();
 }
 
 /** Card + label styling per event type for the detailed timeline. */
@@ -1100,12 +1102,13 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     Boolean(user && ["SUPER_ADMIN", "MANAGING_DIRECTOR", "MANAGER", "DIVISION_HEAD"].includes(user.role)) ||
     assignedSupervisorMe ||
     (isEnquirySubmitter && Boolean(order?.sampleApprovedAt));
+  // Only the enquiry creator (salesperson) or SUPER_ADMIN can submit feedback.
+  // Management roles (MD, heads) see the read-only feedback display only.
   const mightSubmitFeedback =
     user &&
     order &&
     !isClosedStatus &&
-    (order.createdById === user.id ||
-      ["SUPER_ADMIN", "MANAGING_DIRECTOR"].includes(user.role));
+    (order.createdById === user.id || user.role === "SUPER_ADMIN");
 
   /** When a sample was requested, division cannot complete until specs are head-approved and the submitter confirms they reviewed them. */
   const enquiryCompleteSampleGateOk =
@@ -2421,37 +2424,31 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             ) : auditLogsAsc.length === 0 ? (
               <p className="text-sm text-slate-500">No audit entries recorded.</p>
             ) : (
-              <ul className="space-y-3">
+              <ul className="space-y-2">
                 {auditLogsAsc.map((log) => {
                   const extra = auditPayloadSummary(log.action, log.payload);
                   return (
                     <li
                       key={log.id}
-                      className="rounded-lg border border-slate-100 bg-slate-50/50 p-3 text-sm"
+                      className="rounded-xl border border-slate-100 bg-white px-4 py-3 shadow-sm"
                     >
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-mono text-xs text-slate-400">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <Badge variant="secondary" className="text-[11px] font-medium">
+                          {auditActionLabel(log.action)}
+                        </Badge>
+                        <span className="font-mono text-[11px] text-slate-400">
                           {new Date(log.createdAt).toLocaleString()}
                         </span>
-                        <Badge variant="secondary" className="text-[10px]">
-                          {log.action}
-                        </Badge>
                       </div>
                       {log.user ? (
-                        <p className="mt-1 text-xs text-slate-600">
-                          {log.user.name} · {log.user.email}
+                        <p className="mt-1.5 text-xs text-slate-600">
+                          <span className="font-medium">{log.user.name}</span>
+                          <span className="text-slate-400"> · {log.user.email}</span>
                         </p>
                       ) : (
-                        <p className="mt-1 text-xs text-slate-400">System / integration</p>
+                        <p className="mt-1.5 text-xs text-slate-400">System</p>
                       )}
-                      {extra ? <p className="mt-2 text-slate-700">{extra}</p> : null}
-                      {log.payload != null ? (
-                        <pre className="mt-2 max-h-32 overflow-auto rounded bg-slate-900/5 p-2 text-[11px] text-slate-600">
-                          {typeof log.payload === "string"
-                            ? log.payload
-                            : JSON.stringify(log.payload)}
-                        </pre>
-                      ) : null}
+                      {extra ? <p className="mt-1.5 text-xs text-slate-600">{extra}</p> : null}
                     </li>
                   );
                 })}
