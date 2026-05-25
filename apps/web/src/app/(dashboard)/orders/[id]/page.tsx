@@ -1718,7 +1718,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           ) : null}
           {order.assignedSupervisor ? (
             <p className="flex flex-col gap-0.5 px-5 py-3.5 sm:flex-row sm:items-baseline sm:gap-3">
-              <span className="min-w-[10rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">Assigned supervisor</span>
+              <span className="min-w-[10rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">Assigned production</span>
               <span className="text-sm font-semibold text-slate-900">
                 {order.assignedSupervisor.name} <span className="font-normal text-slate-500">({order.assignedSupervisor.email})</span>
               </span>
@@ -2067,11 +2067,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             <div className="flex items-center justify-between gap-3">
               <div>
                 <CardTitle className="text-base font-semibold text-indigo-900">
-                  {needsHandoff ? "Assign supervisor & development" : "Supervisor & development assignment"}
+                  {needsHandoff ? "Assign production staff & development" : "Production staff & development assignment"}
                 </CardTitle>
                 <p className="mt-0.5 text-xs text-indigo-700/70">
                   {needsHandoff
-                    ? "Choose an ASM / supervisor from this division only, then classify the enquiry as new or existing development."
+                    ? "Choose production staff from this division only, then classify the enquiry as new or existing development."
                     : "Assignment saved. Click Edit to update."}
                 </p>
               </div>
@@ -2091,7 +2091,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               <div className="space-y-3">
                 {order.assignedSupervisor ? (
                   <div className="flex items-baseline gap-3">
-                    <span className="min-w-[9rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">Supervisor</span>
+                    <span className="min-w-[9rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">Production</span>
                     <span className="text-sm font-semibold text-slate-900">
                       {order.assignedSupervisor.name}{" "}
                       <span className="font-normal text-slate-500">({order.assignedSupervisor.email})</span>
@@ -2144,7 +2144,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             ) : (
               <>
                 <div className="space-y-2">
-                  <Label>Supervisor (this division only)</Label>
+                  <Label>Production staff (this division only)</Label>
                   <Select value={handoffSupervisorId} onValueChange={setHandoffSupervisorId}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select supervisor" />
@@ -2728,14 +2728,14 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               <div className="border-t-2 border-indigo-100 bg-gradient-to-br from-indigo-50/60 via-blue-50/30 to-slate-50/40 px-5 py-5 space-y-4">
                 <div className="flex items-center gap-2">
                   <div className="h-6 w-1 rounded-full bg-indigo-500" />
-                  <p className="text-xs font-bold uppercase tracking-widest text-indigo-700">Division Head Actions</p>
+                  <p className="text-xs font-bold uppercase tracking-widest text-indigo-700">Head Actions</p>
                 </div>
 
                 {order.sampleRequested && !order.headSampleRequestApprovedAt && mightManageSample ? (
                   <div className="rounded-xl border border-indigo-200 bg-white/90 p-4 shadow-sm space-y-3">
                     <div>
                       <p className="text-sm font-semibold text-slate-900">Approve sample request</p>
-                      <p className="mt-0.5 text-xs text-slate-500">Salesperson has requested a sample. Approve so the assigned supervisor can submit sample specifications.</p>
+                      <p className="mt-0.5 text-xs text-slate-500">Marketing / Sales has requested a sample. Approve so the assigned production staff can submit sample specifications.</p>
                     </div>
                     {sampleRequestApprovalPrereqMet ? (
                       <Button type="button" size="sm" disabled={sampleMutation.isPending} onClick={() => sampleMutation.mutate({ action: "approveSampleRequest" })}>
@@ -2743,7 +2743,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                       </Button>
                     ) : (
                       <p className="rounded-lg border border-amber-200 bg-amber-50/90 px-3 py-2 text-xs text-amber-900">
-                        Submit <span className="font-semibold">supervisor assignment</span> in the enquiry handoff section above first (including planning details for new development). The server requires that before this approval step.
+                        Submit <span className="font-semibold">production staff assignment</span> in the enquiry handoff section above first (including planning details for new development). The server requires that before this approval step.
                       </p>
                     )}
                   </div>
@@ -2754,7 +2754,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                     <div>
                       <p className="text-sm font-semibold text-slate-900">Approve sample details</p>
                       {!canApproveSampleNow ? (
-                        <p className="mt-0.5 text-xs text-slate-500">Wait for the supervisor to submit sample details first, then approve here.</p>
+                        <p className="mt-0.5 text-xs text-slate-500">Wait for the production team to submit sample details first, then approve here.</p>
                       ) : (
                         <p className="mt-0.5 text-xs text-emerald-700">Sample details have been submitted — ready to review and approve.</p>
                       )}
@@ -2857,7 +2857,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               <div className="border-t-2 border-violet-100 bg-gradient-to-br from-violet-50/60 via-purple-50/30 to-slate-50/40 px-5 py-5 space-y-4">
                 <div className="flex items-center gap-2">
                   <div className="h-6 w-1 rounded-full bg-violet-500" />
-                  <p className="text-xs font-bold uppercase tracking-widest text-violet-700">Supervisor Actions</p>
+                  <p className="text-xs font-bold uppercase tracking-widest text-violet-700">Production Actions</p>
                 </div>
 
                 {order.sampleRequested && !order.headSampleRequestApprovedAt ? (

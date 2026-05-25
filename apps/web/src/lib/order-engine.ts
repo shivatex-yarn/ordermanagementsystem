@@ -147,15 +147,6 @@ export async function createOrder(
       currentDivision: { select: { id: true, name: true } },
     },
   });
-  await publish({
-    type: "OrderCreated",
-    orderId: order.id,
-    orderNumber: order.orderNumber,
-    createdById: order.createdById,
-    divisionId: order.currentDivisionId,
-    timestamp: order.createdAt.toISOString(),
-    userId: createdById,
-  });
   return order;
 }
 
@@ -237,9 +228,11 @@ export async function updateOrderWithEditHistory(
 export async function acceptOrder(orderId: number, acceptedById: number, acceptanceReason: string) {
   const trimmedReason = acceptanceReason.trim();
   if (trimmedReason.length < 10) return null;
-  const order = await prisma.order.findUnique({ where: { id: orderId } });
-  if (!order) return null;
-  if (await blockedByUnansweredBreach(orderId)) return null;
+  const [order, blocked] = await Promise.all([
+    prisma.order.findUnique({ where: { id: orderId } }),
+    blockedByUnansweredBreach(orderId),
+  ]);
+  if (!order || blocked) return null;
   if (order.status !== "PLACED" && order.status !== "TRANSFERRED") return null;
   if (order.status === "TRANSFERRED" && !order.receivedById) return null;
   const updated = await prisma.order.update({
@@ -277,17 +270,17 @@ export async function transferOrder(
   transferDetails: string,
   opts?: { bypassSlaGate?: boolean }
 ) {
-  if (!opts?.bypassSlaGate) {
-    if (await blockedByUnansweredBreach(orderId)) return null;
-  }
-  const order = await prisma.order.findUnique({ where: { id: orderId } });
-  if (!order) return null;
+  const [order, blocked] = await Promise.all([
+    prisma.order.findUnique({ where: { id: orderId } }),
+    opts?.bypassSlaGate ? Promise.resolve(false) : blockedByUnansweredBreach(orderId),
+  ]);
+  if (!order || blocked) return null;
   if (order.status !== "PLACED" && order.status !== "TRANSFERRED" && order.status !== "IN_PROGRESS")
     return null;
   const slaDeadline = computeSlaDeadline(new Date());
   const detailsTrim = transferDetails.trim();
   if (detailsTrim.length < 10) return null;
-  const [transfer] = await prisma.$transaction([
+  const [transfer, updated] = await prisma.$transaction([
     prisma.orderTransfer.create({
       data: {
         orderId,
@@ -307,16 +300,13 @@ export async function transferOrder(
         transferCount: { increment: 1 },
         slaDeadline,
       },
+      include: {
+        createdBy: { select: { id: true, name: true, email: true } },
+        currentDivision: { select: { id: true, name: true } },
+        previousDivision: { select: { id: true, name: true } },
+      },
     }),
   ]);
-  const updated = await prisma.order.findUnique({
-    where: { id: orderId },
-    include: {
-      createdBy: { select: { id: true, name: true, email: true } },
-      currentDivision: { select: { id: true, name: true } },
-      previousDivision: { select: { id: true, name: true } },
-    },
-  });
   if (!updated) return null;
   await publish({
     type: "OrderTransferred",
@@ -339,11 +329,13 @@ export async function rejectOrder(orderId: number, rejectedById: number, reason:
   // empty reasons never reach the OrderRejection row.
   const trimmedReason = (reason ?? "").trim();
   if (trimmedReason.length < 10) return null;
-  const order = await prisma.order.findUnique({ where: { id: orderId } });
-  if (!order) return null;
-  if (await blockedByUnansweredBreach(orderId)) return null;
+  const [order, blocked] = await Promise.all([
+    prisma.order.findUnique({ where: { id: orderId } }),
+    blockedByUnansweredBreach(orderId),
+  ]);
+  if (!order || blocked) return null;
   if (order.status === "REJECTED" || order.status === "COMPLETED" || order.status === "CANCELLED") return null;
-  await prisma.$transaction([
+  const [, updated] = await prisma.$transaction([
     prisma.orderRejection.create({
       data: { orderId, divisionId: order.currentDivisionId, reason: trimmedReason, rejectedById },
     }),
@@ -355,16 +347,13 @@ export async function rejectOrder(orderId: number, rejectedById: number, reason:
         rejectionCount: { increment: 1 },
         slaDeadline: null,
       },
+      include: {
+        createdBy: { select: { id: true, name: true, email: true } },
+        currentDivision: { select: { id: true, name: true } },
+        rejectedBy: { select: { id: true, name: true, email: true } },
+      },
     }),
   ]);
-  const updated = await prisma.order.findUnique({
-    where: { id: orderId },
-    include: {
-      createdBy: { select: { id: true, name: true, email: true } },
-      currentDivision: { select: { id: true, name: true } },
-      rejectedBy: { select: { id: true, name: true, email: true } },
-    },
-  });
   if (!updated) return null;
   await publish({
     type: "OrderRejected",
@@ -419,9 +408,11 @@ export async function cancelOrderByCreator(orderId: number, cancelledById: numbe
 export async function receiveOrder(orderId: number, receivedById: number, receiveReason: string) {
   const trimmed = receiveReason.trim();
   if (trimmed.length < 10) return null;
-  if (await blockedByUnansweredBreach(orderId)) return null;
-  const order = await prisma.order.findUnique({ where: { id: orderId } });
-  if (!order) return null;
+  const [order, blocked] = await Promise.all([
+    prisma.order.findUnique({ where: { id: orderId } }),
+    blockedByUnansweredBreach(orderId),
+  ]);
+  if (!order || blocked) return null;
   if (order.status !== "TRANSFERRED") return null;
   const slaDeadline = computeSlaDeadline(new Date());
   const updated = await prisma.order.update({
@@ -447,9 +438,11 @@ export async function receiveOrder(orderId: number, receivedById: number, receiv
 }
 
 export async function completeOrder(orderId: number, completedById: number) {
-  if (await blockedByUnansweredBreach(orderId)) return null;
-  const order = await prisma.order.findUnique({ where: { id: orderId } });
-  if (!order) return null;
+  const [order, blocked] = await Promise.all([
+    prisma.order.findUnique({ where: { id: orderId } }),
+    blockedByUnansweredBreach(orderId),
+  ]);
+  if (!order || blocked) return null;
   if (order.status !== "IN_PROGRESS") return null;
   if (order.sampleRequested) {
     if (!order.sampleApprovedAt || !order.sampleSpecsAcknowledgedAt) return null;

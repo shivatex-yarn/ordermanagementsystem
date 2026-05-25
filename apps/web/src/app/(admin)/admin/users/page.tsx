@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { roleLabel } from "@/lib/roles";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -305,7 +306,7 @@ export default function AdminUsersPage() {
                     <tr key={u.id} className="border-b border-slate-50">
                       <td className="p-3 font-medium">{u.name}</td>
                       <td className="p-3 text-slate-600">{u.email}</td>
-                      <td className="p-3">{u.role.replace("_", " ")}</td>
+                      <td className="p-3">{roleLabel(u.role as Parameters<typeof roleLabel>[0])}</td>
                       <td className="p-3">
                         <Badge variant={u.active !== false ? "success" : "secondary"}>
                           {u.active !== false ? "Active" : "Inactive"}
@@ -498,8 +499,8 @@ export default function AdminUsersPage() {
               <Select value={role} onValueChange={setRole}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="USER">User</SelectItem>
-                  <SelectItem value="SUPERVISOR">Supervisor</SelectItem>
+                  <SelectItem value="USER">Marketing / Sales</SelectItem>
+                  <SelectItem value="SUPERVISOR">Production</SelectItem>
                   <SelectItem value="MANAGER">Division Head (Manager)</SelectItem>
                   <SelectItem value="ACCOUNTS">Accounts</SelectItem>
                   <SelectItem value="MANAGING_DIRECTOR">Managing Director</SelectItem>
@@ -574,8 +575,8 @@ export default function AdminUsersPage() {
                 <Select value={editRole} onValueChange={setEditRole}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="USER">User</SelectItem>
-                    <SelectItem value="SUPERVISOR">Supervisor</SelectItem>
+                    <SelectItem value="USER">Marketing / Sales</SelectItem>
+                    <SelectItem value="SUPERVISOR">Production</SelectItem>
                     <SelectItem value="MANAGER">Division Head (Manager)</SelectItem>
                     <SelectItem value="ACCOUNTS">Accounts</SelectItem>
                     <SelectItem value="MANAGING_DIRECTOR">Managing Director</SelectItem>
