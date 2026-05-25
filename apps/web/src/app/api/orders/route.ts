@@ -1,10 +1,11 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { prisma } from "@/lib/db";
 import { withAuth } from "@/lib/with-auth";
 import { Prisma, type OrderStatus } from "@prisma/client";
 import { createOrderSchema } from "@/lib/validation";
 import { userMayCreateEnquiry } from "@/lib/enquiry-access";
 import { createOrder } from "@/lib/order-engine";
+import { publish } from "@/lib/events";
 import { getRateLimitIdentifierForUser, rateLimit } from "@/lib/rate-limit";
 import { getCreatedAtRange, normalizePeriodParam, parseCreatedAtRangeFromParams } from "@/lib/date-period";
 import { userMayRouteEnquiryToDivision } from "@/lib/division-access";
@@ -245,19 +246,49 @@ export async function POST(req: Request) {
       { status: 403 }
     );
   }
-  const order = await createOrder(userId, parsed.data.divisionId, {
-    companyName: parsed.data.companyName,
-    description: parsed.data.description,
-    customFields: parsed.data.customFields,
-    sampleRequested: parsed.data.sampleRequested,
-    sampleRequestNotes: parsed.data.sampleRequestNotes,
-    customerName: parsed.data.customerName,
-    customerPhone: parsed.data.customerPhone,
-    customerEmail: parsed.data.customerEmail,
-    customerAddress: parsed.data.customerAddress,
-    gstNumber: parsed.data.gstNumber,
-    gstCopyUrl: parsed.data.gstCopyUrl,
-    customerOrderDate: parsed.data.customerOrderDate,
-  });
+  let order;
+  try {
+    order = await createOrder(userId, parsed.data.divisionId, {
+      companyName: parsed.data.companyName,
+      description: parsed.data.description,
+      customFields: parsed.data.customFields,
+      sampleRequested: parsed.data.sampleRequested,
+      sampleRequestNotes: parsed.data.sampleRequestNotes,
+      customerName: parsed.data.customerName,
+      customerPhone: parsed.data.customerPhone,
+      customerEmail: parsed.data.customerEmail,
+      customerAddress: parsed.data.customerAddress,
+      gstNumber: parsed.data.gstNumber,
+      gstCopyUrl: parsed.data.gstCopyUrl,
+      customerOrderDate: parsed.data.customerOrderDate,
+    });
+  } catch (err) {
+    console.error("[POST /api/orders]", err);
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2022") {
+      return NextResponse.json(
+        { error: "Database is missing required columns. Run: cd apps/web && npx prisma migrate deploy", code: "SCHEMA_DRIFT" },
+        { status: 503 }
+      );
+    }
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/column/i.test(msg) && /does not exist/i.test(msg)) {
+      return NextResponse.json(
+        { error: "Database schema is out of date. Run: cd apps/web && npx prisma migrate deploy", code: "SCHEMA_DRIFT" },
+        { status: 503 }
+      );
+    }
+    return NextResponse.json({ error: "Failed to create enquiry" }, { status: 500 });
+  }
+  after(() =>
+    publish({
+      type: "OrderCreated",
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      createdById: order.createdById,
+      divisionId: order.currentDivisionId,
+      timestamp: order.createdAt.toISOString(),
+      userId: userId,
+    }).catch((err) => console.error("[POST /api/orders] post-response event failed:", err))
+  );
   return NextResponse.json(order, { status: 201 });
 }

@@ -2,22 +2,22 @@ import { prisma } from "@/lib/db";
 import { publish } from "@/lib/events";
 import { registerEventHandlers } from "@/lib/event-handlers";
 import { appendTimeline } from "@/lib/timeline";
+import { advancePastNonWorkingDay } from "@/lib/sla-calendar";
 const SLA_HOURS = 48;
 
 registerEventHandlers();
 
 function addHours(date: Date, h: number): Date {
   const d = new Date(date);
-  d.setHours(d.getHours() + h);
+  d.setUTCHours(d.getUTCHours() + h);
   return d;
 }
 
 function computeSlaDeadline(start: Date): Date {
-  // Business rule: SLA should not fall on Sunday; push Sunday deadlines to Monday same time.
+  // Add 48 calendar hours then push the deadline forward if it lands on a
+  // Sunday or Indian public holiday so the deadline is always a working day.
   const d = addHours(start, SLA_HOURS);
-  if (d.getDay() !== 0) return d;
-  d.setDate(d.getDate() + 1);
-  return d;
+  return advancePastNonWorkingDay(d);
 }
 
 async function getOpenSlaBreach(orderId: number) {
@@ -476,8 +476,18 @@ export async function acknowledgeSampleSpecsBySales(orderId: number, userId: num
   if (!order) return null;
   if (order.createdById !== userId) return null;
   if (!order.sampleRequested || !order.sampleApprovedAt) return null;
-  if (order.sampleSpecsAcknowledgedAt) return null;
   if (order.status === "REJECTED" || order.status === "COMPLETED" || order.status === "CANCELLED") return null;
+  // Idempotent: if already acknowledged just return the current order (no-op).
+  if (order.sampleSpecsAcknowledgedAt) {
+    return prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        createdBy: { select: { id: true, name: true, email: true } },
+        currentDivision: { select: { id: true, name: true } },
+        sampleSpecsAcknowledgedBy: { select: { id: true, name: true, email: true } },
+      },
+    });
+  }
 
   const now = new Date();
   const updated = await prisma.order.update({

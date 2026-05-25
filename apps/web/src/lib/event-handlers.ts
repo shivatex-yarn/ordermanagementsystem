@@ -7,6 +7,7 @@ import {
   sendEnquiryNotificationEmail,
   sendSlaBreachDetailEmail,
   sendSupervisorEnquiryHandoffEmail,
+  sendEmail,
 } from "@/lib/email";
 import { postEventToN8n } from "@/lib/n8n-webhook";
 import { appendTimeline, type TimelineEventType } from "@/lib/timeline";
@@ -181,15 +182,26 @@ async function notificationHandler(event: OrderEvent): Promise<void> {
     });
 
     const userIds = new Set<number>([order.createdById, e.supervisorId]);
-    const managers = await prisma.divisionManager.findMany({
-      where: { divisionId: order.currentDivisionId },
-      select: { userId: true },
-    });
+    const [managers, handoffDivHeads, superAdmins] = await Promise.all([
+      prisma.divisionManager.findMany({
+        where: { divisionId: order.currentDivisionId },
+        select: { userId: true },
+      }),
+      prisma.user.findMany({
+        where: {
+          role: { in: ["DIVISION_HEAD", "MANAGER"] },
+          divisionId: order.currentDivisionId,
+          active: true,
+        },
+        select: { id: true },
+      }),
+      prisma.user.findMany({
+        where: { role: "SUPER_ADMIN", active: true },
+        select: { id: true },
+      }),
+    ]);
     managers.forEach((m) => userIds.add(m.userId));
-    const superAdmins = await prisma.user.findMany({
-      where: { role: "SUPER_ADMIN", active: true },
-      select: { id: true },
-    });
+    handoffDivHeads.forEach((u) => userIds.add(u.id));
     superAdmins.forEach((u) => userIds.add(u.id));
 
     const notifyUsers = await prisma.user.findMany({
@@ -233,6 +245,111 @@ async function notificationHandler(event: OrderEvent): Promise<void> {
     return;
   }
 
+  // ── SalesFeedbackRecorded: targeted email to all division heads ──────────
+  if (event.type === "SalesFeedbackRecorded") {
+    const feedbackOrder = await prisma.order.findUnique({
+      where: { id: event.orderId },
+      select: { currentDivisionId: true, createdById: true, companyName: true, orderNumber: true },
+    });
+    if (feedbackOrder) {
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+      const [headsByManager, headsByDivision] = await Promise.all([
+        prisma.divisionManager.findMany({
+          where: { divisionId: feedbackOrder.currentDivisionId },
+          select: { user: { select: { id: true, name: true, email: true, role: true } } },
+        }),
+        prisma.user.findMany({
+          where: { role: { in: ["DIVISION_HEAD", "MANAGER"] }, divisionId: feedbackOrder.currentDivisionId, active: true },
+          select: { id: true, name: true, email: true, role: true },
+        }),
+      ]);
+      const headMap = new Map<number, { name: string; email: string; role: string }>();
+      headsByManager.forEach((m) => { if (m.user) headMap.set(m.user.id, m.user); });
+      headsByDivision.forEach((u) => headMap.set(u.id, u));
+      const headIds = new Set<number>([feedbackOrder.createdById]);
+      headMap.forEach((_, id) => headIds.add(id));
+      for (const uid of headIds) {
+        await prisma.notification.create({
+          data: { userId: uid, type: event.type, title, body, metadata: event as object },
+        });
+      }
+      const summary = `Marketing / Sales has submitted customer feedback for enquiry ${event.orderNumber}${feedbackOrder.companyName ? ` (${feedbackOrder.companyName})` : ""}.`;
+      for (const [, u] of headMap) {
+        if (u.role === "MANAGING_DIRECTOR") continue;
+        sendEmail({
+          to: u.email,
+          subject: `Customer feedback received — ${event.orderNumber}`,
+          html: `<p>Hi ${u.name},</p><p>${summary}</p><p><a href="${appUrl}/orders/${event.orderId}">View enquiry →</a></p>`,
+          text: `${summary}\n\nView: ${appUrl}/orders/${event.orderId}`,
+        }).catch((err) => console.error("[email] Feedback head email failed:", err));
+      }
+    }
+    return;
+  }
+
+  // ── OrderCompleted: notify the assigned production person ────────────────
+  if (event.type === "OrderCompleted") {
+    const completedOrder = await prisma.order.findUnique({
+      where: { id: event.orderId },
+      select: {
+        currentDivisionId: true,
+        createdById: true,
+        companyName: true,
+        assignedSupervisorId: true,
+        assignedSupervisor: { select: { id: true, name: true, email: true } },
+      },
+    });
+    if (completedOrder) {
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+      const [mgrs, dHeads, sAdmins] = await Promise.all([
+        prisma.divisionManager.findMany({
+          where: { divisionId: completedOrder.currentDivisionId },
+          select: { userId: true },
+        }),
+        prisma.user.findMany({
+          where: { role: { in: ["DIVISION_HEAD", "MANAGER"] }, divisionId: completedOrder.currentDivisionId, active: true },
+          select: { id: true },
+        }),
+        prisma.user.findMany({ where: { role: "SUPER_ADMIN", active: true }, select: { id: true } }),
+      ]);
+      const notifyIds = new Set<number>([completedOrder.createdById]);
+      if (completedOrder.assignedSupervisorId) notifyIds.add(completedOrder.assignedSupervisorId);
+      mgrs.forEach((m) => notifyIds.add(m.userId));
+      dHeads.forEach((u) => notifyIds.add(u.id));
+      sAdmins.forEach((u) => notifyIds.add(u.id));
+      for (const uid of notifyIds) {
+        await prisma.notification.create({
+          data: { userId: uid, type: event.type, title, body, metadata: event as object },
+        });
+      }
+      // Dedicated email to assigned production person
+      if (completedOrder.assignedSupervisor?.email) {
+        const sup = completedOrder.assignedSupervisor;
+        const summary = `Enquiry ${event.orderNumber}${completedOrder.companyName ? ` (${completedOrder.companyName})` : ""} has been marked as completed by the division head.`;
+        sendEmail({
+          to: sup.email,
+          subject: `Enquiry completed — ${event.orderNumber}`,
+          html: `<p>Hi ${sup.name},</p><p>${summary}</p><p><a href="${appUrl}/orders/${event.orderId}">View enquiry →</a></p>`,
+          text: `${summary}\n\nView: ${appUrl}/orders/${event.orderId}`,
+        }).catch((err) => console.error("[email] Completed supervisor email failed:", err));
+      }
+      // Generic email to others (excluding MD and supervisor who got dedicated one)
+      const allNotifyUsers = await prisma.user.findMany({
+        where: { id: { in: [...notifyIds] } },
+        select: { id: true, name: true, email: true, role: true },
+      });
+      const completedSummary = eventTypeToSummary(event.type, event);
+      for (const u of allNotifyUsers) {
+        if (u.role === "MANAGING_DIRECTOR") continue;
+        if (u.id === completedOrder.assignedSupervisorId) continue; // already sent dedicated email
+        sendEnquiryNotificationEmail(u.email, u.name, event.orderNumber, event.type, completedSummary).catch(
+          (err) => console.error("[email] Completed notification email failed:", err)
+        );
+      }
+    }
+    return;
+  }
+
   const order = await prisma.order.findUnique({
     where: { id: event.orderId },
     select: { currentDivisionId: true, createdById: true },
@@ -242,15 +359,30 @@ async function notificationHandler(event: OrderEvent): Promise<void> {
   if (event.type === "OrderCancelled") {
     userIds.delete(order.createdById);
   }
-  const managers = await prisma.divisionManager.findMany({
-    where: { divisionId: order.currentDivisionId },
-    select: { userId: true },
-  });
+  // Collect all heads for this division:
+  // 1. Users in the divisionManager join table
+  // 2. DIVISION_HEAD / MANAGER users whose primary divisionId matches (for heads not in the join table)
+  // Run all three lookups in parallel for speed.
+  const [managers, divHeads, superAdmins] = await Promise.all([
+    prisma.divisionManager.findMany({
+      where: { divisionId: order.currentDivisionId },
+      select: { userId: true },
+    }),
+    prisma.user.findMany({
+      where: {
+        role: { in: ["DIVISION_HEAD", "MANAGER"] },
+        divisionId: order.currentDivisionId,
+        active: true,
+      },
+      select: { id: true },
+    }),
+    prisma.user.findMany({
+      where: { role: "SUPER_ADMIN", active: true },
+      select: { id: true },
+    }),
+  ]);
   managers.forEach((m) => userIds.add(m.userId));
-  const superAdmins = await prisma.user.findMany({
-    where: { role: "SUPER_ADMIN" },
-    select: { id: true },
-  });
+  divHeads.forEach((u) => userIds.add(u.id));
   superAdmins.forEach((u) => userIds.add(u.id));
   const users = await prisma.user.findMany({
     where: { id: { in: [...userIds] } },

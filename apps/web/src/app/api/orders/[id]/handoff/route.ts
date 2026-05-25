@@ -10,7 +10,12 @@ export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await withRole(["MANAGER", "DIVISION_HEAD", "SUPER_ADMIN", "MANAGING_DIRECTOR"]);
+  // SUPERVISOR / ASM (production staff) are allowed so they can update their own
+  // assignment's development details after being assigned by the head.
+  const auth = await withRole([
+    "MANAGER", "DIVISION_HEAD", "SUPER_ADMIN", "MANAGING_DIRECTOR",
+    "SUPERVISOR", "ASM",
+  ]);
   if (auth.response) return auth.response;
   const id = Number((await params).id);
   if (!Number.isInteger(id)) {
@@ -18,7 +23,8 @@ export async function POST(
   }
   const rawBody = await req.json().catch(() => ({}));
   let body = rawBody as Record<string, unknown>;
-  /** Supervisor-only reassignment: allow omitting `newDevPlan` when full planning is already stored. */
+
+  /** Allow omitting `newDevPlan` when full planning is already stored. */
   if (body?.developmentKind === "new" && body?.newDevPlan == null) {
     const existing = await prisma.order.findUnique({
       where: { id },
@@ -32,6 +38,7 @@ export async function POST(
       body = { ...body, newDevPlan: fromHandoff };
     }
   }
+
   const parsed = enquiryHandoffSchema.safeParse({
     orderId: id,
     supervisorId: body?.supervisorId,
@@ -49,20 +56,47 @@ export async function POST(
 
   const orderRow = await prisma.order.findUnique({
     where: { id },
-    select: { id: true, createdById: true, currentDivisionId: true, previousDivisionId: true },
+    select: {
+      id: true,
+      createdById: true,
+      currentDivisionId: true,
+      previousDivisionId: true,
+      assignedSupervisorId: true,
+    },
   });
   if (!orderRow) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const canView = await userCanViewOrder(auth.payload, orderRow);
   if (!canView) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const bypassHead = ["SUPER_ADMIN", "MANAGING_DIRECTOR", "MANAGER", "DIVISION_HEAD"].includes(
+  const userId = Number(auth.payload.sub);
+  const isSupervisorRole = auth.payload.role === "SUPERVISOR" || auth.payload.role === "ASM";
+
+  // Production staff (SUPERVISOR / ASM) may only update details for an order where
+  // they are the assigned production person, and they cannot reassign themselves to
+  // a different person — the supervisorId must remain their own.
+  if (isSupervisorRole) {
+    if (orderRow.assignedSupervisorId !== userId) {
+      return NextResponse.json(
+        { error: "You can only update development details for enquiries assigned to you." },
+        { status: 403 }
+      );
+    }
+    if (parsed.data.supervisorId !== userId) {
+      return NextResponse.json(
+        { error: "Production staff cannot reassign the enquiry to a different person." },
+        { status: 403 }
+      );
+    }
+  }
+
+  const bypassHead = ["SUPER_ADMIN", "MANAGING_DIRECTOR", "MANAGER", "DIVISION_HEAD", "SUPERVISOR", "ASM"].includes(
     auth.payload.role
   );
   let order;
   try {
     order = await submitEnquiryHandoff(
       parsed.data.orderId,
-      Number(auth.payload.sub),
+      userId,
       {
         supervisorId: parsed.data.supervisorId,
         developmentKind: parsed.data.developmentKind,

@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { UserPlus, Pencil, UserX, Trash2 } from "lucide-react";
+import { UserPlus, Pencil, UserX, Trash2, KeyRound, Eye, EyeOff } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -70,6 +70,15 @@ export default function AdminUsersPage() {
   const [editDivisionIds, setEditDivisionIds] = useState<number[]>([]);
   const [editActive, setEditActive] = useState(true);
 
+  // Reset password dialog state
+  const [resetPwUser, setResetPwUser] = useState<UserRow | null>(null);
+  const [resetPwNew, setResetPwNew] = useState("");
+  const [resetPwConfirm, setResetPwConfirm] = useState("");
+  const [resetPwShowNew, setResetPwShowNew] = useState(false);
+  const [resetPwShowConfirm, setResetPwShowConfirm] = useState(false);
+  const [resetPwError, setResetPwError] = useState("");
+  const [resetPwSuccess, setResetPwSuccess] = useState(false);
+
   const { data: pageData, isLoading } = useQuery({
     queryKey: ["admin-users"],
     queryFn: fetchAdminUsersPage,
@@ -81,6 +90,28 @@ export default function AdminUsersPage() {
     queryClient.invalidateQueries({ queryKey: ["admin-users"] });
     queryClient.invalidateQueries({ queryKey: ["divisions"] });
   };
+
+  const resetPasswordMutation = useMutation({
+    mutationFn: async ({ id, password }: { id: number; password: string }) => {
+      const res = await fetch(`/api/admin/users/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ password }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error((data as { error?: string }).error || "Failed to reset password");
+      }
+    },
+    onSuccess: () => {
+      setResetPwSuccess(true);
+      setResetPwNew("");
+      setResetPwConfirm("");
+      setResetPwError("");
+    },
+    onError: (err: Error) => setResetPwError(err.message),
+  });
 
   const deactivateUserMutation = useMutation({
     mutationFn: async (id: number) => {
@@ -328,6 +359,25 @@ export default function AdminUsersPage() {
                               <Pencil className="h-4 w-4 mr-1" />
                               Edit / Map
                             </Button>
+                            {user?.role === "SUPER_ADMIN" && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-violet-600 hover:text-violet-800"
+                                onClick={() => {
+                                  setResetPwUser(u);
+                                  setResetPwNew("");
+                                  setResetPwConfirm("");
+                                  setResetPwError("");
+                                  setResetPwSuccess(false);
+                                  setResetPwShowNew(false);
+                                  setResetPwShowConfirm(false);
+                                }}
+                              >
+                                <KeyRound className="h-4 w-4 mr-1" />
+                                Reset Pwd
+                              </Button>
+                            )}
                             {u.active !== false && (
                               <Button
                                 variant="ghost"
@@ -472,6 +522,97 @@ export default function AdminUsersPage() {
         </DialogContent>
       </Dialog>
       )}
+
+      {/* Reset Password dialog — Super Admin only */}
+      <Dialog
+        open={!!resetPwUser}
+        onOpenChange={(open) => {
+          if (!open) { setResetPwUser(null); setResetPwNew(""); setResetPwConfirm(""); setResetPwError(""); setResetPwSuccess(false); }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <KeyRound className="h-5 w-5 text-violet-600" />
+              Reset password
+            </DialogTitle>
+          </DialogHeader>
+          {resetPwUser && (
+            <>
+              <p className="text-sm text-slate-600">
+                Set a new password for <strong>{resetPwUser.name}</strong> ({resetPwUser.email}).
+              </p>
+              {resetPwSuccess ? (
+                <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm text-emerald-700 font-medium">
+                  Password updated successfully.
+                </div>
+              ) : (
+                <div className="space-y-4 pt-1">
+                  <div className="space-y-1.5">
+                    <Label>New password</Label>
+                    <div className="relative">
+                      <Input
+                        type={resetPwShowNew ? "text" : "password"}
+                        value={resetPwNew}
+                        onChange={(e) => { setResetPwNew(e.target.value); setResetPwError(""); }}
+                        placeholder="Min. 8 characters"
+                        className="pr-10"
+                      />
+                      <button type="button" onClick={() => setResetPwShowNew(v => !v)}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700">
+                        {resetPwShowNew ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Confirm new password</Label>
+                    <div className="relative">
+                      <Input
+                        type={resetPwShowConfirm ? "text" : "password"}
+                        value={resetPwConfirm}
+                        onChange={(e) => { setResetPwConfirm(e.target.value); setResetPwError(""); }}
+                        placeholder="Re-enter password"
+                        className={`pr-10 ${resetPwConfirm && resetPwNew !== resetPwConfirm ? "border-red-400" : resetPwConfirm && resetPwNew === resetPwConfirm ? "border-emerald-400" : ""}`}
+                      />
+                      <button type="button" onClick={() => setResetPwShowConfirm(v => !v)}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700">
+                        {resetPwShowConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                    {resetPwConfirm && resetPwNew !== resetPwConfirm && (
+                      <p className="text-xs text-red-600">Passwords do not match.</p>
+                    )}
+                    {resetPwConfirm && resetPwNew === resetPwConfirm && resetPwNew.length >= 8 && (
+                      <p className="text-xs text-emerald-600">Passwords match.</p>
+                    )}
+                  </div>
+                  {resetPwError && <p className="text-sm text-red-600">{resetPwError}</p>}
+                </div>
+              )}
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setResetPwUser(null)}>
+                  {resetPwSuccess ? "Close" : "Cancel"}
+                </Button>
+                {!resetPwSuccess && (
+                  <Button
+                    className="bg-violet-700 hover:bg-violet-800 text-white"
+                    disabled={
+                      resetPasswordMutation.isPending ||
+                      resetPwNew.length < 8 ||
+                      resetPwNew !== resetPwConfirm
+                    }
+                    onClick={() => {
+                      if (resetPwUser) resetPasswordMutation.mutate({ id: resetPwUser.id, password: resetPwNew });
+                    }}
+                  >
+                    {resetPasswordMutation.isPending ? "Updating…" : "Update password"}
+                  </Button>
+                )}
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Create user dialog - hidden for MD */}
       {!isViewOnly && (

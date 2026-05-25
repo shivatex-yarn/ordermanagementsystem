@@ -66,26 +66,28 @@ export async function GET(
     return NextResponse.json({ error: "Invalid enquiry id" }, { status: 400 });
   }
   /**
-   * Fetch with up to 2 attempts. The pooler occasionally drops idle connections; the
-   * first call surfaces P1001 and the second succeeds.
+   * Fetch with up to 4 attempts using exponential back-off (350 ms → 900 ms → 1800 ms).
+   * Neon serverless databases hibernate after inactivity; the first request to a cold
+   * instance can fail with P1001 and the database needs up to ~3 s to fully wake.
    *
    * Crucially, on a successful retry we MUST return data — the previous version had a
    * control-flow bug where a successful retry inside the catch still fell through to
    * the generic `return 500`. We now use an explicit result variable + outer-loop break.
    */
+  const TRANSIENT_DELAYS = [350, 900, 1800]; // ms between attempts 1→2, 2→3, 3→4
   let order: Awaited<ReturnType<typeof prisma.order.findUnique>> | undefined;
   let lastError: unknown = null;
-  for (let attempt = 0; attempt < 2; attempt++) {
+  for (let attempt = 0; attempt < 4; attempt++) {
     try {
       order = await prisma.order.findUnique({ where: { id }, include: fullInclude });
       lastError = null;
       break;
     } catch (err) {
       lastError = err;
-      // Retry only on transient pooler closes — schema/permission errors are fatal.
+      // Retry only on transient pooler/connectivity errors — schema/permission errors are fatal.
       const code = err instanceof Prisma.PrismaClientKnownRequestError ? err.code : null;
-      if (attempt === 0 && (code === "P1001" || code === "P1017" || code === "P2024")) {
-        await new Promise((r) => setTimeout(r, 350));
+      if (attempt < 3 && (code === "P1001" || code === "P1017" || code === "P2024")) {
+        await new Promise((r) => setTimeout(r, TRANSIENT_DELAYS[attempt]));
         continue;
       }
       break;

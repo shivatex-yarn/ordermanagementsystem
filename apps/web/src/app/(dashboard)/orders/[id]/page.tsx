@@ -213,10 +213,21 @@ type OrderDetail = {
   sampleRemarks?: string | null;
 };
 
+class TransientFetchError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "TransientFetchError";
+  }
+}
+
 async function fetchOrder(id: number): Promise<OrderDetail> {
   const res = await fetch(`/api/orders/${id}`, { credentials: "include" });
   const raw: unknown = await res.json().catch(() => null);
   if (!res.ok) {
+    const code =
+      raw && typeof raw === "object" && "code" in raw && typeof (raw as { code: unknown }).code === "string"
+        ? (raw as { code: string }).code
+        : "";
     const errMsg =
       raw && typeof raw === "object" && "error" in raw && typeof (raw as { error: unknown }).error === "string"
         ? (raw as { error: string }).error
@@ -230,6 +241,10 @@ async function fetchOrder(id: number): Promise<OrderDetail> {
           : res.status === 401
             ? "Session expired — please sign in again."
             : `Could not load enquiry (${res.status}).`;
+    // 503 DB_UNAVAILABLE / DB cold-start → throw a transient error so TanStack retries
+    if (res.status === 503 && (code === "DB_UNAVAILABLE" || !code)) {
+      throw new TransientFetchError(msg);
+    }
     throw new Error(msg);
   }
   if (!raw || typeof raw !== "object") {
@@ -611,7 +626,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     queryKey: ["order", orderId],
     queryFn: () => fetchOrder(orderId),
     enabled: Number.isInteger(orderId),
-    retry: 1,
+    // Retry up to 3 times for transient DB cold-start errors; don't retry hard errors (403/404/401).
+    retry: (failureCount, error) => {
+      if (error instanceof TransientFetchError) return failureCount < 3;
+      return false;
+    },
+    retryDelay: (attempt) => [2000, 4000, 6000][attempt] ?? 6000,
     staleTime: 30_000,
   });
 
@@ -647,16 +667,6 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   });
   const divisions = divisionsData?.divisions ?? [];
 
-  const needsHandoff =
-    Boolean(
-      user &&
-        order &&
-        order.status === "IN_PROGRESS" &&
-        !order.enquiryHandoff &&
-        showInteractiveUi &&
-        user.role === "MANAGING_DIRECTOR"
-    );
-
   const isDivisionHead = useMemo(
     () =>
       Boolean(
@@ -668,17 +678,25 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     [user, order?.currentDivision?.managers, order?.id]
   );
 
+  /** True for any role that can assign / reassign the production person. */
   const mayManageHandoffReassign = Boolean(
-    user && (isDivisionHead || ["SUPER_ADMIN", "MANAGING_DIRECTOR"].includes(user.role))
+    user &&
+      showInteractiveUi &&
+      (isDivisionHead || ["SUPER_ADMIN", "MANAGING_DIRECTOR", "MANAGER", "DIVISION_HEAD"].includes(user.role))
   );
+
+  /** Show the first-time assignment form when order is IN_PROGRESS with no handoff yet. */
+  const needsHandoff = Boolean(
+    mayManageHandoffReassign && order && order.status === "IN_PROGRESS" && !order.enquiryHandoff
+  );
+
+  /** Show the read-only + "Edit assignment" view when handoff already exists. */
   const canReassignHandoff = Boolean(
-    showInteractiveUi &&
-      user &&
+    mayManageHandoffReassign &&
       order &&
       order.status === "IN_PROGRESS" &&
       order.enquiryHandoff &&
-      !order.sampleShippedAt &&
-      user.role === "MANAGING_DIRECTOR"
+      !order.sampleShippedAt
   );
   const showHandoffCard = needsHandoff || canReassignHandoff;
 
@@ -1759,7 +1777,10 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             <div className="px-5 py-3.5">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Development classification</p>
-                {showInteractiveUi && user && ["MANAGER", "DIVISION_HEAD", "SUPER_ADMIN"].includes(user.role) && !isClosedStatus ? (
+                {showInteractiveUi && user && (
+                  ["MANAGER", "DIVISION_HEAD", "SUPER_ADMIN"].includes(user.role) ||
+                  (assignedSupervisorMe && ["SUPERVISOR", "ASM"].includes(user.role))
+                ) && !isClosedStatus ? (
                   <button
                     type="button"
                     onClick={() => {
@@ -2154,21 +2175,23 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                     ) : null}
                   </>
                 ) : null}
-                <div className="pt-1">
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    size="sm"
-                    disabled={deleteHandoffMutation.isPending}
-                    onClick={() => {
-                      setHandoffError("");
-                      deleteHandoffMutation.mutate();
-                    }}
-                  >
-                    {deleteHandoffMutation.isPending ? "Clearing…" : "Clear assignment"}
-                  </Button>
-                  {handoffError ? <p className="mt-2 text-sm text-red-600">{handoffError}</p> : null}
-                </div>
+                {user?.role === "MANAGING_DIRECTOR" && (
+                  <div className="pt-1">
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      disabled={deleteHandoffMutation.isPending}
+                      onClick={() => {
+                        setHandoffError("");
+                        deleteHandoffMutation.mutate();
+                      }}
+                    >
+                      {deleteHandoffMutation.isPending ? "Clearing…" : "Clear assignment"}
+                    </Button>
+                    {handoffError ? <p className="mt-2 text-sm text-red-600">{handoffError}</p> : null}
+                  </div>
+                )}
               </div>
             ) : divisionSupervisors.length === 0 ? (
               <p className="text-amber-800">
@@ -2457,7 +2480,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             {order.headSampleRequestApprovedAt ? (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                Request approved{order.headSampleRequestApprovedBy?.name ? ` · ${order.headSampleRequestApprovedBy.name}` : ""}
+                Request approved{order.currentDivision?.name ? ` · ${order.currentDivision.name} Head` : " · Head"}
               </span>
             ) : order.sampleRequested && !legacySampleProgress ? (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 ring-1 ring-amber-200">
@@ -2470,7 +2493,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             {order.sampleApprovedAt && (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                Details approved{order.sampleApprovedBy?.name ? ` · ${order.sampleApprovedBy.name}` : ""}
+                Details approved{order.currentDivision?.name ? ` · ${order.currentDivision.name} Head` : " · Head"}
               </span>
             )}
             {order.sampleShippedAt && (
@@ -2482,8 +2505,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             {order.sampleSpecsAcknowledgedAt && (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-800 ring-1 ring-sky-200">
                 <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />
-                Submitter reviewed specs
-                {order.sampleSpecsAcknowledgedBy?.name ? ` · ${order.sampleSpecsAcknowledgedBy.name}` : ""}
+                Submitter reviewed specs · Marketing / Sales
               </span>
             )}
           </div>
