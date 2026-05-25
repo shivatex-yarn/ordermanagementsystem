@@ -25,18 +25,23 @@ async function handleSlaBreachNotification(
   });
   if (!exists) return;
 
-  /** SLA breach alerts: every active Super Admin + every active Managing Director (in-app + detailed email). */
+  /** SLA breach alerts: every active Super Admin + Managing Director + Division Heads + Accounts (in-app). */
   const userIds = new Set<number>();
-  const superAdmins = await prisma.user.findMany({
-    where: { role: "SUPER_ADMIN", active: true },
-    select: { id: true },
-  });
+  const [superAdmins, mds, slaBreachDiv] = await Promise.all([
+    prisma.user.findMany({ where: { role: "SUPER_ADMIN", active: true }, select: { id: true } }),
+    prisma.user.findMany({ where: { role: "MANAGING_DIRECTOR", active: true }, select: { id: true } }),
+    prisma.user.findMany({
+      where: {
+        role: { in: ["DIVISION_HEAD", "MANAGER", "ACCOUNTS"] },
+        divisionId: event.divisionId,
+        active: true,
+      },
+      select: { id: true },
+    }),
+  ]);
   superAdmins.forEach((u) => userIds.add(u.id));
-  const mds = await prisma.user.findMany({
-    where: { role: "MANAGING_DIRECTOR", active: true },
-    select: { id: true },
-  });
   mds.forEach((u) => userIds.add(u.id));
+  slaBreachDiv.forEach((u) => userIds.add(u.id));
 
   const users = await prisma.user.findMany({
     where: { id: { in: [...userIds] } },
@@ -182,7 +187,7 @@ async function notificationHandler(event: OrderEvent): Promise<void> {
     });
 
     const userIds = new Set<number>([order.createdById, e.supervisorId]);
-    const [managers, handoffDivHeads, superAdmins] = await Promise.all([
+    const [managers, handoffDivHeads, superAdmins, handoffMds, handoffAsmSups] = await Promise.all([
       prisma.divisionManager.findMany({
         where: { divisionId: order.currentDivisionId },
         select: { userId: true },
@@ -199,10 +204,20 @@ async function notificationHandler(event: OrderEvent): Promise<void> {
         where: { role: "SUPER_ADMIN", active: true },
         select: { id: true },
       }),
+      prisma.user.findMany({
+        where: { role: "MANAGING_DIRECTOR", active: true },
+        select: { id: true },
+      }),
+      prisma.user.findMany({
+        where: { role: { in: ["SUPERVISOR", "ASM"] }, divisionId: order.currentDivisionId, active: true },
+        select: { id: true },
+      }),
     ]);
     managers.forEach((m) => userIds.add(m.userId));
     handoffDivHeads.forEach((u) => userIds.add(u.id));
     superAdmins.forEach((u) => userIds.add(u.id));
+    handoffMds.forEach((u) => userIds.add(u.id));
+    handoffAsmSups.forEach((u) => userIds.add(u.id));
 
     const notifyUsers = await prisma.user.findMany({
       where: { id: { in: [...userIds] } },
@@ -268,6 +283,13 @@ async function notificationHandler(event: OrderEvent): Promise<void> {
       headsByDivision.forEach((u) => headMap.set(u.id, u));
       const headIds = new Set<number>([feedbackOrder.createdById]);
       headMap.forEach((_, id) => headIds.add(id));
+      // MD and ACCOUNTS also see feedback notifications (awareness + billing context).
+      const [feedbackMds, feedbackAccounts] = await Promise.all([
+        prisma.user.findMany({ where: { role: "MANAGING_DIRECTOR", active: true }, select: { id: true } }),
+        prisma.user.findMany({ where: { role: "ACCOUNTS", active: true }, select: { id: true } }),
+      ]);
+      feedbackMds.forEach((u) => headIds.add(u.id));
+      feedbackAccounts.forEach((u) => headIds.add(u.id));
       for (const uid of headIds) {
         await prisma.notification.create({
           data: { userId: uid, type: event.type, title, body, metadata: event as object },
@@ -301,7 +323,7 @@ async function notificationHandler(event: OrderEvent): Promise<void> {
     });
     if (completedOrder) {
       const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-      const [mgrs, dHeads, sAdmins] = await Promise.all([
+      const [mgrs, dHeads, sAdmins, completedMds, completedAccounts] = await Promise.all([
         prisma.divisionManager.findMany({
           where: { divisionId: completedOrder.currentDivisionId },
           select: { userId: true },
@@ -311,12 +333,16 @@ async function notificationHandler(event: OrderEvent): Promise<void> {
           select: { id: true },
         }),
         prisma.user.findMany({ where: { role: "SUPER_ADMIN", active: true }, select: { id: true } }),
+        prisma.user.findMany({ where: { role: "MANAGING_DIRECTOR", active: true }, select: { id: true } }),
+        prisma.user.findMany({ where: { role: "ACCOUNTS", active: true }, select: { id: true } }),
       ]);
       const notifyIds = new Set<number>([completedOrder.createdById]);
       if (completedOrder.assignedSupervisorId) notifyIds.add(completedOrder.assignedSupervisorId);
       mgrs.forEach((m) => notifyIds.add(m.userId));
       dHeads.forEach((u) => notifyIds.add(u.id));
       sAdmins.forEach((u) => notifyIds.add(u.id));
+      completedMds.forEach((u) => notifyIds.add(u.id));
+      completedAccounts.forEach((u) => notifyIds.add(u.id));
       for (const uid of notifyIds) {
         await prisma.notification.create({
           data: { userId: uid, type: event.type, title, body, metadata: event as object },
@@ -340,8 +366,9 @@ async function notificationHandler(event: OrderEvent): Promise<void> {
       });
       const completedSummary = eventTypeToSummary(event.type, event);
       for (const u of allNotifyUsers) {
-        if (u.role === "MANAGING_DIRECTOR") continue;
-        if (u.id === completedOrder.assignedSupervisorId) continue; // already sent dedicated email
+        if (u.role === "MANAGING_DIRECTOR") continue; // MD: in-app only
+        if (u.role === "ACCOUNTS") continue; // Accounts: in-app only
+        if (u.id === completedOrder.assignedSupervisorId) continue; // supervisor already got dedicated email
         sendEnquiryNotificationEmail(u.email, u.name, event.orderNumber, event.type, completedSummary).catch(
           (err) => console.error("[email] Completed notification email failed:", err)
         );
@@ -352,18 +379,39 @@ async function notificationHandler(event: OrderEvent): Promise<void> {
 
   const order = await prisma.order.findUnique({
     where: { id: event.orderId },
-    select: { currentDivisionId: true, createdById: true },
+    select: { currentDivisionId: true, createdById: true, assignedSupervisorId: true },
   });
   if (!order) return;
+
   const userIds = new Set<number>([order.createdById]);
+  // Don't notify the creator when they are the one cancelling.
   if (event.type === "OrderCancelled") {
     userIds.delete(order.createdById);
   }
-  // Collect all heads for this division:
-  // 1. Users in the divisionManager join table
-  // 2. DIVISION_HEAD / MANAGER users whose primary divisionId matches (for heads not in the join table)
-  // Run all three lookups in parallel for speed.
-  const [managers, divHeads, superAdmins] = await Promise.all([
+
+  // Events where the assigned production supervisor/ASM should be notified.
+  const SUPERVISOR_EVENTS = new Set([
+    "SampleDetailsUpdated",
+    "SampleDevelopmentUpdated",
+    "SampleApproved",
+    "SampleShipped",
+    "SampleHeadRequestApproved",
+    "SLABreachHeadRejectionSubmitted",
+    "OrderAccepted",
+    "OrderTransferred",
+    "OrderReceived",
+  ]);
+  if (order.assignedSupervisorId && SUPERVISOR_EVENTS.has(event.type)) {
+    userIds.add(order.assignedSupervisorId);
+  }
+
+  // Events that ACCOUNTS users should be notified about (billing / closure).
+  const ACCOUNTS_EVENTS = new Set(["OrderCompleted", "OrderCancelled", "OrderRejected"]);
+
+  // Collect all heads for this division (divisionManager join table + role-based lookup),
+  // all Super Admins, all Managing Directors, and optionally Accounts users.
+  // Run all lookups in parallel for speed.
+  const [managers, divHeads, superAdmins, mds, accountsUsers, asmSupervisors] = await Promise.all([
     prisma.divisionManager.findMany({
       where: { divisionId: order.currentDivisionId },
       select: { userId: true },
@@ -380,10 +428,33 @@ async function notificationHandler(event: OrderEvent): Promise<void> {
       where: { role: "SUPER_ADMIN", active: true },
       select: { id: true },
     }),
+    // MD sees all in-app notifications (no routine emails — handled below).
+    prisma.user.findMany({
+      where: { role: "MANAGING_DIRECTOR", active: true },
+      select: { id: true },
+    }),
+    // Accounts sees billing-relevant events.
+    ACCOUNTS_EVENTS.has(event.type)
+      ? prisma.user.findMany({ where: { role: "ACCOUNTS", active: true }, select: { id: true } })
+      : Promise.resolve([] as { id: number }[]),
+    // ASM & SUPERVISOR users in the current division get all workflow notifications.
+    prisma.user.findMany({
+      where: {
+        role: { in: ["SUPERVISOR", "ASM"] },
+        divisionId: order.currentDivisionId,
+        active: true,
+      },
+      select: { id: true },
+    }),
   ]);
+
   managers.forEach((m) => userIds.add(m.userId));
   divHeads.forEach((u) => userIds.add(u.id));
   superAdmins.forEach((u) => userIds.add(u.id));
+  mds.forEach((u) => userIds.add(u.id));
+  accountsUsers.forEach((u) => userIds.add(u.id));
+  asmSupervisors.forEach((u) => userIds.add(u.id));
+
   const users = await prisma.user.findMany({
     where: { id: { in: [...userIds] } },
     select: { id: true, name: true, email: true, role: true },
@@ -395,13 +466,10 @@ async function notificationHandler(event: OrderEvent): Promise<void> {
   }
   const summary = eventTypeToSummary(event.type, event);
   for (const u of users) {
-    /**
-     * Per spec: MD only receives SLA breach emails. Strip MDs out of routine
-     * workflow notifications (creation, handoff, sample, feedback, etc.). The
-     * in-app notification was already created above so they still see it in
-     * the Notifications page if they want — just no mailbox noise.
-     */
+    // MD only receives SLA breach emails — in-app notification already created above.
     if (u.role === "MANAGING_DIRECTOR") continue;
+    // ACCOUNTS only get in-app; no email blast for them.
+    if (u.role === "ACCOUNTS") continue;
     sendEnquiryNotificationEmail(u.email, u.name, event.orderNumber, event.type, summary).catch((err) =>
       console.error("[email] Notification email failed for", u.email, err)
     );
