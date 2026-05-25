@@ -521,6 +521,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [handoffNewDetails, setHandoffNewDetails] = useState("");
   const [handoffExistingDetails, setHandoffExistingDetails] = useState("");
   const [handoffError, setHandoffError] = useState("");
+  const [showHandoffEditForm, setShowHandoffEditForm] = useState(false);
   // New development planning dialog
   const [newDevDialogOpen, setNewDevDialogOpen] = useState(false);
   const [newDevDescription, setNewDevDescription] = useState("");
@@ -881,6 +882,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     onSuccess: async (res) => {
       if (res.ok) {
         setHandoffError("");
+        setShowHandoffEditForm(false);
         setHandoffSupervisorId("");
         setHandoffNewDetails("");
         setHandoffExistingDetails("");
@@ -2062,17 +2064,79 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       {!isAuditView && showHandoffCard ? (
         <Card className="overflow-hidden border border-indigo-100 shadow-sm ring-1 ring-indigo-50">
           <CardHeader className="border-b border-indigo-100 bg-gradient-to-r from-indigo-50/80 to-violet-50/50 px-5 py-4">
-            <CardTitle className="text-base font-semibold text-indigo-900">
-              {canReassignHandoff && !needsHandoff ? "Update supervisor & development" : "Assign supervisor & development"}
-            </CardTitle>
-            <p className="mt-0.5 text-xs text-indigo-700/70">
-              {canReassignHandoff && !needsHandoff
-                ? "Change the assigned ASM / supervisor or update development classification. Blocked after the sample has been marked shipped."
-                : "Choose an ASM / supervisor from this division only, then classify the enquiry as new or existing development."}
-            </p>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <CardTitle className="text-base font-semibold text-indigo-900">
+                  {needsHandoff ? "Assign supervisor & development" : "Supervisor & development assignment"}
+                </CardTitle>
+                <p className="mt-0.5 text-xs text-indigo-700/70">
+                  {needsHandoff
+                    ? "Choose an ASM / supervisor from this division only, then classify the enquiry as new or existing development."
+                    : "Assignment saved. Click Edit to update."}
+                </p>
+              </div>
+              {canReassignHandoff && !needsHandoff && !showHandoffEditForm && (
+                <button
+                  type="button"
+                  onClick={() => setShowHandoffEditForm(true)}
+                  className="shrink-0 rounded-md border border-indigo-200 bg-white/60 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-white hover:text-indigo-900 transition-colors"
+                >
+                  Edit assignment
+                </button>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="space-y-4 text-sm">
-            {divisionSupervisors.length === 0 ? (
+            {canReassignHandoff && !needsHandoff && !showHandoffEditForm ? (
+              <div className="space-y-3">
+                {order.assignedSupervisor ? (
+                  <div className="flex items-baseline gap-3">
+                    <span className="min-w-[9rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">Supervisor</span>
+                    <span className="text-sm font-semibold text-slate-900">
+                      {order.assignedSupervisor.name}{" "}
+                      <span className="font-normal text-slate-500">({order.assignedSupervisor.email})</span>
+                    </span>
+                  </div>
+                ) : null}
+                {order.enquiryHandoff && typeof order.enquiryHandoff === "object" ? (
+                  <>
+                    <div className="flex items-baseline gap-3">
+                      <span className="min-w-[9rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">Development</span>
+                      <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ${order.enquiryHandoff.developmentKind === "existing" ? "bg-blue-50 text-blue-700 ring-blue-200" : "bg-violet-50 text-violet-700 ring-violet-200"}`}>
+                        {order.enquiryHandoff.developmentKind === "existing" ? "Existing development" : "New development"}
+                      </span>
+                    </div>
+                    {typeof order.enquiryHandoff.existingProductDetails === "string" && order.enquiryHandoff.existingProductDetails.trim() ? (
+                      <div className="flex items-start gap-3">
+                        <span className="min-w-[9rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">Details</span>
+                        <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{order.enquiryHandoff.existingProductDetails}</p>
+                      </div>
+                    ) : null}
+                    {order.enquiryHandoff.developmentKind === "new" && typeof order.enquiryHandoff.newDevelopmentDetails === "string" && order.enquiryHandoff.newDevelopmentDetails.trim() ? (
+                      <div className="flex items-start gap-3">
+                        <span className="min-w-[9rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">Description</span>
+                        <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{order.enquiryHandoff.newDevelopmentDetails}</p>
+                      </div>
+                    ) : null}
+                  </>
+                ) : null}
+                <div className="pt-1">
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    disabled={deleteHandoffMutation.isPending}
+                    onClick={() => {
+                      setHandoffError("");
+                      deleteHandoffMutation.mutate();
+                    }}
+                  >
+                    {deleteHandoffMutation.isPending ? "Clearing…" : "Clear assignment"}
+                  </Button>
+                  {handoffError ? <p className="mt-2 text-sm text-red-600">{handoffError}</p> : null}
+                </div>
+              </div>
+            ) : divisionSupervisors.length === 0 ? (
               <p className="text-amber-800">
                 No active supervisors are linked to this division. Ask an admin to assign SUPERVISOR users to{" "}
                 <span className="font-medium">{order.currentDivision?.name ?? "this division"}</span>.
@@ -2173,8 +2237,21 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                       handoffMutation.mutate();
                     }}
                   >
-                    {handoffMutation.isPending ? "Submitting…" : canReassignHandoff && !needsHandoff ? "Save assignment" : "Submit assignment"}
+                    {handoffMutation.isPending ? "Submitting…" : canReassignHandoff ? "Save assignment" : "Submit assignment"}
                   </Button>
+                  {showHandoffEditForm && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={handoffMutation.isPending || deleteHandoffMutation.isPending}
+                      onClick={() => {
+                        setHandoffError("");
+                        setShowHandoffEditForm(false);
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  )}
                   {canReassignHandoff && (
                     <Button
                       type="button"

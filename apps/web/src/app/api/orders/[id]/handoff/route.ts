@@ -55,20 +55,27 @@ export async function POST(
   const canView = await userCanViewOrder(auth.payload, orderRow);
   if (!canView) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const bypassHead =
-    auth.payload.role === "SUPER_ADMIN" || auth.payload.role === "MANAGING_DIRECTOR";
-  const order = await submitEnquiryHandoff(
-    parsed.data.orderId,
-    Number(auth.payload.sub),
-    {
-      supervisorId: parsed.data.supervisorId,
-      developmentKind: parsed.data.developmentKind,
-      newDevelopmentDetails: parsed.data.newDevelopmentDetails,
-      existingProductDetails: parsed.data.existingProductDetails,
-      newDevPlan: parsed.data.newDevPlan,
-    },
-    { bypassHeadCheck: bypassHead }
+  const bypassHead = ["SUPER_ADMIN", "MANAGING_DIRECTOR", "MANAGER", "DIVISION_HEAD"].includes(
+    auth.payload.role
   );
+  let order;
+  try {
+    order = await submitEnquiryHandoff(
+      parsed.data.orderId,
+      Number(auth.payload.sub),
+      {
+        supervisorId: parsed.data.supervisorId,
+        developmentKind: parsed.data.developmentKind,
+        newDevelopmentDetails: parsed.data.newDevelopmentDetails,
+        existingProductDetails: parsed.data.existingProductDetails,
+        newDevPlan: parsed.data.newDevPlan,
+      },
+      { bypassHeadCheck: bypassHead }
+    );
+  } catch (err) {
+    console.error("[POST /api/orders/[id]/handoff]", err);
+    return NextResponse.json({ error: "Failed to save assignment" }, { status: 500 });
+  }
   if (!order) {
     return NextResponse.json(
       {
