@@ -105,7 +105,8 @@ export async function POST(req: Request) {
       }
       if (!succeeded) {
         console.error("[login] prisma user lookup failed after retries:", lastErr);
-        if (isMockCreds) {
+        // Only allow offline mock login in development — NEVER in production (security risk).
+        if (isMockCreds && process.env.NODE_ENV === "development") {
           return await respondOfflineMockLogin(remaining);
         }
         return NextResponse.json(

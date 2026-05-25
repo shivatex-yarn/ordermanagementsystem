@@ -20,6 +20,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Enquiry Management System",
   description: "Enterprise enquiry management with divisions, SLA, and audit",
+  icons: {
+    icon: "/company-logo.png",
+    shortcut: "/company-logo.png",
+    apple: "/company-logo.png",
+  },
 };
 
 export default function RootLayout({
