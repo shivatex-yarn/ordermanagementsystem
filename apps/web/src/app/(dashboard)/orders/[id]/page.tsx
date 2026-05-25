@@ -1728,7 +1728,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             <div className="px-5 py-3.5">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Development classification</p>
-                {showInteractiveUi && user && ["MANAGER", "DIVISION_HEAD", "SUPER_ADMIN", "MANAGING_DIRECTOR"].includes(user.role) && isDivisionHead && !isClosedStatus ? (
+                {showInteractiveUi && user && ["MANAGER", "DIVISION_HEAD", "SUPER_ADMIN"].includes(user.role) && !isClosedStatus ? (
                   <button
                     type="button"
                     onClick={() => {
@@ -1747,8 +1747,10 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                         setNewDevDialogError("");
                         setNewDevDialogOpen(true);
                       } else if (handoff.developmentKind === "existing") {
-                        // For existing development, re-open handoff (no dialog needed — handled by handoff form re-show)
-                        // Not applicable here; just a safeguard
+                        setShowHandoffEditForm(true);
+                        setTimeout(() => {
+                          document.getElementById("handoff-assignment-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                        }, 50);
                       }
                     }}
                     className="rounded-md border border-violet-200 bg-white/60 px-2.5 py-1 text-xs font-medium text-violet-700 transition-colors hover:bg-white hover:text-violet-900"
@@ -2062,7 +2064,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       </Card>
 
       {!isAuditView && showHandoffCard ? (
-        <Card className="overflow-hidden border border-indigo-100 shadow-sm ring-1 ring-indigo-50">
+        <Card id="handoff-assignment-card" className="overflow-hidden border border-indigo-100 shadow-sm ring-1 ring-indigo-50">
           <CardHeader className="border-b border-indigo-100 bg-gradient-to-r from-indigo-50/80 to-violet-50/50 px-5 py-4">
             <div className="flex items-center justify-between gap-3">
               <div>
