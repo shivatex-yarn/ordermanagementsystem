@@ -106,12 +106,12 @@ export function roleLabel(role: Role | undefined | null): string {
     case "MANAGER":
       return "Division Head";
     case "SUPERVISOR":
-      return "Supervisor";
+      return "Production";
     case "ASM":
       return "ASM";
     case "USER":
-      return "Salesperson";
+      return "Marketing / Sales";
     default:
-      return "User";
+      return "Unknown";
   }
 }

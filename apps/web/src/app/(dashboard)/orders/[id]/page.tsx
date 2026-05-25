@@ -213,10 +213,21 @@ type OrderDetail = {
   sampleRemarks?: string | null;
 };
 
+class TransientFetchError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "TransientFetchError";
+  }
+}
+
 async function fetchOrder(id: number): Promise<OrderDetail> {
   const res = await fetch(`/api/orders/${id}`, { credentials: "include" });
   const raw: unknown = await res.json().catch(() => null);
   if (!res.ok) {
+    const code =
+      raw && typeof raw === "object" && "code" in raw && typeof (raw as { code: unknown }).code === "string"
+        ? (raw as { code: string }).code
+        : "";
     const errMsg =
       raw && typeof raw === "object" && "error" in raw && typeof (raw as { error: unknown }).error === "string"
         ? (raw as { error: string }).error
@@ -230,6 +241,10 @@ async function fetchOrder(id: number): Promise<OrderDetail> {
           : res.status === 401
             ? "Session expired — please sign in again."
             : `Could not load enquiry (${res.status}).`;
+    // 503 DB_UNAVAILABLE / DB cold-start → throw a transient error so TanStack retries
+    if (res.status === 503 && (code === "DB_UNAVAILABLE" || !code)) {
+      throw new TransientFetchError(msg);
+    }
     throw new Error(msg);
   }
   if (!raw || typeof raw !== "object") {
@@ -521,6 +536,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [handoffNewDetails, setHandoffNewDetails] = useState("");
   const [handoffExistingDetails, setHandoffExistingDetails] = useState("");
   const [handoffError, setHandoffError] = useState("");
+  const [showHandoffEditForm, setShowHandoffEditForm] = useState(false);
+  // Existing development quick-edit dialog
+  const [existingDevEditOpen, setExistingDevEditOpen] = useState(false);
+  const [existingDevEditText, setExistingDevEditText] = useState("");
+  const [existingDevEditError, setExistingDevEditError] = useState("");
   // New development planning dialog
   const [newDevDialogOpen, setNewDevDialogOpen] = useState(false);
   const [newDevDescription, setNewDevDescription] = useState("");
@@ -606,7 +626,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     queryKey: ["order", orderId],
     queryFn: () => fetchOrder(orderId),
     enabled: Number.isInteger(orderId),
-    retry: 1,
+    // Retry up to 3 times for transient DB cold-start errors; don't retry hard errors (403/404/401).
+    retry: (failureCount, error) => {
+      if (error instanceof TransientFetchError) return failureCount < 3;
+      return false;
+    },
+    retryDelay: (attempt) => [2000, 4000, 6000][attempt] ?? 6000,
     staleTime: 30_000,
   });
 
@@ -642,16 +667,6 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   });
   const divisions = divisionsData?.divisions ?? [];
 
-  const needsHandoff =
-    Boolean(
-      user &&
-        order &&
-        order.status === "IN_PROGRESS" &&
-        !order.enquiryHandoff &&
-        showInteractiveUi &&
-        user.role === "MANAGING_DIRECTOR"
-    );
-
   const isDivisionHead = useMemo(
     () =>
       Boolean(
@@ -663,17 +678,25 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     [user, order?.currentDivision?.managers, order?.id]
   );
 
+  /** True for any role that can assign / reassign the production person. */
   const mayManageHandoffReassign = Boolean(
-    user && (isDivisionHead || ["SUPER_ADMIN", "MANAGING_DIRECTOR"].includes(user.role))
+    user &&
+      showInteractiveUi &&
+      (isDivisionHead || ["SUPER_ADMIN", "MANAGING_DIRECTOR", "MANAGER", "DIVISION_HEAD"].includes(user.role))
   );
+
+  /** Show the first-time assignment form when order is IN_PROGRESS with no handoff yet. */
+  const needsHandoff = Boolean(
+    mayManageHandoffReassign && order && order.status === "IN_PROGRESS" && !order.enquiryHandoff
+  );
+
+  /** Show the read-only + "Edit assignment" view when handoff already exists. */
   const canReassignHandoff = Boolean(
-    showInteractiveUi &&
-      user &&
+    mayManageHandoffReassign &&
       order &&
       order.status === "IN_PROGRESS" &&
       order.enquiryHandoff &&
-      !order.sampleShippedAt &&
-      user.role === "MANAGING_DIRECTOR"
+      !order.sampleShippedAt
   );
   const showHandoffCard = needsHandoff || canReassignHandoff;
 
@@ -881,6 +904,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     onSuccess: async (res) => {
       if (res.ok) {
         setHandoffError("");
+        setShowHandoffEditForm(false);
         setHandoffSupervisorId("");
         setHandoffNewDetails("");
         setHandoffExistingDetails("");
@@ -929,6 +953,33 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       }
       const data = await res.json().catch(() => ({}));
       setHandoffError((data as { error?: string }).error || "Could not clear assignment");
+    },
+  });
+
+  const updateExistingDevMutation = useMutation({
+    mutationFn: () =>
+      fetch(`/api/orders/${orderId}/handoff`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          supervisorId: order?.assignedSupervisorId,
+          developmentKind: "existing",
+          existingProductDetails: existingDevEditText,
+        }),
+      }),
+    onSuccess: async (res) => {
+      if (res.ok) {
+        setExistingDevEditOpen(false);
+        setExistingDevEditText("");
+        setExistingDevEditError("");
+        queryClient.invalidateQueries({ queryKey: ["order", orderId] });
+        queryClient.invalidateQueries({ queryKey: ["order-audit", orderId] });
+        queryClient.invalidateQueries({ queryKey: ["orders"] });
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      setExistingDevEditError((data as { error?: string }).error || "Failed to update details");
     },
   });
 
@@ -1716,7 +1767,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           ) : null}
           {order.assignedSupervisor ? (
             <p className="flex flex-col gap-0.5 px-5 py-3.5 sm:flex-row sm:items-baseline sm:gap-3">
-              <span className="min-w-[10rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">Assigned supervisor</span>
+              <span className="min-w-[10rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">Assigned production</span>
               <span className="text-sm font-semibold text-slate-900">
                 {order.assignedSupervisor.name} <span className="font-normal text-slate-500">({order.assignedSupervisor.email})</span>
               </span>
@@ -1726,7 +1777,10 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             <div className="px-5 py-3.5">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Development classification</p>
-                {showInteractiveUi && user && ["MANAGER", "DIVISION_HEAD", "SUPER_ADMIN", "MANAGING_DIRECTOR"].includes(user.role) && isDivisionHead && !isClosedStatus ? (
+                {showInteractiveUi && user && (
+                  ["MANAGER", "DIVISION_HEAD", "SUPER_ADMIN"].includes(user.role) ||
+                  (assignedSupervisorMe && ["SUPERVISOR", "ASM"].includes(user.role))
+                ) && !isClosedStatus ? (
                   <button
                     type="button"
                     onClick={() => {
@@ -1745,8 +1799,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                         setNewDevDialogError("");
                         setNewDevDialogOpen(true);
                       } else if (handoff.developmentKind === "existing") {
-                        // For existing development, re-open handoff (no dialog needed — handled by handoff form re-show)
-                        // Not applicable here; just a safeguard
+                        setExistingDevEditText(
+                          typeof handoff.existingProductDetails === "string" ? handoff.existingProductDetails : ""
+                        );
+                        setExistingDevEditError("");
+                        setExistingDevEditOpen(true);
                       }
                     }}
                     className="rounded-md border border-violet-200 bg-white/60 px-2.5 py-1 text-xs font-medium text-violet-700 transition-colors hover:bg-white hover:text-violet-900"
@@ -2060,19 +2117,83 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       </Card>
 
       {!isAuditView && showHandoffCard ? (
-        <Card className="overflow-hidden border border-indigo-100 shadow-sm ring-1 ring-indigo-50">
+        <Card id="handoff-assignment-card" className="overflow-hidden border border-indigo-100 shadow-sm ring-1 ring-indigo-50">
           <CardHeader className="border-b border-indigo-100 bg-gradient-to-r from-indigo-50/80 to-violet-50/50 px-5 py-4">
-            <CardTitle className="text-base font-semibold text-indigo-900">
-              {canReassignHandoff && !needsHandoff ? "Update supervisor & development" : "Assign supervisor & development"}
-            </CardTitle>
-            <p className="mt-0.5 text-xs text-indigo-700/70">
-              {canReassignHandoff && !needsHandoff
-                ? "Change the assigned ASM / supervisor or update development classification. Blocked after the sample has been marked shipped."
-                : "Choose an ASM / supervisor from this division only, then classify the enquiry as new or existing development."}
-            </p>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <CardTitle className="text-base font-semibold text-indigo-900">
+                  {needsHandoff ? "Assign production staff & development" : "Production staff & development assignment"}
+                </CardTitle>
+                <p className="mt-0.5 text-xs text-indigo-700/70">
+                  {needsHandoff
+                    ? "Choose production staff from this division only, then classify the enquiry as new or existing development."
+                    : "Assignment saved. Click Edit to update."}
+                </p>
+              </div>
+              {canReassignHandoff && !needsHandoff && !showHandoffEditForm && (
+                <button
+                  type="button"
+                  onClick={() => setShowHandoffEditForm(true)}
+                  className="shrink-0 rounded-md border border-indigo-200 bg-white/60 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-white hover:text-indigo-900 transition-colors"
+                >
+                  Edit assignment
+                </button>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="space-y-4 text-sm">
-            {divisionSupervisors.length === 0 ? (
+            {canReassignHandoff && !needsHandoff && !showHandoffEditForm ? (
+              <div className="space-y-3">
+                {order.assignedSupervisor ? (
+                  <div className="flex items-baseline gap-3">
+                    <span className="min-w-[9rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">Production</span>
+                    <span className="text-sm font-semibold text-slate-900">
+                      {order.assignedSupervisor.name}{" "}
+                      <span className="font-normal text-slate-500">({order.assignedSupervisor.email})</span>
+                    </span>
+                  </div>
+                ) : null}
+                {order.enquiryHandoff && typeof order.enquiryHandoff === "object" ? (
+                  <>
+                    <div className="flex items-baseline gap-3">
+                      <span className="min-w-[9rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">Development</span>
+                      <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ${order.enquiryHandoff.developmentKind === "existing" ? "bg-blue-50 text-blue-700 ring-blue-200" : "bg-violet-50 text-violet-700 ring-violet-200"}`}>
+                        {order.enquiryHandoff.developmentKind === "existing" ? "Existing development" : "New development"}
+                      </span>
+                    </div>
+                    {typeof order.enquiryHandoff.existingProductDetails === "string" && order.enquiryHandoff.existingProductDetails.trim() ? (
+                      <div className="flex items-start gap-3">
+                        <span className="min-w-[9rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">Details</span>
+                        <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{order.enquiryHandoff.existingProductDetails}</p>
+                      </div>
+                    ) : null}
+                    {order.enquiryHandoff.developmentKind === "new" && typeof order.enquiryHandoff.newDevelopmentDetails === "string" && order.enquiryHandoff.newDevelopmentDetails.trim() ? (
+                      <div className="flex items-start gap-3">
+                        <span className="min-w-[9rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">Description</span>
+                        <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{order.enquiryHandoff.newDevelopmentDetails}</p>
+                      </div>
+                    ) : null}
+                  </>
+                ) : null}
+                {user?.role === "MANAGING_DIRECTOR" && (
+                  <div className="pt-1">
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      disabled={deleteHandoffMutation.isPending}
+                      onClick={() => {
+                        setHandoffError("");
+                        deleteHandoffMutation.mutate();
+                      }}
+                    >
+                      {deleteHandoffMutation.isPending ? "Clearing…" : "Clear assignment"}
+                    </Button>
+                    {handoffError ? <p className="mt-2 text-sm text-red-600">{handoffError}</p> : null}
+                  </div>
+                )}
+              </div>
+            ) : divisionSupervisors.length === 0 ? (
               <p className="text-amber-800">
                 No active supervisors are linked to this division. Ask an admin to assign SUPERVISOR users to{" "}
                 <span className="font-medium">{order.currentDivision?.name ?? "this division"}</span>.
@@ -2080,7 +2201,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             ) : (
               <>
                 <div className="space-y-2">
-                  <Label>Supervisor (this division only)</Label>
+                  <Label>Production staff (this division only)</Label>
                   <Select value={handoffSupervisorId} onValueChange={setHandoffSupervisorId}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select supervisor" />
@@ -2173,8 +2294,21 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                       handoffMutation.mutate();
                     }}
                   >
-                    {handoffMutation.isPending ? "Submitting…" : canReassignHandoff && !needsHandoff ? "Save assignment" : "Submit assignment"}
+                    {handoffMutation.isPending ? "Submitting…" : canReassignHandoff ? "Save assignment" : "Submit assignment"}
                   </Button>
+                  {showHandoffEditForm && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={handoffMutation.isPending || deleteHandoffMutation.isPending}
+                      onClick={() => {
+                        setHandoffError("");
+                        setShowHandoffEditForm(false);
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  )}
                   {canReassignHandoff && (
                     <Button
                       type="button"
@@ -2346,7 +2480,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             {order.headSampleRequestApprovedAt ? (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                Request approved{order.headSampleRequestApprovedBy?.name ? ` · ${order.headSampleRequestApprovedBy.name}` : ""}
+                Request approved{order.currentDivision?.name ? ` · ${order.currentDivision.name} Head` : " · Head"}
               </span>
             ) : order.sampleRequested && !legacySampleProgress ? (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 ring-1 ring-amber-200">
@@ -2359,7 +2493,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             {order.sampleApprovedAt && (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                Details approved{order.sampleApprovedBy?.name ? ` · ${order.sampleApprovedBy.name}` : ""}
+                Details approved{order.currentDivision?.name ? ` · ${order.currentDivision.name} Head` : " · Head"}
               </span>
             )}
             {order.sampleShippedAt && (
@@ -2371,8 +2505,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             {order.sampleSpecsAcknowledgedAt && (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-800 ring-1 ring-sky-200">
                 <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />
-                Submitter reviewed specs
-                {order.sampleSpecsAcknowledgedBy?.name ? ` · ${order.sampleSpecsAcknowledgedBy.name}` : ""}
+                Submitter reviewed specs · Marketing / Sales
               </span>
             )}
           </div>
@@ -2651,14 +2784,14 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               <div className="border-t-2 border-indigo-100 bg-gradient-to-br from-indigo-50/60 via-blue-50/30 to-slate-50/40 px-5 py-5 space-y-4">
                 <div className="flex items-center gap-2">
                   <div className="h-6 w-1 rounded-full bg-indigo-500" />
-                  <p className="text-xs font-bold uppercase tracking-widest text-indigo-700">Division Head Actions</p>
+                  <p className="text-xs font-bold uppercase tracking-widest text-indigo-700">Head Actions</p>
                 </div>
 
                 {order.sampleRequested && !order.headSampleRequestApprovedAt && mightManageSample ? (
                   <div className="rounded-xl border border-indigo-200 bg-white/90 p-4 shadow-sm space-y-3">
                     <div>
                       <p className="text-sm font-semibold text-slate-900">Approve sample request</p>
-                      <p className="mt-0.5 text-xs text-slate-500">Salesperson has requested a sample. Approve so the assigned supervisor can submit sample specifications.</p>
+                      <p className="mt-0.5 text-xs text-slate-500">Marketing / Sales has requested a sample. Approve so the assigned production staff can submit sample specifications.</p>
                     </div>
                     {sampleRequestApprovalPrereqMet ? (
                       <Button type="button" size="sm" disabled={sampleMutation.isPending} onClick={() => sampleMutation.mutate({ action: "approveSampleRequest" })}>
@@ -2666,7 +2799,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                       </Button>
                     ) : (
                       <p className="rounded-lg border border-amber-200 bg-amber-50/90 px-3 py-2 text-xs text-amber-900">
-                        Submit <span className="font-semibold">supervisor assignment</span> in the enquiry handoff section above first (including planning details for new development). The server requires that before this approval step.
+                        Submit <span className="font-semibold">production staff assignment</span> in the enquiry handoff section above first (including planning details for new development). The server requires that before this approval step.
                       </p>
                     )}
                   </div>
@@ -2677,7 +2810,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                     <div>
                       <p className="text-sm font-semibold text-slate-900">Approve sample details</p>
                       {!canApproveSampleNow ? (
-                        <p className="mt-0.5 text-xs text-slate-500">Wait for the supervisor to submit sample details first, then approve here.</p>
+                        <p className="mt-0.5 text-xs text-slate-500">Wait for the production team to submit sample details first, then approve here.</p>
                       ) : (
                         <p className="mt-0.5 text-xs text-emerald-700">Sample details have been submitted — ready to review and approve.</p>
                       )}
@@ -2780,7 +2913,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               <div className="border-t-2 border-violet-100 bg-gradient-to-br from-violet-50/60 via-purple-50/30 to-slate-50/40 px-5 py-5 space-y-4">
                 <div className="flex items-center gap-2">
                   <div className="h-6 w-1 rounded-full bg-violet-500" />
-                  <p className="text-xs font-bold uppercase tracking-widest text-violet-700">Supervisor Actions</p>
+                  <p className="text-xs font-bold uppercase tracking-widest text-violet-700">Production Actions</p>
                 </div>
 
                 {order.sampleRequested && !order.headSampleRequestApprovedAt ? (
@@ -3408,6 +3541,43 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setNewDevViewOpen(false)}>
               Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Existing Development Quick-Edit Dialog ── */}
+      <Dialog open={existingDevEditOpen} onOpenChange={(open) => { setExistingDevEditOpen(open); if (!open) setExistingDevEditError(""); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit existing development details</DialogTitle>
+            <DialogDescription>Update the product / reference details for this enquiry.</DialogDescription>
+          </DialogHeader>
+          <div className="py-2 space-y-3">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Existing product / reference details</label>
+              <textarea
+                value={existingDevEditText}
+                onChange={(e) => setExistingDevEditText(e.target.value)}
+                rows={5}
+                className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs"
+                placeholder="Style code, prior enquiry reference, specifications…"
+                autoFocus
+              />
+              <p className="text-xs text-slate-400">Minimum 10 characters required.</p>
+            </div>
+            {existingDevEditError ? <p className="text-sm text-red-600">{existingDevEditError}</p> : null}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setExistingDevEditOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={existingDevEditText.trim().length < 10 || updateExistingDevMutation.isPending}
+              onClick={() => updateExistingDevMutation.mutate()}
+            >
+              {updateExistingDevMutation.isPending ? "Saving…" : "Save changes"}
             </Button>
           </DialogFooter>
         </DialogContent>

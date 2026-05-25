@@ -162,12 +162,10 @@ export function subscribe(handler: EventHandler): () => void {
   };
 }
 
-export async function publish(event: OrderEvent): Promise<void> {
-  for (const handler of handlers) {
-    try {
-      await handler(event);
-    } catch (err) {
-      console.error("[EventBus] Handler error:", err);
-    }
-  }
+export function publish(event: OrderEvent): Promise<void> {
+  // Run all handlers concurrently in the background — callers don't block.
+  Promise.allSettled(
+    handlers.map((h) => Promise.resolve(h(event)).catch((err) => console.error("[EventBus] Handler error:", err)))
+  ).catch(() => {});
+  return Promise.resolve();
 }

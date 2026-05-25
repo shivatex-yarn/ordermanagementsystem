@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
 import { Eye, EyeOff } from "lucide-react";
 import Image from "next/image";
@@ -152,6 +153,13 @@ export default function LoginPage() {
                 >
                   Password
                 </Label>
+                <Link
+                  href="/forgot-password"
+                  className="text-xs text-slate-500 hover:text-slate-900 transition-colors"
+                  tabIndex={-1}
+                >
+                  Forgot password?
+                </Link>
               </div>
               <div className="relative">
                 <Input
