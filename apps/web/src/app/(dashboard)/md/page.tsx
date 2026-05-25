@@ -189,6 +189,8 @@ export default function MDOverviewPage() {
   const [divisionFilter, setDivisionFilter] = useState<string>("");
   const [priorityFilter, setPriorityFilter] = useState<string>("");
   const [slaFilter, setSlaFilter] = useState<"all" | "breached" | "atrisk" | "ok">("all");
+  const [activityPage, setActivityPage] = useState(0);
+  const ACTIVITY_PAGE_SIZE = 10;
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["md-overview"],
@@ -579,40 +581,83 @@ export default function MDOverviewPage() {
       {/* Recent activity timeline */}
       <Card className="border border-slate-200/70 shadow-none">
         <CardContent className="p-5">
-          <div className="mb-3 flex items-center justify-between">
+          <div className="mb-4 flex items-center justify-between">
             <div>
               <h2 className="text-sm font-semibold text-slate-900">Recent enquiry movement</h2>
               <p className="text-xs text-slate-500">Workflow events across every enquiry, newest first.</p>
             </div>
             <span className="flex items-center gap-1 text-xs text-slate-500">
-              <ArrowRightLeft className="h-3 w-3" /> Last 40 events
+              <ArrowRightLeft className="h-3 w-3" />
+              {(data?.recentTimeline ?? []).length} events
             </span>
           </div>
           {isLoading ? (
             <p className="py-4 text-sm text-slate-500">Loading…</p>
           ) : (data?.recentTimeline ?? []).length === 0 ? (
             <p className="py-4 text-sm text-slate-500">No recent activity.</p>
-          ) : (
-            <ol className="relative space-y-3 border-l border-slate-200 pl-5">
-              {(data?.recentTimeline ?? []).map((e) => (
-                <li key={e.id} className="relative">
-                  <span className="absolute -left-[1.45rem] top-1.5 inline-flex h-2.5 w-2.5 rounded-full bg-slate-900 ring-4 ring-white" />
-                  <div className="flex items-baseline gap-2">
-                    <Link href={`/orders/${e.order.id}`} className="font-mono text-xs font-semibold text-slate-900 hover:underline">
-                      {e.order.orderNumber}
-                    </Link>
-                    <span className="text-xs text-slate-500">· {e.order.currentDivision.name}</span>
-                    <span className="ml-auto text-xs text-slate-400">{relativeTime(e.createdAt)}</span>
+          ) : (() => {
+            const all = data?.recentTimeline ?? [];
+            const totalPages = Math.ceil(all.length / ACTIVITY_PAGE_SIZE);
+            const page = Math.min(activityPage, totalPages - 1);
+            const slice = all.slice(page * ACTIVITY_PAGE_SIZE, page * ACTIVITY_PAGE_SIZE + ACTIVITY_PAGE_SIZE);
+            return (
+              <>
+                <ol className="relative space-y-4 border-l border-slate-200 pl-5">
+                  {slice.map((e) => (
+                    <li key={e.id} className="relative">
+                      <span className="absolute -left-[1.45rem] top-1.5 inline-flex h-2.5 w-2.5 rounded-full bg-slate-900 ring-4 ring-white" />
+                      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                        <Link href={`/orders/${e.order.id}`} className="font-mono text-xs font-semibold text-slate-900 hover:underline">
+                          {e.order.orderNumber}
+                        </Link>
+                        <span className="text-xs text-slate-400">· {e.order.currentDivision.name}</span>
+                        <span className="ml-auto text-xs text-slate-400">{relativeTime(e.createdAt)}</span>
+                      </div>
+                      <p className="mt-0.5 text-sm font-medium text-slate-800">{e.title}</p>
+                      {e.detail ? <p className="mt-0.5 text-xs text-slate-500">{e.detail}</p> : null}
+                      {e.actor ? (
+                        <p className="mt-0.5 text-[11px] text-slate-400">
+                          by {e.actor.name} · {e.actor.role.replace(/_/g, " ")}
+                        </p>
+                      ) : null}
+                    </li>
+                  ))}
+                </ol>
+
+                {/* Pagination controls */}
+                {totalPages > 1 && (
+                  <div className="mt-5 flex items-center justify-between border-t border-slate-100 pt-4">
+                    <p className="text-xs text-slate-500">
+                      Showing {page * ACTIVITY_PAGE_SIZE + 1}–{Math.min((page + 1) * ACTIVITY_PAGE_SIZE, all.length)} of {all.length}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-3 text-xs"
+                        disabled={page === 0}
+                        onClick={() => setActivityPage((p) => Math.max(0, p - 1))}
+                      >
+                        ← Previous
+                      </Button>
+                      <span className="text-xs text-slate-500">
+                        Page {page + 1} / {totalPages}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-3 text-xs"
+                        disabled={page >= totalPages - 1}
+                        onClick={() => setActivityPage((p) => Math.min(totalPages - 1, p + 1))}
+                      >
+                        Next →
+                      </Button>
+                    </div>
                   </div>
-                  <p className="mt-0.5 text-sm text-slate-800">{e.title}</p>
-                  {e.detail ? <p className="text-xs text-slate-500">{e.detail}</p> : null}
-                  {e.actor ? (
-                    <p className="text-[11px] text-slate-400">by {e.actor.name} · {e.actor.role}</p>
-                  ) : null}
-                </li>
-              ))}
-            </ol>
-          )}
+                )}
+              </>
+            );
+          })()}
         </CardContent>
       </Card>
     </div>
