@@ -312,6 +312,7 @@ export async function transferOrder(
         currentDivisionId: toDivisionId,
         transferCount: { increment: 1 },
         slaDeadline,
+        ...ALL_STAGE_DEADLINES_NULL,
       },
       include: {
         createdBy: { select: { id: true, name: true, email: true } },
@@ -432,7 +433,7 @@ export async function receiveOrder(orderId: number, receivedById: number, receiv
   const slaDeadline = computeSlaDeadline(new Date());
   const updated = await prisma.order.update({
     where: { id: orderId },
-    data: { receivedById, slaDeadline, receiveReason: trimmed },
+    data: { receivedById, slaDeadline, receiveReason: trimmed, ...ALL_STAGE_DEADLINES_NULL },
     include: {
       createdBy: { select: { id: true, name: true, email: true } },
       currentDivision: { select: { id: true, name: true } },
@@ -712,7 +713,7 @@ export async function approveOrderSample(orderId: number, userId: number) {
     orderNumber: updated.orderNumber,
     divisionId: updated.currentDivisionId,
     approvedById: userId,
-    timestamp: new Date().toISOString(),
+    timestamp: approveNow.toISOString(),
     userId,
   });
   return updated;
@@ -930,12 +931,16 @@ export async function submitEnquiryHandoff(
     };
   }
 
-  // Head-sample-approval SLA: only starts on first handoff when sample is requested
-  // and head hasn't yet approved the sample request.
-  const headSampleApprovalDeadline =
+  // Head-sample-approval SLA:
+  //   • First submission + sample requested + not yet approved → start the 24h timer.
+  //   • Update submission → clear any stale timer (approval may have happened
+  //     since the original handoff, or conditions changed).
+  const headSampleApprovalDeadline: Date | null | undefined =
     !isUpdate && order.sampleRequested && !order.headSampleRequestApprovedAt
       ? computeSlaDeadline(now, HEAD_SAMPLE_APPROVAL_SLA_HOURS)
-      : undefined;
+      : isUpdate
+        ? null  // explicit clear on update — no stale timer should survive
+        : undefined;
 
   const updated = await prisma.order.update({
     where: { id: orderId },

@@ -173,7 +173,8 @@ const SOUTH_INDIAN_HINDU_HOLIDAYS = new Set([
   "2040-08-30",
 
   // ── Vijayadasami / Dussehra (10th Ashwin Shukla — Saraswati Puja / Golu) ──
-  "2025-10-02", "2026-10-21", "2027-10-11", "2028-09-29", "2029-10-18",
+  // 2025-10-02 intentionally omitted — already covered by Gandhi Jayanti in FIXED set.
+  "2026-10-21", "2027-10-11", "2028-09-29", "2029-10-18",
   "2030-10-07", "2031-10-26", "2032-10-15", "2033-10-04", "2034-10-24",
   "2035-10-13", "2036-10-01", "2037-10-20", "2038-10-09", "2039-09-28",
   "2040-10-17",
