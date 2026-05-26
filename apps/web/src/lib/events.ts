@@ -92,6 +92,7 @@ export interface SLABreachEvent extends BaseOrderEvent {
   type: "SLABreachDetected";
   divisionId: number;
   orderId: number;
+  breachType?: string;
 }
 
 export interface SLABreachHeadRejectionSubmittedEvent extends BaseOrderEvent {

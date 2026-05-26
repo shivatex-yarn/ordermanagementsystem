@@ -251,7 +251,20 @@ model Order {
   @@index([createdById, createdAt(sort: Desc)])
   @@index([currentDivisionId, createdAt(sort: Desc)])
   @@index([priority, status])
+  // Stage-specific SLA deadlines — set when each stage begins, cleared when it completes.
+  // Breach job monitors all of these in addition to the placement/transfer slaDeadline.
+  handoffSlaDeadline            DateTime? @map("handoff_sla_deadline")
+  headSampleApprovalSlaDeadline DateTime? @map("head_sample_approval_sla_deadline")
+  sampleDetailsSlaDeadline      DateTime? @map("sample_details_sla_deadline")
+  sampleApprovalSlaDeadline     DateTime? @map("sample_approval_sla_deadline")
+  shipmentSlaDeadline           DateTime? @map("shipment_sla_deadline")
+
   @@index([status, slaDeadline])
+  @@index([handoffSlaDeadline])
+  @@index([headSampleApprovalSlaDeadline])
+  @@index([sampleDetailsSlaDeadline])
+  @@index([sampleApprovalSlaDeadline])
+  @@index([shipmentSlaDeadline])
 }
 
 model OrderTransfer {
@@ -316,6 +329,9 @@ model SLABreach {
   headRejectionMessage String?   @map("head_rejection_message") @db.Text
   headRejectedAt       DateTime? @map("head_rejected_at")
   headRejectedById     Int?      @map("head_rejected_by_id")
+
+  /** Which workflow stage this breach belongs to. */
+  breachType           String    @default("PLACEMENT") @map("breach_type")
 
   /** Login-time delay reason: gates Division Head's access to other modules. Free-form delay rationale. */
   delayReasonText      String?   @map("delay_reason_text") @db.Text

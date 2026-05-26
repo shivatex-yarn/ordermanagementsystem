@@ -4,6 +4,11 @@ import { registerEventHandlers } from "@/lib/event-handlers";
 import { appendTimeline } from "@/lib/timeline";
 import { advancePastNonWorkingDay } from "@/lib/sla-calendar";
 const SLA_HOURS = 48;
+const HANDOFF_SLA_HOURS = 24;              // head must assign supervisor within 24 h of acceptance
+const HEAD_SAMPLE_APPROVAL_SLA_HOURS = 24; // head must approve sample request within 24 h of handoff
+const SAMPLE_DETAILS_SLA_HOURS = 48;       // supervisor must submit sample details within 48 h
+const SAMPLE_APPROVAL_SLA_HOURS = 24;      // head must approve sample within 24 h of details
+const SHIPMENT_SLA_HOURS = 48;             // supervisor must record shipment within 48 h of approval
 
 registerEventHandlers();
 
@@ -13,12 +18,17 @@ function addHours(date: Date, h: number): Date {
   return d;
 }
 
-function computeSlaDeadline(start: Date): Date {
-  // Add 48 calendar hours then push the deadline forward if it lands on a
-  // Sunday or Indian public holiday so the deadline is always a working day.
-  const d = addHours(start, SLA_HOURS);
-  return advancePastNonWorkingDay(d);
+function computeSlaDeadline(start: Date, hours = SLA_HOURS): Date {
+  return advancePastNonWorkingDay(addHours(start, hours));
 }
+
+const ALL_STAGE_DEADLINES_NULL = {
+  handoffSlaDeadline: null,
+  headSampleApprovalSlaDeadline: null,
+  sampleDetailsSlaDeadline: null,
+  sampleApprovalSlaDeadline: null,
+  shipmentSlaDeadline: null,
+};
 
 async function getOpenSlaBreach(orderId: number) {
   return prisma.sLABreach.findFirst({
@@ -235,6 +245,7 @@ export async function acceptOrder(orderId: number, acceptedById: number, accepta
   if (!order || blocked) return null;
   if (order.status !== "PLACED" && order.status !== "TRANSFERRED") return null;
   if (order.status === "TRANSFERRED" && !order.receivedById) return null;
+  const now = new Date();
   const updated = await prisma.order.update({
     where: { id: orderId },
     data: {
@@ -242,6 +253,8 @@ export async function acceptOrder(orderId: number, acceptedById: number, accepta
       acceptedById,
       slaDeadline: null,
       acceptanceReason: trimmedReason,
+      // Head now has 24 h to assign a supervisor via enquiry handoff.
+      handoffSlaDeadline: computeSlaDeadline(now, HANDOFF_SLA_HOURS),
     },
     include: {
       createdBy: { select: { id: true, name: true, email: true } },
@@ -256,7 +269,7 @@ export async function acceptOrder(orderId: number, acceptedById: number, accepta
     acceptedById: updated.acceptedById!,
     divisionId: updated.currentDivisionId,
     acceptanceReason: trimmedReason,
-    timestamp: new Date().toISOString(),
+    timestamp: now.toISOString(),
     userId: acceptedById,
   });
   return updated;
@@ -299,6 +312,7 @@ export async function transferOrder(
         currentDivisionId: toDivisionId,
         transferCount: { increment: 1 },
         slaDeadline,
+        ...ALL_STAGE_DEADLINES_NULL,
       },
       include: {
         createdBy: { select: { id: true, name: true, email: true } },
@@ -346,6 +360,7 @@ export async function rejectOrder(orderId: number, rejectedById: number, reason:
         rejectedById,
         rejectionCount: { increment: 1 },
         slaDeadline: null,
+        ...ALL_STAGE_DEADLINES_NULL,
       },
       include: {
         createdBy: { select: { id: true, name: true, email: true } },
@@ -385,6 +400,7 @@ export async function cancelOrderByCreator(orderId: number, cancelledById: numbe
       cancelledById,
       cancellationReason: trimmed,
       slaDeadline: null,
+      ...ALL_STAGE_DEADLINES_NULL,
     },
     include: {
       createdBy: { select: { id: true, name: true, email: true } },
@@ -417,7 +433,7 @@ export async function receiveOrder(orderId: number, receivedById: number, receiv
   const slaDeadline = computeSlaDeadline(new Date());
   const updated = await prisma.order.update({
     where: { id: orderId },
-    data: { receivedById, slaDeadline, receiveReason: trimmed },
+    data: { receivedById, slaDeadline, receiveReason: trimmed, ...ALL_STAGE_DEADLINES_NULL },
     include: {
       createdBy: { select: { id: true, name: true, email: true } },
       currentDivision: { select: { id: true, name: true } },
@@ -451,7 +467,7 @@ export async function completeOrder(orderId: number, completedById: number) {
   const durationMs = completedAt.getTime() - order.createdAt.getTime();
   const updated = await prisma.order.update({
     where: { id: orderId },
-    data: { status: "COMPLETED", completedById, completedAt, slaDeadline: null },
+    data: { status: "COMPLETED", completedById, completedAt, slaDeadline: null, ...ALL_STAGE_DEADLINES_NULL },
     include: {
       createdBy: { select: { id: true, name: true, email: true } },
       currentDivision: { select: { id: true, name: true } },
@@ -545,6 +561,18 @@ export async function updateOrderSampleDetails(
   const handoverPersonName = input.handoverPersonName !== undefined ? input.handoverPersonName.trim() || null : undefined;
   const handoverPersonPhone = input.handoverPersonPhone !== undefined ? input.handoverPersonPhone.trim() || null : undefined;
   const handoverPersonType = input.handoverPersonType !== undefined ? input.handoverPersonType.trim() || null : undefined;
+
+  // First meaningful submission clears the details SLA and starts the approval SLA.
+  const hadNoDetails =
+    !order.sampleDetails?.trim() && !order.sampleQuantity?.trim() && !order.sampleWeight?.trim();
+  const submittingDetails = Boolean(
+    (sampleDetails !== undefined && sampleDetails?.trim()) ||
+    (sampleQuantity !== undefined && sampleQuantity?.trim()) ||
+    (sampleWeight !== undefined && sampleWeight?.trim())
+  );
+  const isFirstDetailsSubmission = hadNoDetails && submittingDetails;
+  const detailsNow = new Date();
+
   const updated = await prisma.order.update({
     where: { id: orderId },
     data: {
@@ -559,6 +587,12 @@ export async function updateOrderSampleDetails(
       ...(handoverPersonType !== undefined && { handoverPersonType }),
       ...(order.sampleApprovedAt
         ? { sampleSpecsAcknowledgedAt: null, sampleSpecsAcknowledgedById: null }
+        : {}),
+      ...(isFirstDetailsSubmission
+        ? {
+            sampleDetailsSlaDeadline: null,
+            sampleApprovalSlaDeadline: computeSlaDeadline(detailsNow, SAMPLE_APPROVAL_SLA_HOURS),
+          }
         : {}),
     },
     include: {
@@ -658,11 +692,14 @@ export async function approveOrderSample(orderId: number, userId: number) {
   const hasExistingRef =
     sd && sd.type === "existing" && typeof sd.existingReference === "string" && sd.existingReference.trim().length > 0;
   if (!hasSavedDetails && !hasNewDev && !hasExistingRef) return null;
+  const approveNow = new Date();
   const updated = await prisma.order.update({
     where: { id: orderId },
     data: {
-      sampleApprovedAt: new Date(),
+      sampleApprovedAt: approveNow,
       sampleApprovedById: userId,
+      sampleApprovalSlaDeadline: null, // approval done — timer clears
+      shipmentSlaDeadline: computeSlaDeadline(approveNow, SHIPMENT_SLA_HOURS),
     },
     include: {
       createdBy: { select: { id: true, name: true, email: true } },
@@ -676,7 +713,7 @@ export async function approveOrderSample(orderId: number, userId: number) {
     orderNumber: updated.orderNumber,
     divisionId: updated.currentDivisionId,
     approvedById: userId,
-    timestamp: new Date().toISOString(),
+    timestamp: approveNow.toISOString(),
     userId,
   });
   return updated;
@@ -730,6 +767,7 @@ export async function recordSampleShipment(
       handoverPersonPhone: sentByCourier ? null : handoverPersonPhone,
       handoverPersonType: sentByCourier ? null : handoverPersonType,
       ...(sampleProofUrl !== undefined && { sampleProofUrl }),
+      shipmentSlaDeadline: null, // sample shipped — timer clears
     },
     include: {
       createdBy: { select: { id: true, name: true, email: true } },
@@ -893,12 +931,27 @@ export async function submitEnquiryHandoff(
     };
   }
 
+  // Head-sample-approval SLA:
+  //   • First submission + sample requested + not yet approved → start the 24h timer.
+  //   • Update submission → clear any stale timer (approval may have happened
+  //     since the original handoff, or conditions changed).
+  const headSampleApprovalDeadline: Date | null | undefined =
+    !isUpdate && order.sampleRequested && !order.headSampleRequestApprovedAt
+      ? computeSlaDeadline(now, HEAD_SAMPLE_APPROVAL_SLA_HOURS)
+      : isUpdate
+        ? null  // explicit clear on update — no stale timer should survive
+        : undefined;
+
   const updated = await prisma.order.update({
     where: { id: orderId },
     data: {
       assignedSupervisorId: supervisor.id,
       enquiryHandoff: handoff as object,
       ...extraData,
+      handoffSlaDeadline: null, // handoff submitted — timer clears
+      ...(headSampleApprovalDeadline !== undefined
+        ? { headSampleApprovalSlaDeadline: headSampleApprovalDeadline }
+        : {}),
     },
     include: {
       createdBy: { select: { id: true, name: true, email: true } },
@@ -949,6 +1002,8 @@ export async function approveHeadSampleRequest(orderId: number, userId: number) 
     data: {
       headSampleRequestApprovedAt: now,
       headSampleRequestApprovedById: userId,
+      headSampleApprovalSlaDeadline: null, // approval done — timer clears
+      sampleDetailsSlaDeadline: computeSlaDeadline(now, SAMPLE_DETAILS_SLA_HOURS),
     },
     include: {
       createdBy: { select: { id: true, name: true, email: true } },
