@@ -741,8 +741,12 @@ export async function recordSampleShipment(
     orderId: updated.id,
     orderNumber: updated.orderNumber,
     divisionId: updated.currentDivisionId,
+    sentByCourier,
     courierName: updated.courierName ?? "",
     trackingId: updated.trackingId ?? "",
+    handoverPersonName: (updated as Record<string, unknown>).handoverPersonName as string | undefined,
+    handoverPersonPhone: (updated as Record<string, unknown>).handoverPersonPhone as string | undefined,
+    handoverPersonType: (updated as Record<string, unknown>).handoverPersonType as string | undefined,
     timestamp: new Date().toISOString(),
     userId,
   });
