@@ -82,17 +82,37 @@ export async function POST(req: Request) {
     const password = parsed.data.password;
     const isMockCreds = emailNorm === MOCK_EMAIL && password === MOCK_PASSWORD;
 
-    let user;
+    let user: {
+      id: number;
+      name: string;
+      email: string;
+      role: Role;
+      divisionId: number | null;
+      passwordHash: string;
+      active: boolean;
+    } | null = null;
     {
+      // Short retry delays — Neon cold starts resolve in < 500 ms once the pooler
+      // warms up; long delays (800 ms+) just made the UI feel sluggish.
       const MAX_ATTEMPTS = 3;
-      const RETRY_DELAYS_MS = [800, 1500];
+      const RETRY_DELAYS_MS = [150, 400];
       let lastErr: unknown;
       let succeeded = false;
       for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
         try {
+          // Use `select` instead of `include: { division: true }` — the division
+          // JOIN added ~5–15 ms and the division row is not used in the login response.
           user = await prisma.user.findUnique({
             where: { email: emailNorm },
-            include: { division: true },
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              role: true,
+              divisionId: true,
+              passwordHash: true,
+              active: true,
+            },
           });
           succeeded = true;
           break;
@@ -153,26 +173,31 @@ export async function POST(req: Request) {
       null;
     const userAgent = req.headers.get("user-agent") ?? null;
 
-    try {
-      await prisma.userLoginSession.create({
-        data: {
-          userId: user.id,
-          sessionId,
-          ipAddress: ip,
-          userAgent,
-        },
-      });
-    } catch (err) {
-      console.error("[login] UserLoginSession create failed:", err);
-    }
-
-    const token = await signToken({
-      sub: String(user.id),
-      email: user.email,
-      role: user.role,
-      divisionId: user.divisionId ?? undefined,
-      sid: sessionId,
-    });
+    // Fire session write and JWT signing in parallel — they are independent.
+    // bcrypt.compare already took ~200–400 ms; the session insert adds another ~30–80 ms
+    // on cold Neon. Overlapping it with signToken (CPU-only, ~2 ms) is free latency.
+    const [, token] = await Promise.all([
+      prisma.userLoginSession
+        .create({
+          data: {
+            userId: user.id,
+            sessionId,
+            ipAddress: ip,
+            userAgent,
+          },
+        })
+        .catch((err) => {
+          // Non-fatal: session logging must not block the user's login.
+          console.error("[login] UserLoginSession create failed:", err);
+        }),
+      signToken({
+        sub: String(user.id),
+        email: user.email,
+        role: user.role,
+        divisionId: user.divisionId ?? undefined,
+        sid: sessionId,
+      }),
+    ]);
     const response = NextResponse.json(
       {
         user: {

@@ -74,8 +74,10 @@ export async function GET() {
 
       if (looksLikeDbUnavailable) {
         // One quick retry for flaky pooler disconnects.
+        // 100 ms is enough time for Neon PgBouncer to re-assign an idle connection;
+        // the previous 450 ms delay made every page refresh after a cold start feel slow.
         try {
-          await new Promise((r) => setTimeout(r, 450));
+          await new Promise((r) => setTimeout(r, 100));
           const db2 = await withTiming("db_user_retry", () =>
             prisma.user.findUnique({
               where: { id: userId },
