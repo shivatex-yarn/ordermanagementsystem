@@ -1,12 +1,14 @@
 import { prisma } from "@/lib/db";
 import { subscribe } from "@/lib/events";
 import type { OrderEvent } from "@/lib/events";
-import { formatEnquiryNumber } from "@/lib/enquiry-display";
+import { formatEnquiryNumber, formatEnquiryNumberShort } from "@/lib/enquiry-display";
 import { getNotificationShortLabel } from "@/lib/notification-labels";
 import {
   sendEnquiryNotificationEmail,
   sendSlaBreachDetailEmail,
   sendSupervisorEnquiryHandoffEmail,
+  sendNewEnquiryToDivisionHeadEmail,
+  sendSampleShippedEmail,
   sendEmail,
   sendEmailsThrottled,
 } from "@/lib/email";
@@ -149,6 +151,71 @@ async function notificationHandler(event: OrderEvent): Promise<void> {
     return;
   }
 
+  // ── OrderCreated: send rich email to division heads with enquiry details ──
+  if (event.type === "OrderCreated") {
+    const e = event as Extract<OrderEvent, { type: "OrderCreated" }>;
+    const createdOrder = await prisma.order.findUnique({
+      where: { id: event.orderId },
+      include: {
+        createdBy: { select: { id: true, name: true, email: true } },
+        currentDivision: { select: { id: true, name: true } },
+      },
+    });
+    if (!createdOrder) return;
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+
+    // Notify: division heads/managers + super admins + MDs
+    const [headsByMgr, headsByRole, sAdmins, createdMds] = await Promise.all([
+      prisma.divisionManager.findMany({
+        where: { divisionId: e.divisionId },
+        select: { user: { select: { id: true, name: true, email: true, role: true } } },
+      }),
+      prisma.user.findMany({
+        where: { role: { in: ["DIVISION_HEAD", "MANAGER"] }, divisionId: e.divisionId, active: true },
+        select: { id: true, name: true, email: true, role: true },
+      }),
+      prisma.user.findMany({ where: { role: "SUPER_ADMIN", active: true }, select: { id: true } }),
+      prisma.user.findMany({ where: { role: "MANAGING_DIRECTOR", active: true }, select: { id: true } }),
+    ]);
+
+    const headMap = new Map<number, { id: number; name: string; email: string; role: string }>();
+    headsByMgr.forEach((m) => { if (m.user) headMap.set(m.user.id, m.user); });
+    headsByRole.forEach((u) => headMap.set(u.id, u));
+
+    const notifyIds = new Set<number>([e.createdById]);
+    headMap.forEach((_, id) => notifyIds.add(id));
+    sAdmins.forEach((u) => notifyIds.add(u.id));
+    createdMds.forEach((u) => notifyIds.add(u.id));
+
+    for (const uid of notifyIds) {
+      await prisma.notification.create({
+        data: { userId: uid, type: event.type, title, body, metadata: event as object },
+      });
+    }
+
+    // Send rich emails to heads/managers only
+    const emailTargets = Array.from(headMap.values());
+    if (emailTargets.length > 0) {
+      await sendEmailsThrottled(
+        emailTargets.map((u) => () =>
+          sendNewEnquiryToDivisionHeadEmail(u.email, u.name, {
+            orderNumber: createdOrder.orderNumber,
+            divisionName: createdOrder.currentDivision.name,
+            submittedByName: createdOrder.createdBy.name,
+            submittedByEmail: createdOrder.createdBy.email,
+            customerName: createdOrder.customerName,
+            companyName: createdOrder.companyName ?? "",
+            customerPhone: createdOrder.customerPhone,
+            description: createdOrder.description ?? "",
+            sampleRequested: createdOrder.sampleRequested,
+            orderUrl: `${appUrl}/orders/${createdOrder.id}`,
+          })
+        )
+      );
+    }
+    return;
+  }
+
   if (event.type === "OrderEnquiryHandoffSubmitted") {
     const e = event as Extract<OrderEvent, { type: "OrderEnquiryHandoffSubmitted" }>;
     const order = await prisma.order.findUnique({
@@ -260,6 +327,80 @@ async function notificationHandler(event: OrderEvent): Promise<void> {
     return;
   }
 
+  // ── SampleShipped: send rich shipment email to division heads ───────────
+  if (event.type === "SampleShipped") {
+    const e = event as Extract<OrderEvent, { type: "SampleShipped" }>;
+    const shippedOrder = await prisma.order.findUnique({
+      where: { id: event.orderId },
+      select: {
+        companyName: true,
+        customerName: true,
+        currentDivisionId: true,
+        createdById: true,
+        assignedSupervisorId: true,
+      },
+    });
+    if (shippedOrder) {
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+      const [shippedMgrLinks, shippedHeads, shippedSAdmins, shippedMds, shippedAsmSups] = await Promise.all([
+        prisma.divisionManager.findMany({
+          where: { divisionId: shippedOrder.currentDivisionId },
+          select: { userId: true },
+        }),
+        prisma.user.findMany({
+          where: { role: { in: ["DIVISION_HEAD", "MANAGER"] }, divisionId: shippedOrder.currentDivisionId, active: true },
+          select: { id: true },
+        }),
+        prisma.user.findMany({ where: { role: "SUPER_ADMIN", active: true }, select: { id: true } }),
+        prisma.user.findMany({ where: { role: "MANAGING_DIRECTOR", active: true }, select: { id: true } }),
+        prisma.user.findMany({ where: { role: { in: ["SUPERVISOR", "ASM"] }, divisionId: shippedOrder.currentDivisionId, active: true }, select: { id: true } }),
+      ]);
+      const notifySet = new Set<number>([shippedOrder.createdById]);
+      if (shippedOrder.assignedSupervisorId) notifySet.add(shippedOrder.assignedSupervisorId);
+      shippedMgrLinks.forEach((m) => notifySet.add(m.userId));
+      shippedHeads.forEach((u) => notifySet.add(u.id));
+      shippedSAdmins.forEach((u) => notifySet.add(u.id));
+      shippedMds.forEach((u) => notifySet.add(u.id));
+      shippedAsmSups.forEach((u) => notifySet.add(u.id));
+      for (const uid of notifySet) {
+        await prisma.notification.create({
+          data: { userId: uid, type: event.type, title, body, metadata: event as object },
+        });
+      }
+      const shippedUsers = await prisma.user.findMany({
+        where: { id: { in: [...notifySet] } },
+        select: { id: true, name: true, email: true, role: true },
+      });
+      // Rich email to division heads (and assigned supervisor); generic email to others
+      const headEmailTargets = shippedUsers.filter((u) =>
+        ["DIVISION_HEAD", "MANAGER"].includes(u.role)
+      );
+      const otherEmailTargets = shippedUsers.filter(
+        (u) => !["DIVISION_HEAD", "MANAGER", "MANAGING_DIRECTOR"].includes(u.role)
+      );
+      await sendEmailsThrottled([
+        ...headEmailTargets.map((u) => () =>
+          sendSampleShippedEmail(u.email, u.name, {
+            orderNumber: event.orderNumber,
+            companyName: shippedOrder.companyName,
+            customerName: shippedOrder.customerName,
+            sentByCourier: e.sentByCourier,
+            courierName: e.sentByCourier ? e.courierName : undefined,
+            trackingId: e.sentByCourier ? e.trackingId : undefined,
+            handoverPersonName: !e.sentByCourier ? e.handoverPersonName : undefined,
+            handoverPersonPhone: !e.sentByCourier ? e.handoverPersonPhone : undefined,
+            handoverPersonType: !e.sentByCourier ? e.handoverPersonType : undefined,
+            orderUrl: `${appUrl}/orders/${event.orderId}`,
+          })
+        ),
+        ...otherEmailTargets.map((u) => () =>
+          sendEnquiryNotificationEmail(u.email, u.name, event.orderNumber, event.type, eventTypeToSummary(event.type, event))
+        ),
+      ]);
+    }
+    return;
+  }
+
   // ── SalesFeedbackRecorded: targeted email to all division heads ──────────
   if (event.type === "SalesFeedbackRecorded") {
     const feedbackOrder = await prisma.order.findUnique({
@@ -295,16 +436,11 @@ async function notificationHandler(event: OrderEvent): Promise<void> {
           data: { userId: uid, type: event.type, title, body, metadata: event as object },
         });
       }
-      const summary = `Marketing / Sales has submitted customer feedback for enquiry ${event.orderNumber}${feedbackOrder.companyName ? ` (${feedbackOrder.companyName})` : ""}.`;
+      const feedbackSummary = `Customer feedback has been submitted for ${formatEnquiryNumberShort(event.orderNumber)}${feedbackOrder.companyName ? ` · ${feedbackOrder.companyName}` : ""}.`;
       const feedbackEmailTargets = Array.from(headMap.values()).filter((u) => u.role !== "MANAGING_DIRECTOR");
       sendEmailsThrottled(
         feedbackEmailTargets.map((u) => () =>
-          sendEmail({
-            to: u.email,
-            subject: `Customer feedback received — ${event.orderNumber}`,
-            html: `<p>Hi ${u.name},</p><p>${summary}</p><p><a href="${appUrl}/orders/${event.orderId}">View enquiry →</a></p>`,
-            text: `${summary}\n\nView: ${appUrl}/orders/${event.orderId}`,
-          })
+          sendEnquiryNotificationEmail(u.email, u.name, event.orderNumber, event.type, feedbackSummary)
         )
       ).catch((err) => console.error("[email] feedback head email batch failed:", err));
     }
@@ -353,13 +489,9 @@ async function notificationHandler(event: OrderEvent): Promise<void> {
       // Dedicated email to assigned production person
       if (completedOrder.assignedSupervisor?.email) {
         const sup = completedOrder.assignedSupervisor;
-        const summary = `Enquiry ${event.orderNumber}${completedOrder.companyName ? ` (${completedOrder.companyName})` : ""} has been marked as completed by the division head.`;
-        sendEmail({
-          to: sup.email,
-          subject: `Enquiry completed — ${event.orderNumber}`,
-          html: `<p>Hi ${sup.name},</p><p>${summary}</p><p><a href="${appUrl}/orders/${event.orderId}">View enquiry →</a></p>`,
-          text: `${summary}\n\nView: ${appUrl}/orders/${event.orderId}`,
-        }).catch((err) => console.error("[email] Completed supervisor email failed:", err));
+        const completedSup = `Enquiry ${formatEnquiryNumberShort(event.orderNumber)}${completedOrder.companyName ? ` · ${completedOrder.companyName}` : ""} has been marked as completed by the Division Head.`;
+        sendEnquiryNotificationEmail(sup.email, sup.name, event.orderNumber, event.type, completedSup)
+          .catch((err) => console.error("[email] Completed supervisor email failed:", err));
       }
       // Generic email to others (excluding MD and supervisor who got dedicated one)
       const allNotifyUsers = await prisma.user.findMany({
@@ -516,7 +648,12 @@ export function eventTypeToSummary(type: string, event: OrderEvent): string {
       return `Sample was approved for enquiry ${event.orderNumber}.`;
     case "SampleShipped": {
       const e = event as Extract<OrderEvent, { type: "SampleShipped" }>;
-      return `Sample was shipped for enquiry ${e.orderNumber} (${e.courierName}, tracking ${e.trackingId}).`;
+      if (e.sentByCourier) {
+        return `Sample was shipped via courier for enquiry ${e.orderNumber} (${e.courierName}, tracking: ${e.trackingId}).`;
+      }
+      const who = e.handoverPersonName ?? "hand";
+      const type = e.handoverPersonType === "inhouse" ? "in-house" : e.handoverPersonType === "thirdparty" ? "third-party" : "";
+      return `Sample was hand-delivered for enquiry ${e.orderNumber}${who !== "hand" ? ` by ${who}${type ? ` (${type})` : ""}` : ""}.`;
     }
     case "SalesFeedbackRecorded":
       return `Sales feedback was submitted for enquiry ${event.orderNumber}.`;
@@ -580,13 +717,13 @@ async function timelineHandler(event: OrderEvent): Promise<void> {
     },
     SampleApproved: { type: "SAMPLE_APPROVED", title: "Sample approved (final)" },
     SampleHeadRequestApproved: { type: "SAMPLE_APPROVED_BY_HEAD", title: "Sample request approved by Division Head" },
-    SampleShipped: {
-      type: "SAMPLE_SHIPPED",
-      title: "Sample shipped",
-      detail:
-        `Courier: ${(event as Extract<OrderEvent, { type: "SampleShipped" }>).courierName} · ` +
-        `Tracking: ${(event as Extract<OrderEvent, { type: "SampleShipped" }>).trackingId}`,
-    },
+    SampleShipped: (() => {
+      const e = event as Extract<OrderEvent, { type: "SampleShipped" }>;
+      const detail = e.sentByCourier
+        ? `Courier: ${e.courierName} · Tracking: ${e.trackingId}`
+        : `Hand delivery by ${e.handoverPersonName ?? "—"}${e.handoverPersonType === "inhouse" ? " (in-house)" : e.handoverPersonType === "thirdparty" ? " (third-party)" : ""}`;
+      return { type: "SAMPLE_SHIPPED" as const, title: "Sample shipped", detail };
+    })(),
     SalesFeedbackRecorded: { type: "CUSTOMER_FEEDBACK", title: "Customer feedback submitted" },
     SLABreachDetected: { type: "SLA_BREACHED", title: "SLA breach detected (48-hour rule)" },
     SLABreachHeadRejectionSubmitted: {

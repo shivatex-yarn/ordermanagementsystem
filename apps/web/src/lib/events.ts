@@ -123,8 +123,12 @@ export interface SampleApprovedEvent extends BaseOrderEvent {
 export interface SampleShippedEvent extends BaseOrderEvent {
   type: "SampleShipped";
   divisionId: number;
+  sentByCourier: boolean;
   courierName: string;
   trackingId: string;
+  handoverPersonName?: string;
+  handoverPersonPhone?: string;
+  handoverPersonType?: string;
 }
 
 export interface SalesFeedbackRecordedEvent extends BaseOrderEvent {

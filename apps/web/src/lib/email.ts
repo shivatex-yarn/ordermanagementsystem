@@ -1,5 +1,6 @@
 import { Resend } from "resend";
 import { getNotificationShortLabel } from "@/lib/notification-labels";
+import { formatEnquiryNumberShort } from "@/lib/enquiry-display";
 
 const apiKey = process.env.RESEND_API_KEY;
 const from = process.env.RESEND_FROM ?? "Enquiry Management <onboarding@resend.dev>";
@@ -114,7 +115,8 @@ export async function sendEnquiryNotificationEmail(
   summary: string
 ): Promise<{ ok: boolean; error?: string }> {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  const subject = `Enquiry ${orderNumber}: ${eventType}`;
+  const shortNum = formatEnquiryNumberShort(orderNumber);
+  const subject = `${shortNum} · ${getNotificationShortLabel(eventType)}`;
   const safeName = escapeHtml(toName);
   const safeSummary = escapeHtml(summary).replace(/\r\n|\n/g, "<br/>");
   const ordersUrl = escapeHtml(`${appUrl}/orders`);
@@ -127,7 +129,7 @@ export async function sendEnquiryNotificationEmail(
           <td style="padding:36px 32px 32px;">
             <p style="margin:0 0 6px;font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:#a1a1aa;">Enquiry activity</p>
             <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;letter-spacing:-0.02em;color:#18181b;line-height:1.25;">${escapeHtml(getNotificationShortLabel(eventType))}</h1>
-            <p style="margin:0 0 24px;font-size:14px;color:#71717a;line-height:1.5;">Hi ${safeName}, here&rsquo;s an update on <strong style="color:#27272a;">${escapeHtml(orderNumber)}</strong>.</p>
+            <p style="margin:0 0 24px;font-size:14px;color:#71717a;line-height:1.5;">Hi ${safeName}, here&rsquo;s an update on <strong style="color:#4f46e5;">${escapeHtml(shortNum)}</strong>.</p>
             <div style="background:linear-gradient(135deg,#f5f3ff 0%,#faf5ff 100%);border:1px solid #e9d5ff;border-radius:12px;padding:18px 20px;margin:0 0 28px;">
               <p style="margin:0;font-size:15px;line-height:1.6;color:#3f3f46;">${safeSummary}</p>
             </div>
@@ -136,7 +138,144 @@ export async function sendEnquiryNotificationEmail(
         </tr>`;
 
   const html = emailShell(inner, "Enquiry Management System");
-  const text = `Enquiry ${orderNumber}: ${eventType}\n\n${summary}\n\nView: ${appUrl}/orders`;
+  const text = `${shortNum} · ${getNotificationShortLabel(eventType)}\n\n${summary}\n\nView: ${appUrl}/orders`;
+  return sendEmail({ to: toEmail, subject, html, text });
+}
+
+/**
+ * New enquiry created: rich email to division heads with full enquiry details.
+ */
+export async function sendNewEnquiryToDivisionHeadEmail(
+  toEmail: string,
+  toName: string,
+  payload: {
+    orderNumber: string;
+    divisionName: string;
+    submittedByName: string;
+    submittedByEmail: string;
+    customerName: string | null;
+    companyName: string;
+    customerPhone: string | null;
+    description: string;
+    sampleRequested: boolean;
+    orderUrl: string;
+  }
+): Promise<{ ok: boolean; error?: string }> {
+  const shortNum = formatEnquiryNumberShort(payload.orderNumber);
+  const subject = `New enquiry ${shortNum} · ${payload.companyName}`;
+  const em = (s: string | null | undefined) => escapeHtml(s?.trim() || "—");
+  const lc = "padding:10px 16px;border-bottom:1px solid #f4f4f5;font-size:12px;font-weight:600;color:#71717a;text-transform:uppercase;letter-spacing:0.07em;width:36%;background:#fafafa;vertical-align:top;";
+  const vc = "padding:10px 16px;border-bottom:1px solid #f4f4f5;font-size:14px;color:#18181b;vertical-align:top;";
+
+  const inner = `
+        <tr>
+          <td style="height:4px;background:linear-gradient(90deg,#10b981,#6366f1);font-size:0;line-height:0;">&nbsp;</td>
+        </tr>
+        <tr>
+          <td style="padding:36px 32px 32px;">
+            <p style="margin:0 0 6px;font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:#10b981;">New enquiry</p>
+            <h1 style="margin:0 0 4px;font-size:22px;font-weight:700;color:#18181b;line-height:1.25;">${em(payload.companyName)}</h1>
+            <p style="margin:0 0 24px;font-size:14px;color:#71717a;">Hi ${escapeHtml(toName)}, a new enquiry has been submitted to <strong style="color:#27272a;">${escapeHtml(payload.divisionName)}</strong>.</p>
+
+            <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:separate;border-spacing:0;border:1px solid #e4e4e7;border-radius:12px;overflow:hidden;margin:0 0 24px;">
+              <tr><td style="${lc}">Enquiry #</td><td style="${vc}"><strong style="color:#4f46e5;">${escapeHtml(shortNum)}</strong></td></tr>
+              <tr><td style="${lc}">Company</td><td style="${vc}">${em(payload.companyName)}</td></tr>
+              <tr><td style="${lc}">Customer</td><td style="${vc}">${em(payload.customerName)}</td></tr>
+              <tr><td style="${lc}">Phone</td><td style="${vc}">${em(payload.customerPhone)}</td></tr>
+              <tr><td style="${lc}">Submitted by</td><td style="${vc}">${escapeHtml(payload.submittedByName)} <span style="color:#a1a1aa;">(${escapeHtml(payload.submittedByEmail)})</span></td></tr>
+              <tr><td style="${lc}">Sample req.</td><td style="${vc}">${payload.sampleRequested ? '<span style="color:#059669;font-weight:600;">Yes</span>' : '<span style="color:#71717a;">No</span>'}</td></tr>
+            </table>
+
+            <p style="margin:0 0 8px;font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#a1a1aa;">Product / description</p>
+            <div style="background:#fafafa;border:1px solid #e4e4e7;border-radius:10px;padding:16px 18px;font-size:14px;line-height:1.65;color:#3f3f46;margin:0 0 24px;">${escapeHtml(payload.description).replace(/\r\n|\n/g, "<br/>")}</div>
+
+            <a href="${escapeHtml(payload.orderUrl)}" style="display:inline-block;background:#4f46e5;color:#ffffff !important;font-size:14px;font-weight:600;padding:12px 22px;text-decoration:none;border-radius:10px;box-shadow:0 2px 8px rgba(79,70,229,0.3);">Review &amp; act on enquiry</a>
+          </td>
+        </tr>`;
+
+  const html = emailShell(inner, "Enquiry Management System");
+  const text = [
+    `New enquiry: ${payload.companyName} (${shortNum})`,
+    `Submitted by: ${payload.submittedByName} (${payload.submittedByEmail})`,
+    `Customer: ${payload.customerName ?? "—"}  |  Phone: ${payload.customerPhone ?? "—"}`,
+    `Division: ${payload.divisionName}`,
+    `Sample requested: ${payload.sampleRequested ? "Yes" : "No"}`,
+    `Description:\n${payload.description}`,
+    `Open: ${payload.orderUrl}`,
+  ].join("\n\n");
+  return sendEmail({ to: toEmail, subject, html, text });
+}
+
+/**
+ * Sample shipped: rich email to division heads — shows courier OR handover details.
+ */
+export async function sendSampleShippedEmail(
+  toEmail: string,
+  toName: string,
+  payload: {
+    orderNumber: string;
+    companyName: string | null;
+    customerName: string | null;
+    sentByCourier: boolean;
+    courierName?: string;
+    trackingId?: string;
+    handoverPersonName?: string;
+    handoverPersonPhone?: string;
+    handoverPersonType?: string;
+    orderUrl: string;
+  }
+): Promise<{ ok: boolean; error?: string }> {
+  const shortNum = formatEnquiryNumberShort(payload.orderNumber);
+  const subject = `Sample shipped · ${shortNum}${payload.companyName ? ` · ${payload.companyName}` : ""}`;
+  const em = (s: string | null | undefined) => escapeHtml(s?.trim() || "—");
+  const lc = "padding:10px 16px;border-bottom:1px solid #f4f4f5;font-size:12px;font-weight:600;color:#71717a;text-transform:uppercase;letter-spacing:0.07em;width:38%;background:#fafafa;vertical-align:top;";
+  const vc = "padding:10px 16px;border-bottom:1px solid #f4f4f5;font-size:14px;color:#18181b;vertical-align:top;";
+
+  const shipmentRows = payload.sentByCourier
+    ? `
+      <tr><td style="${lc}">Method</td><td style="${vc}"><span style="color:#6366f1;font-weight:600;">Courier</span></td></tr>
+      <tr><td style="${lc}">Courier</td><td style="${vc}">${em(payload.courierName)}</td></tr>
+      <tr><td style="${lc}">Tracking ID</td><td style="${vc}"><code style="font-family:ui-monospace,Menlo,monospace;font-size:13px;">${em(payload.trackingId)}</code></td></tr>`
+    : (() => {
+        const typeLabel = payload.handoverPersonType === "inhouse" ? "In-house (our company)" : payload.handoverPersonType === "thirdparty" ? "Third-party company" : "—";
+        return `
+      <tr><td style="${lc}">Method</td><td style="${vc}"><span style="color:#059669;font-weight:600;">Hand delivery</span></td></tr>
+      <tr><td style="${lc}">Handover person</td><td style="${vc}">${em(payload.handoverPersonName)}</td></tr>
+      <tr><td style="${lc}">Contact</td><td style="${vc}">${em(payload.handoverPersonPhone)}</td></tr>
+      <tr><td style="${lc}">Type</td><td style="${vc}">${escapeHtml(typeLabel)}</td></tr>`;
+      })();
+
+  const inner = `
+        <tr>
+          <td style="height:4px;background:linear-gradient(90deg,#059669,#6366f1);font-size:0;line-height:0;">&nbsp;</td>
+        </tr>
+        <tr>
+          <td style="padding:36px 32px 32px;">
+            <p style="margin:0 0 6px;font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:#059669;">Sample shipped</p>
+            <h1 style="margin:0 0 4px;font-size:22px;font-weight:700;color:#18181b;line-height:1.25;">${em(payload.companyName)}</h1>
+            <p style="margin:0 0 24px;font-size:14px;color:#71717a;">Hi ${escapeHtml(toName)}, the sample for <strong style="color:#4f46e5;">${escapeHtml(shortNum)}</strong> has been dispatched.</p>
+
+            <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:separate;border-spacing:0;border:1px solid #e4e4e7;border-radius:12px;overflow:hidden;margin:0 0 24px;">
+              <tr><td style="${lc}">Enquiry #</td><td style="${vc}"><strong style="color:#4f46e5;">${escapeHtml(shortNum)}</strong></td></tr>
+              <tr><td style="${lc}">Company</td><td style="${vc}">${em(payload.companyName)}</td></tr>
+              <tr><td style="${lc}">Customer</td><td style="${vc}">${em(payload.customerName)}</td></tr>
+              ${shipmentRows}
+            </table>
+
+            <a href="${escapeHtml(payload.orderUrl)}" style="display:inline-block;background:#4f46e5;color:#ffffff !important;font-size:14px;font-weight:600;padding:12px 22px;text-decoration:none;border-radius:10px;box-shadow:0 2px 8px rgba(79,70,229,0.3);">View enquiry</a>
+          </td>
+        </tr>`;
+
+  const html = emailShell(inner, "Enquiry Management System");
+  const shipmentText = payload.sentByCourier
+    ? `Method: Courier\nCourier: ${payload.courierName ?? "—"}\nTracking: ${payload.trackingId ?? "—"}`
+    : `Method: Hand delivery\nHandover: ${payload.handoverPersonName ?? "—"}\nContact: ${payload.handoverPersonPhone ?? "—"}\nType: ${payload.handoverPersonType ?? "—"}`;
+  const text = [
+    `Sample shipped · ${shortNum}`,
+    `Company: ${payload.companyName ?? "—"}  |  Customer: ${payload.customerName ?? "—"}`,
+    shipmentText,
+    `Open: ${payload.orderUrl}`,
+  ].join("\n\n");
   return sendEmail({ to: toEmail, subject, html, text });
 }
 
@@ -155,7 +294,8 @@ export async function sendSupervisorEnquiryHandoffEmail(
     orderUrl: string;
   }
 ): Promise<{ ok: boolean; error?: string }> {
-  const subject = `You have been assigned enquiry ${payload.orderNumber}`;
+  const shortNum = formatEnquiryNumberShort(payload.orderNumber);
+  const subject = `Assigned to you · ${shortNum}${payload.companyName ? ` · ${payload.companyName}` : ""}`;
   const safeName = escapeHtml(toName);
   const devLabel = payload.developmentKind === "new" ? "New development" : "Existing development";
   const inner = `
@@ -166,7 +306,7 @@ export async function sendSupervisorEnquiryHandoffEmail(
           <td style="padding:36px 32px 32px;">
             <p style="margin:0 0 6px;font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:#a1a1aa;">Division assignment</p>
             <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#18181b;">Hi ${safeName}</h1>
-            <p style="margin:0 0 16px;font-size:14px;color:#52525b;line-height:1.5;">You have been assigned <strong>${escapeHtml(payload.orderNumber)}</strong> in <strong>${escapeHtml(payload.divisionName)}</strong>.</p>
+            <p style="margin:0 0 16px;font-size:14px;color:#52525b;line-height:1.5;">You have been assigned <strong style="color:#4f46e5;">${escapeHtml(shortNum)}</strong> in <strong>${escapeHtml(payload.divisionName)}</strong>.</p>
             <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 20px;font-size:14px;color:#3f3f46;">
               <tr><td style="padding:6px 0;color:#71717a;width:140px;">Company</td><td style="padding:6px 0;">${escapeHtml(payload.companyName ?? "—")}</td></tr>
               <tr><td style="padding:6px 0;color:#71717a;vertical-align:top;">Description</td><td style="padding:6px 0;">${escapeHtml(payload.description ?? "—").replace(/\r\n|\n/g, "<br/>")}</td></tr>
@@ -177,7 +317,7 @@ export async function sendSupervisorEnquiryHandoffEmail(
           </td>
         </tr>`;
   const html = emailShell(inner, "Enquiry Management System");
-  const text = `${subject}\n\nCompany: ${payload.companyName ?? "—"}\n\n${payload.description ?? ""}\n\n${devLabel}: ${payload.developmentBody}\n\nOpen: ${payload.orderUrl}`;
+  const text = `Assigned to you · ${shortNum}\n\nCompany: ${payload.companyName ?? "—"}\nDivision: ${payload.divisionName}\n\n${payload.description ?? ""}\n\n${devLabel}: ${payload.developmentBody}\n\nOpen: ${payload.orderUrl}`;
   return sendEmail({ to: toEmail, subject, html, text });
 }
 
@@ -207,7 +347,8 @@ export async function sendSlaBreachDetailEmail(
   payload: SlaBreachEmailPayload
 ): Promise<{ ok: boolean; error?: string }> {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  const subject = `SLA breach: ${payload.orderNumber}${payload.companyName ? ` · ${payload.companyName}` : ""}`;
+  const shortNum = formatEnquiryNumberShort(payload.orderNumber);
+  const subject = `SLA breach · ${shortNum}${payload.companyName ? ` · ${payload.companyName}` : ""}`;
 
   const desc = payload.description?.trim()
     ? escapeHtml(payload.description).replace(/\r\n|\n/g, "<br/>")
@@ -254,7 +395,7 @@ export async function sendSlaBreachDetailEmail(
 
             <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:separate;border-spacing:0;border:1px solid #e4e4e7;border-radius:12px;overflow:hidden;margin:0 0 8px;">
               <tr><td colspan="2" style="padding:12px 18px;background:#fff7ed;border-bottom:1px solid #ffedd5;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#9a3412;">Enquiry details</td></tr>
-              <tr><td style="${lc}">Number</td><td style="${vc}"><strong style="font-size:15px;color:#4f46e5;">${escapeHtml(payload.orderNumber)}</strong></td></tr>
+              <tr><td style="${lc}">Number</td><td style="${vc}"><strong style="font-size:15px;color:#4f46e5;">${escapeHtml(shortNum)}</strong></td></tr>
               <tr><td style="${lc}">Company</td><td style="${vc}">${company}</td></tr>
               <tr><td style="${lc}">Status</td><td style="${vc}"><span style="display:inline-block;padding:4px 10px;border-radius:999px;background:#f4f4f5;font-size:12px;font-weight:600;color:#3f3f46;">${escapeHtml(payload.status)}</span></td></tr>
               <tr><td style="${lc}">SLA deadline (UTC)</td><td style="${vc}">${em(payload.slaDeadlineFormatted)}</td></tr>
@@ -305,7 +446,7 @@ export async function sendSlaBreachDetailEmail(
           .join("\n");
 
   const text = [
-    `SLA breach: ${payload.orderNumber}`,
+    `SLA breach · ${shortNum}`,
     `Breach division (at detection): ${payload.breachDivisionName}`,
     `Company: ${payload.companyName ?? "—"}`,
     `Status: ${payload.status}`,
