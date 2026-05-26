@@ -61,11 +61,15 @@ const setSampleDetailsBody = z
     sampleDetails: z.string().max(20000).optional(),
     sampleQuantity: z.string().max(500).optional(),
     sampleWeight: z.string().max(500).optional(),
-    // Supervisor captures courier intent at detail-submission time
+    // Supervisor captures shipment intent at detail-submission time
     sentByCourier: z.boolean().optional(),
     courierName: z.string().max(255).optional(),
     trackingId: z.string().max(500).optional(),
     sampleProofUrl: z.string().max(2000).optional(),
+    // Hand-delivery fields (used when sentByCourier is false)
+    handoverPersonName: z.string().max(255).optional(),
+    handoverPersonPhone: z.string().max(50).optional(),
+    handoverPersonType: z.enum(["inhouse", "thirdparty"]).optional(),
   })
   .refine(
     (d) =>
@@ -82,6 +86,15 @@ const setSampleDetailsBody = z
       return true;
     },
     { message: "Courier name and tracking ID are required when sent by courier" }
+  )
+  .refine(
+    (d) => {
+      if (d.sentByCourier === false) {
+        return Boolean(d.handoverPersonName?.trim());
+      }
+      return true;
+    },
+    { message: "Handover person name is required for hand delivery" }
   );
 
 const setSampleDevelopmentBody = z.object({
@@ -139,6 +152,9 @@ export const orderSampleActionSchema = z.union([
       courierName: z.string().max(255).optional(),
       trackingId: z.string().max(500).optional(),
       sampleProofUrl: z.string().max(2000).optional(),
+      handoverPersonName: z.string().max(255).optional(),
+      handoverPersonPhone: z.string().max(50).optional(),
+      handoverPersonType: z.enum(["inhouse", "thirdparty"]).optional(),
     })
     .refine(
       (d) => {
@@ -147,6 +163,15 @@ export const orderSampleActionSchema = z.union([
         return Boolean(d.courierName?.trim()) && Boolean(d.trackingId?.trim());
       },
       { message: "Courier name and tracking ID are required when sent by courier" }
+    )
+    .refine(
+      (d) => {
+        if (d.sentByCourier === false) {
+          return Boolean(d.handoverPersonName?.trim());
+        }
+        return true;
+      },
+      { message: "Handover person name is required for hand delivery" }
     ),
   z.object({
     action: z.literal("salesFeedback"),

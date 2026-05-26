@@ -294,6 +294,9 @@ export async function PATCH(
     if (str(body.courierName) !== undefined) data.courierName = str(body.courierName) || null;
     if (str(body.trackingId) !== undefined) data.trackingId = str(body.trackingId) || null;
     if (typeof body.sampleShippedByCourier === "boolean") data.sampleShippedByCourier = body.sampleShippedByCourier;
+    if (str(body.handoverPersonName) !== undefined) data.handoverPersonName = str(body.handoverPersonName) || null;
+    if (str(body.handoverPersonPhone) !== undefined) data.handoverPersonPhone = str(body.handoverPersonPhone) || null;
+    if (str(body.handoverPersonType) !== undefined) data.handoverPersonType = str(body.handoverPersonType) || null;
     if (str(body.sampleDeliveryDate) !== undefined) {
       const d = body.sampleDeliveryDate ? new Date(String(body.sampleDeliveryDate)) : null;
       data.sampleDeliveryDate = d && !isNaN(d.getTime()) ? d : null;

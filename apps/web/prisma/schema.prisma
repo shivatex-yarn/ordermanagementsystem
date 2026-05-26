@@ -183,6 +183,11 @@ model Order {
   courierName         String?   @map("courier_name")
   trackingId          String?   @map("tracking_id")
   sampleProofUrl      String?   @map("sample_proof_url")
+  /// When sample is delivered by hand (not courier): the person who carries it.
+  handoverPersonName  String?   @map("handover_person_name")
+  handoverPersonPhone String?   @map("handover_person_phone")
+  /// "inhouse" = our company staff, "thirdparty" = external delivery agent
+  handoverPersonType  String?   @map("handover_person_type")
   salesFeedback       String?   @map("sales_feedback") @db.Text
   salesFeedbackAt     DateTime? @map("sales_feedback_at")
   sampleDeliveryDate  DateTime? @map("sample_delivery_date")

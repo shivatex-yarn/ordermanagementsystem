@@ -24,6 +24,30 @@ export interface SendEmailOptions {
   text?: string;
 }
 
+// Simple token-bucket throttle: max 4 sends/sec to stay safely under Resend's 5/sec limit.
+const EMAIL_INTERVAL_MS = 250; // 4 per second
+let lastSendAt = 0;
+
+async function acquireSendSlot() {
+  const now = Date.now();
+  const wait = EMAIL_INTERVAL_MS - (now - lastSendAt);
+  if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+  lastSendAt = Date.now();
+}
+
+/**
+ * Send multiple emails sequentially, respecting Resend's 5/sec rate limit.
+ * Pass an array of thunks; each is called in order with a 250 ms gap.
+ */
+export async function sendEmailsThrottled(
+  sends: Array<() => Promise<{ ok: boolean; error?: string }>>
+): Promise<void> {
+  for (const fn of sends) {
+    await acquireSendSlot();
+    await fn().catch((err) => console.error("[email] throttled send error:", err));
+  }
+}
+
 /**
  * Send an email via Resend. No-op if RESEND_API_KEY is not set.
  */
