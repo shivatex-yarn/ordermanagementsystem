@@ -56,6 +56,7 @@ export async function pendingDelayReasonBreaches(userId: number, role: Role | nu
     select: {
       id: true,
       orderId: true,
+      breachType: true,
       breachedAt: true,
       headRejectedAt: true,
       headRejectionMessage: true,
