@@ -520,10 +520,13 @@ export async function updateOrderSampleDetails(
     sampleDetails?: string;
     sampleQuantity?: string;
     sampleWeight?: string;
-    // Supervisor captures courier intent at detail-submission time
+    // Supervisor captures shipment intent at detail-submission time
     courierName?: string;
     trackingId?: string;
     sampleProofUrl?: string;
+    handoverPersonName?: string;
+    handoverPersonPhone?: string;
+    handoverPersonType?: string;
   }
 ) {
   const order = await prisma.order.findUnique({ where: { id: orderId } });
@@ -539,6 +542,9 @@ export async function updateOrderSampleDetails(
   const courierName = input.courierName !== undefined ? input.courierName.trim() || null : undefined;
   const trackingId = input.trackingId !== undefined ? input.trackingId.trim() || null : undefined;
   const sampleProofUrl = input.sampleProofUrl !== undefined ? input.sampleProofUrl.trim() || null : undefined;
+  const handoverPersonName = input.handoverPersonName !== undefined ? input.handoverPersonName.trim() || null : undefined;
+  const handoverPersonPhone = input.handoverPersonPhone !== undefined ? input.handoverPersonPhone.trim() || null : undefined;
+  const handoverPersonType = input.handoverPersonType !== undefined ? input.handoverPersonType.trim() || null : undefined;
   const updated = await prisma.order.update({
     where: { id: orderId },
     data: {
@@ -548,6 +554,9 @@ export async function updateOrderSampleDetails(
       ...(courierName !== undefined && { courierName }),
       ...(trackingId !== undefined && { trackingId }),
       ...(sampleProofUrl !== undefined && { sampleProofUrl }),
+      ...(handoverPersonName !== undefined && { handoverPersonName }),
+      ...(handoverPersonPhone !== undefined && { handoverPersonPhone }),
+      ...(handoverPersonType !== undefined && { handoverPersonType }),
       ...(order.sampleApprovedAt
         ? { sampleSpecsAcknowledgedAt: null, sampleSpecsAcknowledgedById: null }
         : {}),
@@ -676,7 +685,15 @@ export async function approveOrderSample(orderId: number, userId: number) {
 export async function recordSampleShipment(
   orderId: number,
   userId: number,
-  input: { sentByCourier?: boolean; courierName?: string; trackingId?: string; sampleProofUrl?: string }
+  input: {
+    sentByCourier?: boolean;
+    courierName?: string;
+    trackingId?: string;
+    sampleProofUrl?: string;
+    handoverPersonName?: string;
+    handoverPersonPhone?: string;
+    handoverPersonType?: string;
+  }
 ) {
   const order = await prisma.order.findUnique({ where: { id: orderId } });
   if (!order?.sampleRequested || !order.sampleApprovedAt || order.sampleShippedAt) return null;
@@ -686,6 +703,20 @@ export async function recordSampleShipment(
   const courierName = input.courierName !== undefined ? input.courierName.trim() || null : order.courierName;
   const trackingId = input.trackingId !== undefined ? input.trackingId.trim() || null : order.trackingId;
   if (sentByCourier && (!courierName || !trackingId)) return null;
+  // Hand-delivery: use passed handover details; fall back to stored values.
+  const handoverPersonName =
+    input.handoverPersonName !== undefined
+      ? input.handoverPersonName.trim() || null
+      : (order as Record<string, unknown>).handoverPersonName as string | null ?? null;
+  const handoverPersonPhone =
+    input.handoverPersonPhone !== undefined
+      ? input.handoverPersonPhone.trim() || null
+      : (order as Record<string, unknown>).handoverPersonPhone as string | null ?? null;
+  const handoverPersonType =
+    input.handoverPersonType !== undefined
+      ? input.handoverPersonType.trim() || null
+      : (order as Record<string, unknown>).handoverPersonType as string | null ?? null;
+  if (!sentByCourier && !handoverPersonName) return null;
   // Only overwrite proof if a new URL was explicitly supplied; otherwise keep whatever the supervisor uploaded.
   const sampleProofUrl = input.sampleProofUrl !== undefined ? input.sampleProofUrl.trim() || null : undefined;
   const updated = await prisma.order.update({
@@ -695,6 +726,9 @@ export async function recordSampleShipment(
       sampleShippedByCourier: sentByCourier,
       courierName: sentByCourier ? courierName : null,
       trackingId: sentByCourier ? trackingId : null,
+      handoverPersonName: sentByCourier ? null : handoverPersonName,
+      handoverPersonPhone: sentByCourier ? null : handoverPersonPhone,
+      handoverPersonType: sentByCourier ? null : handoverPersonType,
       ...(sampleProofUrl !== undefined && { sampleProofUrl }),
     },
     include: {

@@ -144,6 +144,9 @@ type OrderDetail = {
   courierName?: string | null;
   trackingId?: string | null;
   sampleProofUrl?: string | null;
+  handoverPersonName?: string | null;
+  handoverPersonPhone?: string | null;
+  handoverPersonType?: string | null;
   salesFeedback?: string | null;
   salesFeedbackAt?: string | null;
   cancellationReason?: string | null;
@@ -569,6 +572,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [sentByCourier, setSentByCourier] = useState(true);
   const [courierName, setCourierName] = useState("");
   const [trackingId, setTrackingId] = useState("");
+  const [handoverPersonName, setHandoverPersonName] = useState("");
+  const [handoverPersonPhone, setHandoverPersonPhone] = useState("");
+  const [handoverPersonType, setHandoverPersonType] = useState<"inhouse" | "thirdparty">("inhouse");
   const [sampleProofFile, setSampleProofFile] = useState<File | null>(null);
   const [salesFeedback, setSalesFeedback] = useState("");
   const [feedbackResponseStatus, setFeedbackResponseStatus] = useState("");
@@ -604,6 +610,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [editCourierName, setEditCourierName] = useState("");
   const [editTrackingId, setEditTrackingId] = useState("");
   const [editSampleByCourier, setEditSampleByCourier] = useState(true);
+  const [editHandoverPersonName, setEditHandoverPersonName] = useState("");
+  const [editHandoverPersonPhone, setEditHandoverPersonPhone] = useState("");
+  const [editHandoverPersonType, setEditHandoverPersonType] = useState<"inhouse" | "thirdparty">("inhouse");
   const [editSampleError, setEditSampleError] = useState("");
   const [editSampleSaving, setEditSampleSaving] = useState(false);
   const [approveSampleOpen, setApproveSampleOpen] = useState(false);
@@ -1153,6 +1162,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         setSentByCourier(true);
         setCourierName("");
         setTrackingId("");
+        setHandoverPersonName("");
+        setHandoverPersonPhone("");
+        setHandoverPersonType("inhouse");
         setSampleProofFile(null);
       }
       if (action === "setDetails") {
@@ -2579,6 +2591,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                         setEditCourierName(order.courierName ?? "");
                         setEditTrackingId(order.trackingId ?? "");
                         setEditSampleByCourier(order.sampleShippedByCourier ?? true);
+                        setEditHandoverPersonName(order.handoverPersonName ?? "");
+                        setEditHandoverPersonPhone(order.handoverPersonPhone ?? "");
+                        setEditHandoverPersonType((order.handoverPersonType as "inhouse" | "thirdparty" | null | undefined) ?? "inhouse");
                         setEditSampleDeliveryDate(
                           (order as { sampleDeliveryDate?: string | null }).sampleDeliveryDate
                             ? new Date((order as { sampleDeliveryDate: string }).sampleDeliveryDate).toISOString().split("T")[0]
@@ -2612,14 +2627,49 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                         <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Delivery date</label>
                         <input type="date" value={editSampleDeliveryDate} onChange={(e) => setEditSampleDeliveryDate(e.target.value)} className="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300" />
                       </div>
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Courier name</label>
-                        <input value={editCourierName} onChange={(e) => setEditCourierName(e.target.value)} className="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300" />
+                      <div className="space-y-1 sm:col-span-2">
+                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Delivery method</label>
+                        <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                          <input type="checkbox" checked={editSampleByCourier} onChange={(e) => setEditSampleByCourier(e.target.checked)} className="rounded" />
+                          By courier
+                        </label>
                       </div>
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Tracking ID</label>
-                        <input value={editTrackingId} onChange={(e) => setEditTrackingId(e.target.value)} className="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300" />
-                      </div>
+                      {editSampleByCourier ? (
+                        <>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Courier name</label>
+                            <input value={editCourierName} onChange={(e) => setEditCourierName(e.target.value)} className="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300" />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Tracking ID</label>
+                            <input value={editTrackingId} onChange={(e) => setEditTrackingId(e.target.value)} className="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300" />
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Handover person name</label>
+                            <input value={editHandoverPersonName} onChange={(e) => setEditHandoverPersonName(e.target.value)} placeholder="Required" className="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300" />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Contact number</label>
+                            <input value={editHandoverPersonPhone} onChange={(e) => setEditHandoverPersonPhone(e.target.value)} placeholder="Optional" className="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300" />
+                          </div>
+                          <div className="space-y-1 sm:col-span-2">
+                            <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Person type</label>
+                            <div className="flex items-center gap-4">
+                              <label className="flex items-center gap-1.5 text-sm text-slate-700 cursor-pointer">
+                                <input type="radio" name="editHandoverType" value="inhouse" checked={editHandoverPersonType === "inhouse"} onChange={() => setEditHandoverPersonType("inhouse")} className="accent-amber-600" />
+                                In-house (our company)
+                              </label>
+                              <label className="flex items-center gap-1.5 text-sm text-slate-700 cursor-pointer">
+                                <input type="radio" name="editHandoverType" value="thirdparty" checked={editHandoverPersonType === "thirdparty"} onChange={() => setEditHandoverPersonType("thirdparty")} className="accent-amber-600" />
+                                Third-party company
+                              </label>
+                            </div>
+                          </div>
+                        </>
+                      )}
                       <div className="space-y-1 sm:col-span-2">
                         <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Remarks</label>
                         <input value={editSampleRemarks} onChange={(e) => setEditSampleRemarks(e.target.value)} className="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300" />
@@ -2629,7 +2679,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                     <div className="flex gap-2">
                       <button
                         type="button"
-                        disabled={editSampleSaving}
+                        disabled={editSampleSaving || (!editSampleByCourier && !editHandoverPersonName.trim())}
                         onClick={async () => {
                           setEditSampleSaving(true);
                           setEditSampleError("");
@@ -2644,9 +2694,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                                 sampleWeight: editSampleWeight,
                                 sampleRemarks: editSampleRemarks,
                                 sampleDeliveryDate: editSampleDeliveryDate,
-                                courierName: editCourierName,
-                                trackingId: editTrackingId,
                                 sampleShippedByCourier: editSampleByCourier,
+                                courierName: editSampleByCourier ? editCourierName : "",
+                                trackingId: editSampleByCourier ? editTrackingId : "",
+                                handoverPersonName: !editSampleByCourier ? editHandoverPersonName : "",
+                                handoverPersonPhone: !editSampleByCourier ? editHandoverPersonPhone : "",
+                                handoverPersonType: !editSampleByCourier ? editHandoverPersonType : "",
                               }),
                             });
                             const data = await res.json();
@@ -2706,6 +2759,16 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                         <span className="text-slate-800">{order.courierName}{order.trackingId ? ` · ${order.trackingId}` : ""}</span>
                       </p>
                     )}
+                    {!order.courierName && order.handoverPersonName && (
+                      <p className="flex flex-col sm:col-span-2">
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Handover person</span>
+                        <span className="text-slate-800">
+                          {order.handoverPersonName}
+                          {order.handoverPersonPhone ? ` · ${order.handoverPersonPhone}` : ""}
+                          {order.handoverPersonType ? ` · ${order.handoverPersonType === "inhouse" ? "In-house" : "Third-party"}` : ""}
+                        </span>
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
@@ -2742,6 +2805,24 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                     <p className="flex flex-col">
                       <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Tracking ID</span>
                       <span className="font-mono text-slate-800">{order.trackingId}</span>
+                    </p>
+                  )}
+                  {order.sampleShippedByCourier === false && order.handoverPersonName && (
+                    <p className="flex flex-col">
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Handover person</span>
+                      <span className="text-slate-800">{order.handoverPersonName}</span>
+                    </p>
+                  )}
+                  {order.sampleShippedByCourier === false && order.handoverPersonPhone && (
+                    <p className="flex flex-col">
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Contact</span>
+                      <span className="text-slate-800">{order.handoverPersonPhone}</span>
+                    </p>
+                  )}
+                  {order.sampleShippedByCourier === false && order.handoverPersonType && (
+                    <p className="flex flex-col">
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Person type</span>
+                      <span className="text-slate-800">{order.handoverPersonType === "inhouse" ? "In-house (our company)" : "Third-party company"}</span>
                     </p>
                   )}
                   {order.sampleProofUrl && (
@@ -2835,19 +2916,37 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                       </div>
                       {order.courierName && (
                         <div className="flex items-center gap-2">
-                          <span className="w-20 text-xs font-medium text-slate-500">Courier</span>
+                          <span className="w-24 text-xs font-medium text-slate-500">Courier</span>
                           <span className="text-slate-800">{order.courierName}</span>
                         </div>
                       )}
                       {order.trackingId && (
                         <div className="flex items-center gap-2">
-                          <span className="w-20 text-xs font-medium text-slate-500">Tracking</span>
+                          <span className="w-24 text-xs font-medium text-slate-500">Tracking</span>
                           <span className="font-mono text-slate-800">{order.trackingId}</span>
+                        </div>
+                      )}
+                      {order.sampleShippedByCourier === false && order.handoverPersonName && (
+                        <div className="flex items-center gap-2">
+                          <span className="w-24 text-xs font-medium text-slate-500">Person</span>
+                          <span className="text-slate-800">{order.handoverPersonName}</span>
+                        </div>
+                      )}
+                      {order.sampleShippedByCourier === false && order.handoverPersonPhone && (
+                        <div className="flex items-center gap-2">
+                          <span className="w-24 text-xs font-medium text-slate-500">Contact</span>
+                          <span className="text-slate-800">{order.handoverPersonPhone}</span>
+                        </div>
+                      )}
+                      {order.sampleShippedByCourier === false && order.handoverPersonType && (
+                        <div className="flex items-center gap-2">
+                          <span className="w-24 text-xs font-medium text-slate-500">Type</span>
+                          <span className="text-slate-800">{order.handoverPersonType === "inhouse" ? "In-house (our company)" : "Third-party company"}</span>
                         </div>
                       )}
                       {order.sampleProofUrl && (
                         <div className="flex items-center gap-2">
-                          <span className="w-20 text-xs font-medium text-slate-500">Proof</span>
+                          <span className="w-24 text-xs font-medium text-slate-500">Proof</span>
                           <a
                             href={`/api/orders/${orderId}/sample-proof`}
                             target="_blank"
@@ -2883,19 +2982,47 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                           </div>
                         )}
                       </div>
+                    ) : order.handoverPersonName ? (
+                      <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 space-y-1 text-sm">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-medium text-slate-500 w-24">Method</span>
+                          <span className="text-slate-800">Hand delivery</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-medium text-slate-500 w-24">Person</span>
+                          <span className="text-slate-800">{order.handoverPersonName}</span>
+                        </div>
+                        {order.handoverPersonPhone && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-medium text-slate-500 w-24">Contact</span>
+                            <span className="text-slate-800">{order.handoverPersonPhone}</span>
+                          </div>
+                        )}
+                        {order.handoverPersonType && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-medium text-slate-500 w-24">Type</span>
+                            <span className="text-slate-800">{order.handoverPersonType === "inhouse" ? "In-house (our company)" : "Third-party company"}</span>
+                          </div>
+                        )}
+                      </div>
                     ) : (
-                      <p className="text-xs text-slate-500">Direct handover (no courier).</p>
+                      <p className="text-xs text-slate-500">Direct handover (no courier). Enter handover person details in sample details to continue.</p>
                     )}
                     <Button
                       type="button" size="sm"
-                      disabled={sampleMutation.isPending}
+                      disabled={
+                        sampleMutation.isPending ||
+                        (!order.courierName?.trim() && !order.handoverPersonName?.trim())
+                      }
                       onClick={() =>
                         sampleMutation.mutate({
                           action: "ship",
                           sentByCourier: Boolean(order.courierName?.trim()),
-                          // Pass stored values so recordSampleShipment validation passes for courier orders
                           courierName: order.courierName ?? undefined,
                           trackingId: order.trackingId ?? undefined,
+                          handoverPersonName: order.handoverPersonName ?? undefined,
+                          handoverPersonPhone: order.handoverPersonPhone ?? undefined,
+                          handoverPersonType: (order.handoverPersonType as "inhouse" | "thirdparty" | null | undefined) ?? undefined,
                         })
                       }
                     >
@@ -2938,6 +3065,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                             setEditCourierName(order.courierName ?? "");
                             setEditTrackingId(order.trackingId ?? "");
                             setEditSampleByCourier(order.sampleShippedByCourier ?? true);
+                            setEditHandoverPersonName(order.handoverPersonName ?? "");
+                            setEditHandoverPersonPhone(order.handoverPersonPhone ?? "");
+                            setEditHandoverPersonType((order.handoverPersonType as "inhouse" | "thirdparty" | null | undefined) ?? "inhouse");
                             setEditSampleDeliveryDate(
                               (order as { sampleDeliveryDate?: string | null }).sampleDeliveryDate
                                 ? new Date((order as { sampleDeliveryDate: string }).sampleDeliveryDate).toISOString().split("T")[0]
@@ -2981,10 +3111,48 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                           <input type="checkbox" checked={sentByCourier} onChange={(e) => setSentByCourier(e.target.checked)} className="rounded" />
                           Sent by courier (requires courier name + tracking ID)
                         </label>
-                        {sentByCourier && (
+                        {sentByCourier ? (
                           <div className="grid gap-2 sm:grid-cols-2">
                             <Input value={courierName} onChange={(e) => setCourierName(e.target.value)} placeholder="Courier name" />
                             <Input value={trackingId} onChange={(e) => setTrackingId(e.target.value)} placeholder="Tracking ID" />
+                          </div>
+                        ) : (
+                          <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50/60 p-3">
+                            <p className="text-xs font-semibold text-amber-800">Hand delivery — person details</p>
+                            <Input
+                              value={handoverPersonName}
+                              onChange={(e) => setHandoverPersonName(e.target.value)}
+                              placeholder="Handover person name (required)"
+                            />
+                            <Input
+                              value={handoverPersonPhone}
+                              onChange={(e) => setHandoverPersonPhone(e.target.value)}
+                              placeholder="Contact number (optional)"
+                            />
+                            <div className="flex items-center gap-4 pt-0.5">
+                              <label className="flex items-center gap-1.5 text-sm text-slate-700 cursor-pointer">
+                                <input
+                                  type="radio"
+                                  name="handoverType-new"
+                                  value="inhouse"
+                                  checked={handoverPersonType === "inhouse"}
+                                  onChange={() => setHandoverPersonType("inhouse")}
+                                  className="accent-violet-600"
+                                />
+                                In-house (our company)
+                              </label>
+                              <label className="flex items-center gap-1.5 text-sm text-slate-700 cursor-pointer">
+                                <input
+                                  type="radio"
+                                  name="handoverType-new"
+                                  value="thirdparty"
+                                  checked={handoverPersonType === "thirdparty"}
+                                  onChange={() => setHandoverPersonType("thirdparty")}
+                                  className="accent-violet-600"
+                                />
+                                Third-party company
+                              </label>
+                            </div>
                           </div>
                         )}
                         <div className="space-y-0.5">
@@ -2998,7 +3166,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                         disabled={
                           sampleMutation.isPending ||
                           (!sampleDetails.trim() && !sampleQuantity.trim() && !sampleWeight.trim()) ||
-                          (sentByCourier && (!courierName.trim() || !trackingId.trim()))
+                          (sentByCourier && (!courierName.trim() || !trackingId.trim())) ||
+                          (!sentByCourier && !handoverPersonName.trim())
                         }
                         onClick={async () => {
                           try {
@@ -3021,6 +3190,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                               sentByCourier,
                               courierName: sentByCourier ? courierName.trim() : undefined,
                               trackingId: sentByCourier ? trackingId.trim() : undefined,
+                              handoverPersonName: !sentByCourier ? handoverPersonName.trim() : undefined,
+                              handoverPersonPhone: !sentByCourier ? handoverPersonPhone.trim() || undefined : undefined,
+                              handoverPersonType: !sentByCourier ? handoverPersonType : undefined,
                               sampleProofUrl: proofUrl,
                             });
                           } catch (e) {

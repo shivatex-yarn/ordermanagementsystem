@@ -8,6 +8,7 @@ import {
   sendSlaBreachDetailEmail,
   sendSupervisorEnquiryHandoffEmail,
   sendEmail,
+  sendEmailsThrottled,
 } from "@/lib/email";
 import { postEventToN8n } from "@/lib/n8n-webhook";
 import { appendTimeline, type TimelineEventType } from "@/lib/timeline";
@@ -117,12 +118,11 @@ async function handleSlaBreachNotification(
     orderDetailUrl: `${appUrl}/orders/${fullOrder.id}`,
   };
 
-  await Promise.all(
-    users.map(async (u) => {
+  await sendEmailsThrottled(
+    users.map((u) => async () => {
       const res = await sendSlaBreachDetailEmail(u.email, u.name, payload);
-      if (!res.ok) {
-        console.error("[email] SLA breach email failed for", u.email, res.error);
-      }
+      if (!res.ok) console.error("[email] SLA breach email failed for", u.email, res.error);
+      return res;
     })
   );
 }
@@ -249,14 +249,14 @@ async function notificationHandler(event: OrderEvent): Promise<void> {
     }
 
     const summary = eventTypeToSummary(event.type, event);
-    for (const u of notifyUsers) {
-      if (u.id === e.supervisorId) continue;
-      // Spec: MD gets only SLA breach emails; skip routine workflow notifications.
-      if (u.role === "MANAGING_DIRECTOR") continue;
-      sendEnquiryNotificationEmail(u.email, u.name, event.orderNumber, event.type, summary).catch((err) =>
-        console.error("[email] Notification email failed for", u.email, err)
-      );
-    }
+    const handoffEmailTargets = notifyUsers.filter(
+      (u) => u.id !== e.supervisorId && u.role !== "MANAGING_DIRECTOR"
+    );
+    sendEmailsThrottled(
+      handoffEmailTargets.map((u) => () =>
+        sendEnquiryNotificationEmail(u.email, u.name, event.orderNumber, event.type, summary)
+      )
+    ).catch((err) => console.error("[email] handoff notification batch failed:", err));
     return;
   }
 
@@ -296,15 +296,17 @@ async function notificationHandler(event: OrderEvent): Promise<void> {
         });
       }
       const summary = `Marketing / Sales has submitted customer feedback for enquiry ${event.orderNumber}${feedbackOrder.companyName ? ` (${feedbackOrder.companyName})` : ""}.`;
-      for (const [, u] of headMap) {
-        if (u.role === "MANAGING_DIRECTOR") continue;
-        sendEmail({
-          to: u.email,
-          subject: `Customer feedback received — ${event.orderNumber}`,
-          html: `<p>Hi ${u.name},</p><p>${summary}</p><p><a href="${appUrl}/orders/${event.orderId}">View enquiry →</a></p>`,
-          text: `${summary}\n\nView: ${appUrl}/orders/${event.orderId}`,
-        }).catch((err) => console.error("[email] Feedback head email failed:", err));
-      }
+      const feedbackEmailTargets = Array.from(headMap.values()).filter((u) => u.role !== "MANAGING_DIRECTOR");
+      sendEmailsThrottled(
+        feedbackEmailTargets.map((u) => () =>
+          sendEmail({
+            to: u.email,
+            subject: `Customer feedback received — ${event.orderNumber}`,
+            html: `<p>Hi ${u.name},</p><p>${summary}</p><p><a href="${appUrl}/orders/${event.orderId}">View enquiry →</a></p>`,
+            text: `${summary}\n\nView: ${appUrl}/orders/${event.orderId}`,
+          })
+        )
+      ).catch((err) => console.error("[email] feedback head email batch failed:", err));
     }
     return;
   }
@@ -365,14 +367,17 @@ async function notificationHandler(event: OrderEvent): Promise<void> {
         select: { id: true, name: true, email: true, role: true },
       });
       const completedSummary = eventTypeToSummary(event.type, event);
-      for (const u of allNotifyUsers) {
-        if (u.role === "MANAGING_DIRECTOR") continue; // MD: in-app only
-        if (u.role === "ACCOUNTS") continue; // Accounts: in-app only
-        if (u.id === completedOrder.assignedSupervisorId) continue; // supervisor already got dedicated email
-        sendEnquiryNotificationEmail(u.email, u.name, event.orderNumber, event.type, completedSummary).catch(
-          (err) => console.error("[email] Completed notification email failed:", err)
-        );
-      }
+      const completedEmailTargets = allNotifyUsers.filter(
+        (u) =>
+          u.role !== "MANAGING_DIRECTOR" &&
+          u.role !== "ACCOUNTS" &&
+          u.id !== completedOrder.assignedSupervisorId
+      );
+      sendEmailsThrottled(
+        completedEmailTargets.map((u) => () =>
+          sendEnquiryNotificationEmail(u.email, u.name, event.orderNumber, event.type, completedSummary)
+        )
+      ).catch((err) => console.error("[email] completed notification batch failed:", err));
     }
     return;
   }
@@ -465,15 +470,14 @@ async function notificationHandler(event: OrderEvent): Promise<void> {
     });
   }
   const summary = eventTypeToSummary(event.type, event);
-  for (const u of users) {
-    // MD only receives SLA breach emails — in-app notification already created above.
-    if (u.role === "MANAGING_DIRECTOR") continue;
-    // ACCOUNTS only get in-app; no email blast for them.
-    if (u.role === "ACCOUNTS") continue;
-    sendEnquiryNotificationEmail(u.email, u.name, event.orderNumber, event.type, summary).catch((err) =>
-      console.error("[email] Notification email failed for", u.email, err)
-    );
-  }
+  const emailTargets = users.filter(
+    (u) => u.role !== "MANAGING_DIRECTOR" && u.role !== "ACCOUNTS"
+  );
+  sendEmailsThrottled(
+    emailTargets.map((u) => () =>
+      sendEnquiryNotificationEmail(u.email, u.name, event.orderNumber, event.type, summary)
+    )
+  ).catch((err) => console.error("[email] notification batch failed:", err));
 }
 
 export function eventTypeToSummary(type: string, event: OrderEvent): string {

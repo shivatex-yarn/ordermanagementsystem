@@ -119,6 +119,9 @@ export async function runSampleAction(
         courierName: action.courierName,
         trackingId: action.trackingId,
         sampleProofUrl: action.sampleProofUrl,
+        handoverPersonName: action.handoverPersonName,
+        handoverPersonPhone: action.handoverPersonPhone,
+        handoverPersonType: action.handoverPersonType,
       });
       if (!order) {
         return NextResponse.json(
@@ -204,6 +207,9 @@ export async function runSampleAction(
         courierName: action.courierName,
         trackingId: action.trackingId,
         sampleProofUrl: action.sampleProofUrl,
+        handoverPersonName: action.handoverPersonName,
+        handoverPersonPhone: action.handoverPersonPhone,
+        handoverPersonType: action.handoverPersonType,
       });
       if (!order) {
         return NextResponse.json(
