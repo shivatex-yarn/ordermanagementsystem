@@ -23,6 +23,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { roleLabel } from "@/lib/roles";
 
 type Event = {
   id: number;
@@ -115,7 +116,7 @@ export function EnquiryTimeline({ enquiryId }: { enquiryId: number }) {
                   {e.detail ? <p className="mt-0.5 text-sm text-slate-600">{e.detail}</p> : null}
                   {e.actor ? (
                     <p className="mt-0.5 text-xs text-slate-500">
-                      by {e.actor.name} · {e.actor.role.replace("_", " ")}
+                      by {e.actor.name} · {roleLabel(e.actor.role as Parameters<typeof roleLabel>[0])}
                     </p>
                   ) : null}
                 </li>

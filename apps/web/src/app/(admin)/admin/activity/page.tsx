@@ -6,6 +6,7 @@ import * as XLSX from "xlsx";
 import { Download, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { roleLabel } from "@/lib/roles";
 
 type ActivityLog = {
   id: number;
@@ -68,7 +69,7 @@ export default function AdminActivityPage() {
         Time: new Date(log.createdAt).toLocaleString(),
         Action: log.action,
         Enquiry: log.order ? `${log.order.orderNumber} (${log.order.status})` : "—",
-        Who: log.user ? `${log.user.name} (${log.user.email}) - ${log.user.role}` : "System",
+        Who: log.user ? `${log.user.name} (${log.user.email}) - ${roleLabel(log.user.role as Parameters<typeof roleLabel>[0])}` : "System",
         Details: formatPayload(log.payload),
       }));
 
@@ -130,7 +131,7 @@ export default function AdminActivityPage() {
                           {log.order ? `${log.order.orderNumber} (${log.order.status})` : "—"}
                         </td>
                         <td className="px-4 py-3 text-slate-600">
-                          {log.user ? `${log.user.name} (${log.user.email}) - ${log.user.role}` : "System"}
+                          {log.user ? `${log.user.name} (${log.user.email}) - ${roleLabel(log.user.role as Parameters<typeof roleLabel>[0])}` : "System"}
                         </td>
                         <td className="max-w-sm truncate px-4 py-3 text-slate-500" title={formatPayload(log.payload)}>
                           {formatPayload(log.payload)}

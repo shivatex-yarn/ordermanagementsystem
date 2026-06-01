@@ -31,6 +31,7 @@ import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { roleLabel } from "@/lib/roles";
 
 type Overview = {
   statusCounts: Record<string, number>;
@@ -617,7 +618,7 @@ export default function MDOverviewPage() {
                       {e.detail ? <p className="mt-0.5 text-xs text-slate-500">{e.detail}</p> : null}
                       {e.actor ? (
                         <p className="mt-0.5 text-[11px] text-slate-400">
-                          by {e.actor.name} · {e.actor.role.replace(/_/g, " ")}
+                          by {e.actor.name} · {roleLabel(e.actor.role as Parameters<typeof roleLabel>[0])}
                         </p>
                       ) : null}
                     </li>
