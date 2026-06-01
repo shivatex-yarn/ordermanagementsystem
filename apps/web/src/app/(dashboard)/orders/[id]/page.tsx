@@ -2471,7 +2471,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         </Card>
       )}
 
-      {order.sampleRequested && (
+      {order.sampleRequested && user?.role !== "ACCOUNTS" && (
         <Card className="overflow-hidden border border-slate-200 shadow-sm">
           <CardHeader className="border-b border-violet-100 bg-gradient-to-br from-violet-50/70 via-purple-50/30 to-slate-50/50 px-5 py-4">
             <div className="flex items-start gap-3">
@@ -3213,7 +3213,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       )}
 
       {/* ── Customer Feedback Card (always visible) ── */}
-      {(order.customerFeedback || (showInteractiveUi && mightSubmitFeedback)) && (
+      {user?.role !== "ACCOUNTS" && (order.customerFeedback || (showInteractiveUi && mightSubmitFeedback)) && (
         <Card className="overflow-hidden border border-slate-200 shadow-sm">
           <CardHeader className="border-b border-fuchsia-100 bg-gradient-to-br from-fuchsia-50/70 via-pink-50/30 to-slate-50/50 px-5 py-4">
             <div className="flex items-start gap-3">
@@ -3670,7 +3670,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         </DialogContent>
       </Dialog>
 
-      {order?.id ? (
+      {order?.id && user?.role !== "ACCOUNTS" ? (
         <EnquiryTimeline enquiryId={Number(order.id)} />
       ) : null}
 

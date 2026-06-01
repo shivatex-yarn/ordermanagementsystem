@@ -22,6 +22,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useIdleLogout } from "@/hooks/use-idle-logout";
 import { IdleWarningDialog } from "@/components/idle-warning-dialog";
 import { SLAGate } from "@/components/sla-gate";
+import { roleLabel } from "@/lib/roles";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -234,7 +235,7 @@ export default function DashboardLayout({
             <div className="min-w-0 flex-1">
               <p className="truncate text-xs font-semibold text-slate-800">{user.name}</p>
               <p className="truncate text-[10px] uppercase tracking-wide text-slate-400">
-                {user.role.replace(/_/g, " ")}
+                {roleLabel(user.role as Parameters<typeof roleLabel>[0])}
               </p>
             </div>
           </div>
@@ -298,7 +299,7 @@ export default function DashboardLayout({
                     <p className="text-sm font-semibold text-slate-900">{user.name}</p>
                     <p className="text-xs text-slate-500">{user.email}</p>
                     <span className="mt-1 inline-flex w-fit rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
-                      {user.role.replace(/_/g, " ")}
+                      {roleLabel(user.role as Parameters<typeof roleLabel>[0])}
                     </span>
                   </div>
                 </DropdownMenuLabel>

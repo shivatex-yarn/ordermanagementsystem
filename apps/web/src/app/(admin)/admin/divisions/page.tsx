@@ -23,6 +23,7 @@ import {
 import { UserPlus, X, Pencil, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/use-auth";
+import { roleLabel } from "@/lib/roles";
 
 type Division = {
   id: number;
@@ -402,7 +403,7 @@ export default function AdminDivisionsPage() {
                     })
                     .map((u) => (
                       <SelectItem key={u.id} value={String(u.id)}>
-                        {u.name} ({u.email}) — {u.role}
+                        {u.name} ({u.email}) — {roleLabel(u.role as Parameters<typeof roleLabel>[0])}
                         {" — "}
                         {u.division?.name ? `Division: ${u.division.name}` : "No division"}
                       </SelectItem>

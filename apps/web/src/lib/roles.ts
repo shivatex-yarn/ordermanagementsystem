@@ -104,7 +104,7 @@ export function roleLabel(role: Role | undefined | null): string {
     case "DIVISION_HEAD":
       return "Division Head";
     case "MANAGER":
-      return "Division Head";
+      return "Unit Head";
     case "SUPERVISOR":
       return "Production";
     case "ASM":
