@@ -11,8 +11,8 @@
   --foreground: #0a0a0a;
 
   /* Workflow accent tokens */
-  --enq-ink: #0f172a;             /* primary ink — near-black */
-  --enq-ink-soft: #1f2937;        /* secondary ink */
+  --enq-ink: #4F46E5;             /* primary ink — indigo */
+  --enq-ink-soft: #4338CA;        /* secondary ink — indigo hover */
   --enq-muted: #64748b;            /* muted slate */
   --enq-line: #e5e7eb;             /* hairline */
   --enq-surface: #f8fafc;          /* card backdrop */
@@ -27,14 +27,14 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-plus-jakarta), system-ui, sans-serif;
+  --font-mono: ui-monospace, monospace;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-family: var(--font-plus-jakarta), system-ui, sans-serif;
   font-feature-settings: "rlig" 1, "calt" 1;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;

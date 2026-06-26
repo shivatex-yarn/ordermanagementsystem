@@ -6,14 +6,10 @@ import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
 import { Eye, EyeOff } from "lucide-react";
 import Image from "next/image";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 
 export default function LoginPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  // Dev-only mock credentials so you can test UI without relying on Neon DB connectivity.
   const MOCK_EMAIL = "superadmin@shivatex.in";
   const MOCK_PASSWORD = "shivatex@12345";
   const shouldUseMock = process.env.NODE_ENV === "development";
@@ -45,7 +41,6 @@ export default function LoginPage() {
       };
 
       let { res, data } = await doLogin();
-      // If the server is still warming up after its internal retries, do one final client-side retry.
       if (res.status === 503) {
         await new Promise((r) => setTimeout(r, 2000));
         ({ res, data } = await doLogin());
@@ -55,11 +50,11 @@ export default function LoginPage() {
           typeof (data as Record<string, unknown>)?.error === "string"
             ? String((data as Record<string, unknown>).error)
             : "Login failed";
-        const msg =
+        setError(
           res.status === 503
             ? "Service is starting up. Please wait a moment and try again."
-            : rawMsg;
-        setError(msg);
+            : rawMsg
+        );
         return;
       }
       queryClient.removeQueries({ queryKey: ["auth", "me"] });
@@ -74,95 +69,124 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-white md:flex-row">
-      {/* Left: Branding */}
-      <div className="hidden md:flex md:w-[46%] lg:w-1/2 xl:w-[55%] flex-col justify-between border-slate-100 bg-slate-100/80 p-8 md:border-r md:bg-slate-50 lg:p-12 xl:p-16">
-        <div>
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-              <Image src="/company-logo.png" alt="Company Logo" width={40} height={40} className="object-contain" />
-            </div>
-            <span className="text-xl font-semibold tracking-tight text-slate-900">
-              Enquiry Management
-            </span>
+
+      {/* ── Left: Hero panel ── */}
+      <div className="hidden md:flex md:w-[52%] lg:w-[55%] flex-col bg-[#F2EDE8] px-10 py-8 lg:px-16 lg:py-12">
+
+        {/* Top brand bar */}
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white shadow-sm overflow-hidden">
+            <Image src="/company-logo.png" alt="Logo" width={36} height={36} className="object-contain" />
+          </div>
+          <div>
+            <p className="text-sm font-bold leading-tight text-slate-900">Shivatex Yarn Limited</p>
+            <p className="text-[11px] text-slate-500 leading-tight">Enquiry Management System</p>
           </div>
         </div>
-        <div>
-          <h2 className="max-w-md text-2xl font-semibold tracking-tight text-slate-900 md:text-3xl xl:text-4xl">
-            Enterprise enquiry workflow with SLA, audit, and full control.
-          </h2>
-          <p className="mt-4 text-slate-500 max-w-sm text-base">
-            Sign in to manage enquiries, divisions, and compliance—all in one place.
-          </p>
+
+        {/* Centre: logo card + headline */}
+        <div className="flex flex-1 flex-col justify-center gap-8">
+          {/* Logo card */}
+          <div className="w-[160px] h-[160px] rounded-2xl bg-white/70 flex items-center justify-center shadow-sm border border-white/60">
+            <Image src="/company-logo.png" alt="Company Logo" width={110} height={110} className="object-contain" />
+          </div>
+
+          {/* Headline block */}
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-indigo-600 mb-4">
+              Enquiry Management System
+            </p>
+            <h1 className="text-5xl font-extrabold leading-[1.05] tracking-tight text-slate-900 lg:text-6xl">
+              Manage<br />Every<br />
+              <span className="text-indigo-600">Enquiry.</span>
+            </h1>
+            <p className="mt-5 text-slate-500 text-base leading-relaxed max-w-sm">
+              Track, transfer, and manage all enquiries across divisions — from initial contact to final closure.
+            </p>
+          </div>
+
+          {/* Feature pills */}
+          <div className="flex flex-wrap gap-2">
+            {["SLA Tracking", "Division Transfers", "Audit Logs", "Role Access", "Notifications"].map((f) => (
+              <span
+                key={f}
+                className="rounded-full border border-slate-300/70 bg-white/60 px-3.5 py-1.5 text-xs font-medium text-slate-600"
+              >
+                {f}
+              </span>
+            ))}
+          </div>
         </div>
-        <p className="text-sm text-slate-400">© Enquiry Management System</p>
       </div>
 
-      {/* Right: Form */}
-      <div className="flex w-full flex-1 items-center justify-center p-5 sm:p-8 md:w-[54%] md:p-10 lg:w-1/2 lg:p-12 xl:w-[45%]">
-        <div className="w-full max-w-[400px]">
-          <div className="mb-8 md:hidden">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-                <Image src="/company-logo.png" alt="Company Logo" width={40} height={40} className="object-contain" />
-              </div>
-              <span className="text-xl font-semibold tracking-tight text-slate-900">
-                Enquiry Management
-              </span>
-            </div>
-          </div>
+      {/* ── Right: Sign-in form ── */}
+      <div className="flex w-full flex-1 flex-col items-center justify-center px-6 py-10 md:px-12 lg:px-16">
 
-          <h1 className="text-2xl sm:text-3xl font-semibold text-slate-900 tracking-tight">
+        {/* Mobile brand */}
+        <div className="mb-8 flex items-center gap-3 md:hidden">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white shadow-sm border border-slate-200 overflow-hidden">
+            <Image src="/company-logo.png" alt="Logo" width={36} height={36} className="object-contain" />
+          </div>
+          <div>
+            <p className="text-sm font-bold leading-tight text-slate-900">Shivatex Yarn Limited</p>
+            <p className="text-[11px] text-slate-500">Enquiry Management System</p>
+          </div>
+        </div>
+
+        <div className="w-full max-w-[400px]">
+          <h2 className="text-3xl font-extrabold tracking-tight text-slate-900">
             Welcome back
-          </h1>
-          <p className="mt-2 text-slate-500 text-base">
-            Enter your credentials to continue.
+          </h2>
+          <p className="mt-2 text-sm text-slate-500">
+            Sign in to your account to continue
           </p>
 
-          <form onSubmit={onSubmit} className="mt-10 space-y-6">
+          <form onSubmit={onSubmit} className="mt-9 space-y-5">
             {error && (
-              <div
-                role="alert"
-                className="rounded-xl bg-red-50 border border-red-100 text-red-700 text-sm px-4 py-3"
-              >
+              <div role="alert" className="rounded-xl bg-red-50 border border-red-100 text-red-700 text-sm px-4 py-3">
                 {error}
               </div>
             )}
-            <div className="space-y-2">
-              <Label
+
+            {/* Email */}
+            <div className="space-y-1.5">
+              <label
                 htmlFor="email"
-                className="text-slate-700 font-medium text-sm"
+                className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500"
               >
-                Email
-              </Label>
-              <Input
+                Email Address
+              </label>
+              <input
                 id="email"
                 type="email"
-                placeholder="name@company.com"
+                placeholder="you@shivatex.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 autoComplete="email"
-                className="h-12 rounded-xl border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 focus-visible:ring-slate-900 focus-visible:ring-2"
+                className="w-full h-12 rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 placeholder:text-slate-400 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-shadow"
               />
             </div>
-            <div className="space-y-2">
+
+            {/* Password */}
+            <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <Label
+                <label
                   htmlFor="password"
-                  className="text-slate-700 font-medium text-sm"
+                  className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500"
                 >
                   Password
-                </Label>
+                </label>
                 <Link
                   href="/forgot-password"
-                  className="text-xs text-slate-500 hover:text-slate-900 transition-colors"
+                  className="text-xs text-slate-400 hover:text-indigo-600 transition-colors"
                   tabIndex={-1}
                 >
                   Forgot password?
                 </Link>
               </div>
               <div className="relative">
-                <Input
+                <input
                   id="password"
                   type={showPassword ? "text" : "password"}
                   placeholder="••••••••"
@@ -170,33 +194,31 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   autoComplete="current-password"
-                  className="h-12 rounded-xl border-slate-200 bg-white pr-11 text-slate-900 placeholder:text-slate-400 focus-visible:ring-slate-900 focus-visible:ring-2"
+                  className="w-full h-12 rounded-xl border border-slate-200 bg-white px-4 pr-12 text-sm text-slate-900 placeholder:text-slate-400 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-shadow"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword((v) => !v)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
                   aria-label={showPassword ? "Hide password" : "Show password"}
                 >
-                  {showPassword ? (
-                    <EyeOff className="h-5 w-5" aria-hidden />
-                  ) : (
-                    <Eye className="h-5 w-5" aria-hidden />
-                  )}
+                  {showPassword ? <EyeOff className="h-4 w-4" aria-hidden /> : <Eye className="h-4 w-4" aria-hidden />}
                 </button>
               </div>
             </div>
-            <Button
+
+            {/* Submit */}
+            <button
               type="submit"
-              className="w-full h-12 rounded-xl text-base font-medium bg-slate-900 hover:bg-slate-800 text-white"
               disabled={loading}
+              className="w-full h-12 rounded-xl bg-indigo-600 text-white text-sm font-semibold tracking-wide hover:bg-indigo-700 active:bg-indigo-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed mt-2"
             >
               {loading ? "Signing in…" : "Sign in"}
-            </Button>
+            </button>
           </form>
 
-          <p className="mt-8 text-center text-sm text-slate-400">
-            Secure access. Your data is protected.
+          <p className="mt-10 text-center text-xs text-slate-400">
+            Shivatex Yarn Limited · EMS
           </p>
         </div>
       </div>

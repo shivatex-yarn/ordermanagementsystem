@@ -111,7 +111,7 @@ export function SLAGate() {
                 <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-700">
                   <Building2 className="h-3 w-3" /> {focus.division.name}
                 </span>
-                <span className="inline-flex items-center gap-1 rounded-full bg-slate-900 px-2 py-0.5 font-medium text-white">
+                <span className="inline-flex items-center gap-1 rounded-full bg-indigo-600 px-2 py-0.5 font-medium text-white">
                   {focus.order.status}
                 </span>
                 {focus.order.priority !== "NORMAL" ? (
@@ -125,7 +125,7 @@ export function SLAGate() {
               Delay reason
             </label>
             <textarea
-              className="mt-1 w-full resize-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+              className="mt-1 w-full resize-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-600/10"
               rows={5}
               placeholder="Describe the cause and corrective action — minimum 10 characters."
               value={reason}
@@ -139,7 +139,7 @@ export function SLAGate() {
                 type="button"
                 disabled={submit.isPending || reason.trim().length < 10}
                 onClick={() => submit.mutate({ breachId: focus.breachId, reasonText: reason })}
-                className="bg-slate-900 text-white hover:bg-slate-800"
+                className="bg-indigo-600 text-white hover:bg-indigo-700"
               >
                 {submit.isPending ? "Submitting…" : "Submit and continue"}
               </Button>

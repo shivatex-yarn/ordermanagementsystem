@@ -106,7 +106,7 @@ function ResetPasswordForm() {
               </p>
               <Link
                 href="/forgot-password"
-                className="inline-block mt-2 w-full text-center h-11 leading-[44px] rounded-xl text-sm font-medium bg-slate-900 text-white hover:bg-slate-800 transition-colors"
+                className="inline-block mt-2 w-full text-center h-11 leading-[44px] rounded-xl text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
               >
                 Request a new reset link
               </Link>
@@ -131,7 +131,7 @@ function ResetPasswordForm() {
               </p>
               <Link
                 href="/login"
-                className="inline-block mt-2 w-full text-center h-11 leading-[44px] rounded-xl text-sm font-medium bg-slate-900 text-white hover:bg-slate-800 transition-colors"
+                className="inline-block mt-2 w-full text-center h-11 leading-[44px] rounded-xl text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
               >
                 Sign in now
               </Link>
@@ -173,7 +173,7 @@ function ResetPasswordForm() {
                       required
                       autoComplete="new-password"
                       autoFocus
-                      className="h-11 rounded-xl border-slate-200 bg-white pr-11 text-slate-900 placeholder:text-slate-400 focus-visible:ring-slate-900 focus-visible:ring-2"
+                      className="h-11 rounded-xl border-slate-200 bg-white pr-11 text-slate-900 placeholder:text-slate-400 focus-visible:ring-indigo-600 focus-visible:ring-2"
                     />
                     <button
                       type="button"
@@ -208,7 +208,7 @@ function ResetPasswordForm() {
                           ? "border-red-300 focus-visible:ring-red-400"
                           : passwordsMatch
                             ? "border-emerald-300 focus-visible:ring-emerald-400"
-                            : "border-slate-200 focus-visible:ring-slate-900"
+                            : "border-slate-200 focus-visible:ring-indigo-600"
                       }`}
                     />
                     <button
@@ -234,7 +234,7 @@ function ResetPasswordForm() {
 
                 <Button
                   type="submit"
-                  className="w-full h-11 rounded-xl text-sm font-medium bg-slate-900 hover:bg-slate-800 text-white"
+                  className="w-full h-11 rounded-xl text-sm font-medium bg-indigo-600 hover:bg-indigo-700 text-white"
                   disabled={loading || passwordsMismatch || password.length < 8}
                 >
                   {loading ? "Updating…" : "Update password"}

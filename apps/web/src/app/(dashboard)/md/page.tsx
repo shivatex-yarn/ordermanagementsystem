@@ -159,9 +159,9 @@ function StatCard({
 
 function StatusPill({ status }: { status: string }) {
   const map: Record<string, string> = {
-    PLACED: "bg-slate-900 text-white",
+    PLACED: "bg-indigo-600 text-white",
     IN_PROGRESS: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100",
-    TRANSFERRED: "bg-blue-50 text-blue-700 ring-1 ring-blue-100",
+    TRANSFERRED: "bg-indigo-50 text-blue-700 ring-1 ring-blue-100",
     REJECTED: "bg-red-50 text-red-700 ring-1 ring-red-100",
     COMPLETED: "bg-slate-100 text-slate-700",
     CANCELLED: "bg-slate-100 text-slate-500",
@@ -606,7 +606,7 @@ export default function MDOverviewPage() {
                 <ol className="relative space-y-4 border-l border-slate-200 pl-5">
                   {slice.map((e) => (
                     <li key={e.id} className="relative">
-                      <span className="absolute -left-[1.45rem] top-1.5 inline-flex h-2.5 w-2.5 rounded-full bg-slate-900 ring-4 ring-white" />
+                      <span className="absolute -left-[1.45rem] top-1.5 inline-flex h-2.5 w-2.5 rounded-full bg-indigo-600 ring-4 ring-white" />
                       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                         <Link href={`/orders/${e.order.id}`} className="font-mono text-xs font-semibold text-slate-900 hover:underline">
                           {e.order.orderNumber}

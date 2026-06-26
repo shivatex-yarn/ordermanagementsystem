@@ -168,14 +168,14 @@ export default function AdminLayout({
                 className={cn(
                   "group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150",
                   active
-                    ? "bg-slate-100 text-slate-900 shadow-[inset_3px_0_0_0_rgb(79,70,229)] ring-1 ring-slate-200/80"
-                    : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                    ? "bg-indigo-50 text-indigo-600 shadow-[inset_3px_0_0_0_#4F46E5] ring-1 ring-indigo-200/80"
+                    : "text-slate-600 hover:bg-indigo-50 hover:text-indigo-600"
                 )}
               >
                 <Icon
                   className={cn(
                     "h-4.5 w-4.5 shrink-0 transition-opacity",
-                    active ? "text-indigo-600" : "text-slate-500 group-hover:text-slate-700"
+                    active ? "text-indigo-600" : "text-slate-500 group-hover:text-indigo-600"
                   )}
                   strokeWidth={active ? 2.25 : 2}
                 />

@@ -1598,7 +1598,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                     <button
                       type="button"
                       onClick={openEdit}
-                      className="rounded-md border border-blue-200 bg-white/60 px-2.5 py-1 text-xs font-medium text-blue-700 transition-colors hover:bg-white hover:text-blue-900"
+                      className="rounded-md border border-blue-200 bg-white/60 px-2.5 py-1 text-xs font-medium text-blue-700 transition-colors hover:bg-white hover:text-indigo-600"
                     >
                       Edit details
                     </button>
@@ -1669,7 +1669,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                     </div>
                     {editEnquiryError && <p className="text-xs text-red-600">{editEnquiryError}</p>}
                     <div className="flex gap-2">
-                      <button type="button" onClick={() => void saveEdit()} disabled={editEnquirySaving} className="rounded bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700 disabled:opacity-60">
+                      <button type="button" onClick={() => void saveEdit()} disabled={editEnquirySaving} className="rounded bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-60">
                         {editEnquirySaving ? "Saving…" : "Save changes"}
                       </button>
                       <button type="button" onClick={() => setEditingEnquiry(false)} className="rounded border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50">
@@ -1739,7 +1739,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                               href={gstServeUrl}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="rounded bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-blue-700"
+                              className="rounded bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-indigo-600"
                             >
                               View
                             </a>
@@ -1829,8 +1829,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 ) : null}
               </div>
               <div className="rounded-xl border border-slate-100 bg-gradient-to-br from-slate-50/80 to-white p-3 space-y-2">
-                <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ring-1 ${order.enquiryHandoff.developmentKind === "existing" ? "bg-blue-50 text-blue-700 ring-blue-200" : "bg-violet-50 text-violet-700 ring-violet-200"}`}>
-                  <span className={`h-1.5 w-1.5 rounded-full ${order.enquiryHandoff.developmentKind === "existing" ? "bg-blue-500" : "bg-violet-500"}`} />
+                <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ring-1 ${order.enquiryHandoff.developmentKind === "existing" ? "bg-indigo-50 text-blue-700 ring-blue-200" : "bg-violet-50 text-violet-700 ring-violet-200"}`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${order.enquiryHandoff.developmentKind === "existing" ? "bg-indigo-500" : "bg-violet-500"}`} />
                   {order.enquiryHandoff.developmentKind === "existing" ? "Existing development" : "New development"}
                 </span>
                 {typeof order.enquiryHandoff.existingProductDetails === "string" && order.enquiryHandoff.existingProductDetails.trim() ? (
@@ -2173,7 +2173,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                   <>
                     <div className="flex items-baseline gap-3">
                       <span className="min-w-[9rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">Development</span>
-                      <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ${order.enquiryHandoff.developmentKind === "existing" ? "bg-blue-50 text-blue-700 ring-blue-200" : "bg-violet-50 text-violet-700 ring-violet-200"}`}>
+                      <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ${order.enquiryHandoff.developmentKind === "existing" ? "bg-indigo-50 text-blue-700 ring-blue-200" : "bg-violet-50 text-violet-700 ring-violet-200"}`}>
                         {order.enquiryHandoff.developmentKind === "existing" ? "Existing development" : "New development"}
                       </span>
                     </div>
@@ -2557,8 +2557,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                   )}
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-3">
-                  <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ring-1 ${sampleDevelopment.type === "existing" ? "bg-blue-50 text-blue-700 ring-blue-200" : "bg-violet-50 text-violet-700 ring-violet-200"}`}>
-                    <span className={`h-1.5 w-1.5 rounded-full ${sampleDevelopment.type === "existing" ? "bg-blue-500" : "bg-violet-500"}`} />
+                  <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ring-1 ${sampleDevelopment.type === "existing" ? "bg-indigo-50 text-blue-700 ring-blue-200" : "bg-violet-50 text-violet-700 ring-violet-200"}`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${sampleDevelopment.type === "existing" ? "bg-indigo-500" : "bg-violet-500"}`} />
                     {sampleDevelopment.type === "existing" ? "Existing development" : "New development"}
                   </span>
                   {sampleDevelopment.type === "new" && (
@@ -2828,7 +2828,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                   {order.sampleProofUrl && (
                     <p className="flex flex-col sm:col-span-2">
                       <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Proof</span>
-                      <a className="text-sm font-medium text-blue-600 underline underline-offset-2" href={order.sampleProofUrl} target="_blank" rel="noreferrer">
+                      <a className="text-sm font-medium text-indigo-600 underline underline-offset-2" href={order.sampleProofUrl} target="_blank" rel="noreferrer">
                         View proof ↗
                       </a>
                     </p>
@@ -2951,7 +2951,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                             href={`/api/orders/${orderId}/sample-proof`}
                             target="_blank"
                             rel="noreferrer"
-                            className="text-sm font-medium text-blue-600 underline underline-offset-2"
+                            className="text-sm font-medium text-indigo-600 underline underline-offset-2"
                           >
                             View proof ↗
                           </a>
@@ -3235,13 +3235,13 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                       POSITIVE: "bg-emerald-50 text-emerald-700 ring-emerald-200",
                       NEUTRAL: "bg-amber-50 text-amber-700 ring-amber-200",
                       NEGATIVE: "bg-red-50 text-red-700 ring-red-200",
-                      PENDING: "bg-blue-50 text-blue-700 ring-blue-200",
+                      PENDING: "bg-indigo-50 text-blue-700 ring-blue-200",
                     }[order.customerResponseStatus] ?? "bg-slate-50 text-slate-600 ring-slate-200"}`}>
                       <span className={`h-1.5 w-1.5 rounded-full ${{
                         POSITIVE: "bg-emerald-500",
                         NEUTRAL: "bg-amber-500",
                         NEGATIVE: "bg-red-500",
-                        PENDING: "bg-blue-500",
+                        PENDING: "bg-indigo-500",
                       }[order.customerResponseStatus] ?? "bg-slate-400"}`} />
                       {order.customerResponseStatus}
                     </span>
@@ -3530,8 +3530,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             {sampleDevelopment && (
               <div className="flex items-start gap-2">
                 <span className="w-28 shrink-0 text-xs font-medium text-slate-500 pt-0.5">Dev type</span>
-                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ${sampleDevelopment.type === "existing" ? "bg-blue-50 text-blue-700 ring-blue-200" : "bg-violet-50 text-violet-700 ring-violet-200"}`}>
-                  <span className={`h-1.5 w-1.5 rounded-full ${sampleDevelopment.type === "existing" ? "bg-blue-500" : "bg-violet-500"}`} />
+                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ${sampleDevelopment.type === "existing" ? "bg-indigo-50 text-blue-700 ring-blue-200" : "bg-violet-50 text-violet-700 ring-violet-200"}`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${sampleDevelopment.type === "existing" ? "bg-indigo-500" : "bg-violet-500"}`} />
                   {sampleDevelopment.type === "existing" ? "Existing development" : "New development"}
                 </span>
               </div>
