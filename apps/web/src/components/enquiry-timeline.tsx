@@ -35,7 +35,7 @@ type Event = {
 };
 
 const ICONS: Record<string, { icon: React.ComponentType<{ className?: string }>; tone: string }> = {
-  ENQUIRY_CREATED: { icon: Package, tone: "bg-slate-900 text-white" },
+  ENQUIRY_CREATED: { icon: Package, tone: "bg-indigo-600 text-white" },
   ENQUIRY_APPROVED: { icon: CheckCircle2, tone: "bg-emerald-100 text-emerald-700" },
   ENQUIRY_REJECTED: { icon: XCircle, tone: "bg-red-100 text-red-700" },
   ENQUIRY_TRANSFERRED: { icon: ArrowRightLeft, tone: "bg-blue-100 text-blue-700" },
@@ -50,7 +50,7 @@ const ICONS: Record<string, { icon: React.ComponentType<{ className?: string }>;
   SAMPLE_SPECS_ACKNOWLEDGED_BY_SALES: { icon: CheckCircle2, tone: "bg-sky-100 text-sky-800" },
   SAMPLE_SHIPPED: { icon: Truck, tone: "bg-blue-100 text-blue-700" },
   SAMPLE_RECEIVED: { icon: PackageCheck, tone: "bg-emerald-100 text-emerald-700" },
-  CUSTOMER_FEEDBACK: { icon: MessageSquare, tone: "bg-slate-900 text-white" },
+  CUSTOMER_FEEDBACK: { icon: MessageSquare, tone: "bg-indigo-600 text-white" },
   PRIORITY_CHANGED: { icon: RotateCw, tone: "bg-slate-100 text-slate-700" },
   SLA_BREACHED: { icon: AlertOctagon, tone: "bg-red-100 text-red-700" },
   SLA_HEAD_REJECTION: { icon: ShieldAlert, tone: "bg-amber-100 text-amber-700" },

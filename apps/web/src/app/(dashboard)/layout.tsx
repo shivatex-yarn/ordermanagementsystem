@@ -175,7 +175,7 @@ export default function DashboardLayout({
             className="flex min-w-0 items-center gap-2.5"
             onClick={() => setSidebarOpen(false)}
           >
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-slate-900">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-indigo-600">
               <Package className="h-4 w-4 text-white" />
             </div>
             <span className="min-w-0 truncate text-sm font-bold tracking-tight text-slate-900">
@@ -205,8 +205,8 @@ export default function DashboardLayout({
                 className={cn(
                   "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                   isActive
-                    ? "bg-slate-900 text-white"
-                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                    ? "bg-indigo-600 text-white"
+                    : "text-slate-600 hover:bg-indigo-50 hover:text-indigo-600"
                 )}
               >
                 <Icon className="h-4 w-4 shrink-0" />
@@ -214,7 +214,7 @@ export default function DashboardLayout({
                 {item.href === "/notifications" && showUnreadUi && unreadCount > 0 ? (
                   <span className={cn(
                     "flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1 text-[10px] font-bold",
-                    isActive ? "bg-white text-slate-900" : "bg-slate-900 text-white"
+                    isActive ? "bg-white text-indigo-600" : "bg-indigo-600 text-white"
                   )}>
                     {unreadCount > 99 ? "99+" : unreadCount}
                   </span>
@@ -229,7 +229,7 @@ export default function DashboardLayout({
         {/* User footer */}
         <div className="border-t border-slate-200 p-3">
           <div className="flex items-center gap-3 rounded-lg bg-slate-50 px-3 py-2.5">
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-slate-900 text-[11px] font-bold text-white">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-indigo-600 text-[11px] font-bold text-white">
               {userInitials}
             </div>
             <div className="min-w-0 flex-1">
@@ -278,7 +278,7 @@ export default function DashboardLayout({
             >
               <Bell className="h-4 w-4" />
               {showUnreadUi && unreadCount > 0 ? (
-                <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-slate-900 px-1 text-[9px] font-bold text-white">
+                <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-indigo-600 px-1 text-[9px] font-bold text-white">
                   {unreadCount > 99 ? "99+" : unreadCount}
                 </span>
               ) : null}
@@ -287,7 +287,7 @@ export default function DashboardLayout({
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-slate-900 text-[11px] font-bold text-white transition-colors hover:bg-slate-700"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-indigo-600 text-[11px] font-bold text-white transition-colors hover:bg-indigo-700"
                   aria-label="Account menu"
                 >
                   {userInitials}
@@ -298,7 +298,7 @@ export default function DashboardLayout({
                   <div className="flex flex-col gap-0.5">
                     <p className="text-sm font-semibold text-slate-900">{user.name}</p>
                     <p className="text-xs text-slate-500">{user.email}</p>
-                    <span className="mt-1 inline-flex w-fit rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+                    <span className="mt-1 inline-flex w-fit rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-indigo-600">
                       {roleLabel(user.role as Parameters<typeof roleLabel>[0])}
                     </span>
                   </div>

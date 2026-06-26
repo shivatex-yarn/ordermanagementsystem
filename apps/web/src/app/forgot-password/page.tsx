@@ -119,13 +119,13 @@ export default function ForgotPasswordPage() {
                     required
                     autoComplete="email"
                     autoFocus
-                    className="h-11 rounded-xl border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 focus-visible:ring-slate-900 focus-visible:ring-2"
+                    className="h-11 rounded-xl border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 focus-visible:ring-indigo-600 focus-visible:ring-2"
                   />
                 </div>
 
                 <Button
                   type="submit"
-                  className="w-full h-11 rounded-xl text-sm font-medium bg-slate-900 hover:bg-slate-800 text-white"
+                  className="w-full h-11 rounded-xl text-sm font-medium bg-indigo-600 hover:bg-indigo-700 text-white"
                   disabled={loading}
                 >
                   {loading ? "Sending…" : "Send reset link"}

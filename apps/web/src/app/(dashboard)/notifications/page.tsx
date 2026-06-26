@@ -123,7 +123,7 @@ export default function NotificationsPage() {
       <Card className="border-slate-200/80 shadow-sm">
         <CardHeader className="border-b border-slate-100 bg-slate-50/50 pb-4">
           <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-900 text-white">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-600 text-white">
               <Bell className="h-4 w-4" />
             </div>
             <div>
