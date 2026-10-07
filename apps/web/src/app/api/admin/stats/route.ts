@@ -2,27 +2,31 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { withRole } from "@/lib/with-auth";
 
-/** Super Admin only: metrics for admin dashboard */
+/**
+ * Super Admin / Managing Director: metrics for the admin console.
+ *
+ * The Neon pooler hands each instance a single connection, so these run one
+ * after another. A `Promise.all` here exhausts the pool and times out.
+ */
 export async function GET() {
   const auth = await withRole(["SUPER_ADMIN", "MANAGING_DIRECTOR"]);
   if (auth.response) return auth.response;
 
-  const [
-    ordersByStatus,
-    totalOrders,
-    totalDivisions,
-    slaBreachesCount,
-    recentAuditCount,
-  ] = await Promise.all([
-    prisma.order.groupBy({
-      by: ["status"],
-      _count: { id: true },
-    }),
-    prisma.order.count(),
-    prisma.division.count(),
-    prisma.sLABreach.count({ where: { resolvedAt: null } }),
-    prisma.auditLog.count(),
-  ]);
+  const ordersByStatus = await prisma.order.groupBy({
+    by: ["status"],
+    _count: { id: true },
+  });
+  const totalOrders = await prisma.order.count();
+  const totalDivisions = await prisma.division.count();
+  const totalUsers = await prisma.user.count();
+  const activeUsers = await prisma.user.count({ where: { active: true } });
+  const slaBreachesCount = await prisma.sLABreach.count({ where: { resolvedAt: null } });
+  const recentAuditCount = await prisma.auditLog.count();
+
+  const usersByRole = await prisma.user.groupBy({
+    by: ["role"],
+    _count: { _all: true },
+  });
 
   const ordersByStatusMap = ordersByStatus.reduce(
     (acc, x) => {
@@ -41,8 +45,13 @@ export async function GET() {
       { status: "COMPLETED", count: ordersByStatusMap["COMPLETED"] ?? 0 },
       { status: "CANCELLED", count: ordersByStatusMap["CANCELLED"] ?? 0 },
     ],
+    usersByRole: usersByRole
+      .map((r) => ({ role: r.role, count: r._count._all }))
+      .sort((a, b) => b.count - a.count),
     totalOrders,
     totalDivisions,
+    totalUsers,
+    activeUsers,
     slaBreachesCount,
     recentAuditCount,
   });

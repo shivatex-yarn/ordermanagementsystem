@@ -20,6 +20,11 @@ const orderListSelect = {
   id: true,
   orderNumber: true,
   status: true,
+  priority: true,
+  companyName: true,
+  customerName: true,
+  slaDeadline: true,
+  assignedSupervisorId: true,
   createdAt: true,
   currentDivision: { select: { name: true } },
   createdBy: { select: { name: true, email: true } },
@@ -102,8 +107,22 @@ export async function GET(req: Request) {
   const customCreatedRange = parseCreatedAtRangeFromParams(dateFrom, dateTo);
   const wantStats = searchParams.get("stats") === "1";
   const wantExport = searchParams.get("export") === "1";
+  /** Free-text search from the header search box. */
+  const search = searchParams.get("q")?.trim() || "";
 
   const where: Prisma.OrderWhereInput = {};
+  if (search) {
+    // Matches how people actually look an enquiry up: by its number, the
+    // company, or the person who placed it.
+    const bare = search.replace(/^enq-/i, "");
+    where.OR = [
+      { orderNumber: { contains: bare, mode: "insensitive" } },
+      { companyName: { contains: search, mode: "insensitive" } },
+      { customerName: { contains: search, mode: "insensitive" } },
+      { customerPhone: { contains: search, mode: "insensitive" } },
+      { customerEmail: { contains: search, mode: "insensitive" } },
+    ];
+  }
   if (status) where.status = status as OrderStatus;
   if (divisionId) where.currentDivisionId = Number(divisionId);
   if (customCreatedRange) {

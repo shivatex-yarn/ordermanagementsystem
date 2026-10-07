@@ -33,7 +33,7 @@ export function DashboardCharts({
   if (pieData.length === 0) {
     return (
       <Card>
-        <CardContent className="py-8 text-center text-slate-500 text-sm">
+        <CardContent className="py-8 text-center text-[var(--app-ink-3)] text-sm">
           No enquiries in this view to chart.
         </CardContent>
       </Card>
@@ -51,11 +51,11 @@ export function DashboardCharts({
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
-      <Card className="overflow-hidden border border-slate-200 shadow-sm">
+      <Card className="overflow-hidden border border-[var(--app-line)] shadow-sm">
         <div className="h-1 w-full bg-gradient-to-r from-blue-500 via-indigo-500 to-violet-500" />
         <CardHeader className="pb-3 pt-5">
-          <CardTitle className="text-sm font-semibold text-slate-800">Status distribution</CardTitle>
-          <p className="text-xs font-normal text-slate-500">
+          <CardTitle className="text-sm font-semibold text-[var(--app-ink)]">Status distribution</CardTitle>
+          <p className="text-xs font-normal text-[var(--app-ink-3)]">
             {useCustomRange
               ? `Enquiry counts by status · ${dateFrom} → ${dateTo}`
               : "Enquiry counts by status for the selected period."}
@@ -86,11 +86,11 @@ export function DashboardCharts({
           </ResponsiveContainer>
         </CardContent>
       </Card>
-      <Card className="overflow-hidden border border-slate-200 shadow-sm">
+      <Card className="overflow-hidden border border-[var(--app-line)] shadow-sm">
         <div className="h-1 w-full bg-gradient-to-r from-emerald-400 via-teal-500 to-cyan-500" />
         <CardHeader className="pb-3 pt-5">
-          <CardTitle className="text-sm font-semibold text-slate-800">Enquiries by status</CardTitle>
-          <p className="text-xs font-normal text-slate-500">Volume breakdown across all statuses.</p>
+          <CardTitle className="text-sm font-semibold text-[var(--app-ink)]">Enquiries by status</CardTitle>
+          <p className="text-xs font-normal text-[var(--app-ink-3)]">Volume breakdown across all statuses.</p>
         </CardHeader>
         <CardContent className="h-72">
           <ResponsiveContainer width="100%" height="100%">

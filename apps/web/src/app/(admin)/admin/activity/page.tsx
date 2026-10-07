@@ -3,10 +3,11 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import * as XLSX from "xlsx";
-import { Download, FileText } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ChevronLeft, ChevronRight, Download, FileText } from "lucide-react";
+import { Panel, PageHeader, EmptyState } from "@/components/ui/panel";
+import { StatusPill } from "@/components/ui/status-pill";
 import { roleLabel } from "@/lib/roles";
+import { formatEnquiryNumberShort } from "@/lib/enquiry-display";
 
 type ActivityLog = {
   id: number;
@@ -24,7 +25,7 @@ type ActivityResponse = {
   limit: number;
 };
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 20;
 
 async function fetchActivity(page = 1, limit = PAGE_SIZE): Promise<ActivityResponse> {
   const res = await fetch(`/api/admin/activity?page=${page}&limit=${limit}`, {
@@ -34,9 +35,24 @@ async function fetchActivity(page = 1, limit = PAGE_SIZE): Promise<ActivityRespo
   return res.json();
 }
 
-function formatPayload(payload: unknown) {
+function formatPayload(payload: unknown): string {
   if (!payload || typeof payload !== "object") return "—";
-  return JSON.stringify(payload);
+  const entries = Object.entries(payload as Record<string, unknown>)
+    .filter(([, v]) => v != null && v !== "")
+    .map(([k, v]) => `${humanKey(k)}: ${String(v)}`);
+  return entries.length ? entries.join(" · ") : "—";
+}
+
+/** `fromDivisionId` reads better as "From division". */
+function humanKey(key: string): string {
+  const spaced = key.replace(/([A-Z])/g, " $1").replace(/\bId\b/g, "").trim();
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+/** `OrderTransferred` reads better as "Order transferred". */
+function humanAction(action: string): string {
+  const spaced = action.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/_/g, " ");
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1).toLowerCase();
 }
 
 export default function AdminActivityPage() {
@@ -67,9 +83,11 @@ export default function AdminActivityPage() {
 
       const rows = allLogs.map((log) => ({
         Time: new Date(log.createdAt).toLocaleString(),
-        Action: log.action,
+        Action: humanAction(log.action),
         Enquiry: log.order ? `${log.order.orderNumber} (${log.order.status})` : "—",
-        Who: log.user ? `${log.user.name} (${log.user.email}) - ${roleLabel(log.user.role as Parameters<typeof roleLabel>[0])}` : "System",
+        Who: log.user
+          ? `${log.user.name} (${log.user.email}) - ${roleLabel(log.user.role as Parameters<typeof roleLabel>[0])}`
+          : "System",
         Details: formatPayload(log.payload),
       }));
 
@@ -83,92 +101,151 @@ export default function AdminActivityPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Trigger events &amp; activity logs</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Who performed each action, when, and on which enquiry.
+    <div className="space-y-5">
+      <PageHeader
+        title="Activity logs"
+        description="Every recorded action — who did it, when, and on which enquiry."
+      >
+        <button
+          type="button"
+          onClick={handleExportExcel}
+          disabled={isExporting}
+          className="inline-flex h-10 items-center gap-2 rounded-xl border border-[var(--app-line)] bg-white px-3.5 text-sm font-semibold text-[var(--app-ink-2)] hover:bg-[var(--app-surface-sunk)] disabled:opacity-60"
+        >
+          <Download className="h-4 w-4" aria-hidden />
+          {isExporting ? "Exporting…" : "Download Excel"}
+        </button>
+      </PageHeader>
+
+      <Panel>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--app-line-soft)] px-5 py-3.5">
+          <p className="text-sm font-semibold text-[var(--app-ink-2)]">
+            {isLoading ? (
+              "Loading…"
+            ) : (
+              <>
+                <span className="tnum font-extrabold text-[var(--app-ink)]">
+                  {(data?.total ?? 0).toLocaleString()}
+                </span>{" "}
+                entries
+              </>
+            )}
           </p>
+          {totalPages > 1 ? (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                aria-label="Previous page"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--app-line)] text-[var(--app-ink-2)] disabled:opacity-40 hover:enabled:bg-[var(--app-surface-sunk)]"
+              >
+                <ChevronLeft className="h-4 w-4" aria-hidden />
+              </button>
+              <span className="tnum text-xs font-semibold text-[var(--app-ink-2)]">
+                Page {page} of {totalPages}
+              </span>
+              <button
+                type="button"
+                aria-label="Next page"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--app-line)] text-[var(--app-ink-2)] disabled:opacity-40 hover:enabled:bg-[var(--app-surface-sunk)]"
+              >
+                <ChevronRight className="h-4 w-4" aria-hidden />
+              </button>
+            </div>
+          ) : null}
         </div>
-        <Button type="button" onClick={handleExportExcel} disabled={isExporting} className="gap-2 self-start sm:self-auto">
-          <Download className="h-4 w-4" />
-          {isExporting ? "Exporting..." : "Download Excel"}
-        </Button>
-      </div>
 
-      <Card className="border-slate-200 shadow-sm">
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base font-semibold">
-            <FileText className="h-4 w-4 text-slate-600" />
-            Activity timeline
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="py-10 text-center text-sm text-slate-500">Loading activity logs...</div>
-          ) : !data?.logs?.length ? (
-            <div className="py-10 text-center text-sm text-slate-500">No activity yet.</div>
-          ) : (
-            <>
-              <div className="overflow-x-auto rounded-xl border border-slate-200">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-slate-50">
-                    <tr className="border-b border-slate-200">
-                      <th className="px-4 py-3 text-left font-semibold text-slate-700">Time</th>
-                      <th className="px-4 py-3 text-left font-semibold text-slate-700">Action</th>
-                      <th className="px-4 py-3 text-left font-semibold text-slate-700">Enquiry</th>
-                      <th className="px-4 py-3 text-left font-semibold text-slate-700">Who</th>
-                      <th className="px-4 py-3 text-left font-semibold text-slate-700">Details</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white">
-                    {data.logs.map((log) => (
-                      <tr key={log.id} className="border-b border-slate-100 last:border-b-0">
-                        <td className="px-4 py-3 text-slate-600">{new Date(log.createdAt).toLocaleString()}</td>
-                        <td className="px-4 py-3 font-medium text-slate-900">{log.action}</td>
-                        <td className="px-4 py-3 text-slate-700">
-                          {log.order ? `${log.order.orderNumber} (${log.order.status})` : "—"}
-                        </td>
-                        <td className="px-4 py-3 text-slate-600">
-                          {log.user ? `${log.user.name} (${log.user.email}) - ${roleLabel(log.user.role as Parameters<typeof roleLabel>[0])}` : "System"}
-                        </td>
-                        <td className="max-w-sm truncate px-4 py-3 text-slate-500" title={formatPayload(log.payload)}>
-                          {formatPayload(log.payload)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="mt-4 flex items-center justify-between">
-                <p className="text-sm text-slate-500">
-                  Page {page} of {totalPages} ({data.total} records)
-                </p>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-                    disabled={page <= 1}
-                  >
-                    Previous
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
-                    disabled={page >= totalPages}
-                  >
-                    Next
-                  </Button>
-                </div>
-              </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
+        {isLoading ? (
+          <div className="space-y-2 p-5">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-12 animate-pulse rounded-xl bg-[var(--app-surface-sunk)]" />
+            ))}
+          </div>
+        ) : !data?.logs?.length ? (
+          <EmptyState
+            icon={FileText}
+            title="No activity recorded yet"
+            description="Actions on enquiries will appear here as people work."
+          />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[900px] border-collapse text-left">
+              <thead>
+                <tr className="border-b border-[var(--app-line-soft)] bg-[var(--app-surface-sunk)]">
+                  <th scope="col" className="px-5 py-2.5 text-[11px] font-bold uppercase tracking-wide text-[var(--app-ink-3)]">
+                    When
+                  </th>
+                  <th scope="col" className="px-3 py-2.5 text-[11px] font-bold uppercase tracking-wide text-[var(--app-ink-3)]">
+                    Action
+                  </th>
+                  <th scope="col" className="px-3 py-2.5 text-[11px] font-bold uppercase tracking-wide text-[var(--app-ink-3)]">
+                    Enquiry
+                  </th>
+                  <th scope="col" className="px-3 py-2.5 text-[11px] font-bold uppercase tracking-wide text-[var(--app-ink-3)]">
+                    Who
+                  </th>
+                  <th scope="col" className="px-5 py-2.5 text-[11px] font-bold uppercase tracking-wide text-[var(--app-ink-3)]">
+                    Details
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--app-line-soft)]">
+                {data.logs.map((log) => (
+                  <tr key={log.id} className="align-top hover:bg-[var(--app-brand-tint)]/30">
+                    <td className="tnum whitespace-nowrap px-5 py-3 text-xs text-[var(--app-ink-2)]">
+                      {new Date(log.createdAt).toLocaleString(undefined, {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                        hour: "numeric",
+                        minute: "2-digit",
+                      })}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-3 text-sm font-bold text-[var(--app-ink)]">
+                      {humanAction(log.action)}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-3">
+                      {log.order ? (
+                        <span className="flex flex-col gap-1">
+                          <span className="tnum text-xs font-semibold text-[var(--app-ink-2)]">
+                            {formatEnquiryNumberShort(log.order.orderNumber)}
+                          </span>
+                          <StatusPill status={log.order.status} size="sm" />
+                        </span>
+                      ) : (
+                        <span className="text-xs text-[var(--app-ink-3)]">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-3">
+                      {log.user ? (
+                        <span className="block">
+                          <span className="block text-sm font-semibold text-[var(--app-ink)]">
+                            {log.user.name}
+                          </span>
+                          <span className="block text-xs text-[var(--app-ink-3)]">
+                            {roleLabel(log.user.role as Parameters<typeof roleLabel>[0])}
+                          </span>
+                        </span>
+                      ) : (
+                        <span className="text-xs font-semibold text-[var(--app-ink-3)]">System</span>
+                      )}
+                    </td>
+                    <td
+                      className="max-w-sm truncate px-5 py-3 text-xs text-[var(--app-ink-3)]"
+                      title={formatPayload(log.payload)}
+                    >
+                      {formatPayload(log.payload)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Panel>
     </div>
   );
 }

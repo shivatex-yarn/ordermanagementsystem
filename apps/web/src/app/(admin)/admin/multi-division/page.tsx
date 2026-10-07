@@ -1,5 +1,7 @@
 "use client";
 
+import { PageHeader } from "@/components/ui/panel";
+
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -68,12 +70,10 @@ export default function AdminMultiDivisionPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Multi-division access requests</h1>
-        <p className="text-slate-500 mt-1">
-          Division Heads can request access to multiple divisions. Approve or reject here.
-        </p>
-      </div>
+      <PageHeader
+        title="Multi-division access requests"
+        description="People asking to raise enquiries for divisions other than their own. Approve or reject each one here."
+      />
 
       <Card>
         <CardHeader>
@@ -95,9 +95,9 @@ export default function AdminMultiDivisionPage() {
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <div className="py-8 text-center text-slate-500">Loading...</div>
+            <div className="py-8 text-center text-[var(--app-ink-3)]">Loading...</div>
           ) : !requests.length ? (
-            <div className="py-8 text-center text-slate-500">
+            <div className="py-8 text-center text-[var(--app-ink-3)]">
               No {statusFilter.toLowerCase()} requests.
             </div>
           ) : (
@@ -105,12 +105,12 @@ export default function AdminMultiDivisionPage() {
               {requests.map((r) => (
                 <li
                   key={r.id}
-                  className="rounded-lg border border-slate-100 p-4 space-y-2"
+                  className="rounded-lg border border-[var(--app-line-soft)] p-4 space-y-2"
                 >
                   <div className="flex items-center justify-between flex-wrap gap-2">
                     <div>
                       <span className="font-medium">{r.user.name}</span>
-                      <span className="text-slate-500 text-sm ml-2">({r.user.email})</span>
+                      <span className="text-[var(--app-ink-3)] text-sm ml-2">({r.user.email})</span>
                     </div>
                     <Badge
                       variant={
@@ -124,14 +124,14 @@ export default function AdminMultiDivisionPage() {
                       {r.status}
                     </Badge>
                   </div>
-                  <p className="text-sm text-slate-600">
+                  <p className="text-sm text-[var(--app-ink-2)]">
                     <span className="font-medium">Requested divisions:</span>{" "}
                     {r.divisions.map((d) => d.division.name).join(", ")}
                   </p>
-                  <p className="text-sm text-slate-600">
+                  <p className="text-sm text-[var(--app-ink-2)]">
                     <span className="font-medium">Reason:</span> {r.reason}
                   </p>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-[var(--app-ink-3)]">
                     Submitted {new Date(r.createdAt).toLocaleString()}
                     {r.approvedBy && ` · Processed by ${r.approvedBy.name}`}
                   </p>

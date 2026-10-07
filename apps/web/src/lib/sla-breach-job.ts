@@ -17,16 +17,10 @@ function adjustDeadline(deadline: Date): Date {
 
 type OrderSnap = { id: number; orderNumber: string; currentDivisionId: number };
 
-async function createBreachIfNew(order: OrderSnap, breachType: string, deadline: Date, now: Date): Promise<boolean> {
-  const effective = adjustDeadline(new Date(deadline));
-  if (effective >= now) return false;
+/** One stage of one enquiry that has run past its deadline. */
+type Candidate = { order: OrderSnap; breachType: string };
 
-  const existing = await prisma.sLABreach.findFirst({
-    where: { orderId: order.id, breachType, resolvedAt: null },
-    select: { id: true },
-  });
-  if (existing) return false;
-
+async function recordBreach(order: OrderSnap, breachType: string, now: Date): Promise<void> {
   await prisma.sLABreach.create({
     data: { orderId: order.id, divisionId: order.currentDivisionId, breachType },
   });
@@ -38,7 +32,19 @@ async function createBreachIfNew(order: OrderSnap, breachType: string, deadline:
     breachType,
     timestamp: now.toISOString(),
   });
-  return true;
+}
+
+/** Collect a stage as a candidate when its (holiday-adjusted) deadline has passed. */
+function consider(
+  out: Candidate[],
+  order: OrderSnap,
+  breachType: string,
+  deadline: Date | null,
+  now: Date
+): void {
+  if (!deadline) return;
+  if (adjustDeadline(new Date(deadline)) >= now) return;
+  out.push({ order, breachType });
 }
 
 /**
@@ -54,6 +60,11 @@ async function createBreachIfNew(order: OrderSnap, breachType: string, deadline:
  *
  * Only runs during SLA business hours: Monday–Saturday, 10:00 AM–6:00 PM IST,
  * excluding South Indian public holidays.
+ *
+ * Existing breaches are looked up in a single query rather than one per
+ * candidate stage. On the Neon pooler (one connection per instance) the old
+ * per-candidate `findFirst` turned a handful of overdue enquiries into twenty
+ * seconds of serialised round trips, which stalled every request behind it.
  */
 export async function runSlaBreachCheck(): Promise<{
   breachesCreated: number;
@@ -67,8 +78,8 @@ export async function runSlaBreachCheck(): Promise<{
     return { breachesCreated: 0, skipped: true, reason: "outside business hours" };
   }
 
-  let total = 0;
   const base = { id: true, orderNumber: true, currentDivisionId: true } as const;
+  const candidates: Candidate[] = [];
 
   // ── PLACEMENT: PLACED / TRANSFERRED orders past their 48h deadline ──────────
   const placement = await prisma.order.findMany({
@@ -76,7 +87,7 @@ export async function runSlaBreachCheck(): Promise<{
     select: { ...base, slaDeadline: true },
   });
   for (const o of placement) {
-    if (o.slaDeadline && await createBreachIfNew(o, "PLACEMENT", o.slaDeadline, now)) total++;
+    consider(candidates, o, "PLACEMENT", o.slaDeadline, now);
   }
 
   // ── IN_PROGRESS stage deadlines ─────────────────────────────────────────────
@@ -102,12 +113,56 @@ export async function runSlaBreachCheck(): Promise<{
   });
 
   for (const o of inProgress) {
-    if (o.handoffSlaDeadline            && await createBreachIfNew(o, "HANDOFF",              o.handoffSlaDeadline,            now)) total++;
-    if (o.headSampleApprovalSlaDeadline && await createBreachIfNew(o, "HEAD_SAMPLE_APPROVAL", o.headSampleApprovalSlaDeadline, now)) total++;
-    if (o.sampleDetailsSlaDeadline      && await createBreachIfNew(o, "SAMPLE_DETAILS",       o.sampleDetailsSlaDeadline,      now)) total++;
-    if (o.sampleApprovalSlaDeadline     && await createBreachIfNew(o, "SAMPLE_APPROVAL",      o.sampleApprovalSlaDeadline,     now)) total++;
-    if (o.shipmentSlaDeadline           && await createBreachIfNew(o, "SHIPMENT",             o.shipmentSlaDeadline,           now)) total++;
+    consider(candidates, o, "HANDOFF",              o.handoffSlaDeadline,            now);
+    consider(candidates, o, "HEAD_SAMPLE_APPROVAL", o.headSampleApprovalSlaDeadline, now);
+    consider(candidates, o, "SAMPLE_DETAILS",       o.sampleDetailsSlaDeadline,      now);
+    consider(candidates, o, "SAMPLE_APPROVAL",      o.sampleApprovalSlaDeadline,     now);
+    consider(candidates, o, "SHIPMENT",             o.shipmentSlaDeadline,           now);
+  }
+
+  if (candidates.length === 0) return { breachesCreated: 0 };
+
+  // One lookup for everything already recorded, instead of one per candidate.
+  const orderIds = [...new Set(candidates.map((c) => c.order.id))];
+  const existing = await prisma.sLABreach.findMany({
+    where: { orderId: { in: orderIds }, resolvedAt: null },
+    select: { orderId: true, breachType: true },
+  });
+  const alreadyRecorded = new Set(existing.map((e) => `${e.orderId}:${e.breachType}`));
+
+  let total = 0;
+  for (const c of candidates) {
+    const key = `${c.order.id}:${c.breachType}`;
+    if (alreadyRecorded.has(key)) continue;
+    await recordBreach(c.order, c.breachType, now);
+    // Guard against the same stage appearing twice in one run.
+    alreadyRecorded.add(key);
+    total++;
   }
 
   return { breachesCreated: total };
+}
+
+/**
+ * Safety-net wrapper for read endpoints.
+ *
+ * Dashboards call this so breach counts stay fresh between cron runs, but a
+ * dashboard must not pay for a full scan on every load. This runs the check at
+ * most once every few minutes per server process; the nightly cron calls
+ * `runSlaBreachCheck` directly and is never throttled.
+ */
+const THROTTLE_MS = 5 * 60_000;
+let lastRunAt = 0;
+
+export async function runSlaBreachCheckThrottled(): Promise<void> {
+  const now = Date.now();
+  if (now - lastRunAt < THROTTLE_MS) return;
+  lastRunAt = now;
+  try {
+    await runSlaBreachCheck();
+  } catch (err) {
+    console.error("[sla-breach-job] throttled run failed:", err);
+    // Allow the next caller to retry rather than waiting out the window.
+    lastRunAt = 0;
+  }
 }

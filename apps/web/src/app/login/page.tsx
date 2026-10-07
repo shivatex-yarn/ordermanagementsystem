@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
 import { Eye, EyeOff } from "lucide-react";
 import Image from "next/image";
+import { APP_NAME, COMPANY_NAME } from "@/lib/branding";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -71,36 +72,36 @@ export default function LoginPage() {
     <div className="min-h-screen flex flex-col bg-white md:flex-row">
 
       {/* ── Left: Hero panel ── */}
-      <div className="hidden md:flex md:w-[52%] lg:w-[55%] flex-col bg-[#F2EDE8] px-10 py-8 lg:px-16 lg:py-12">
+      <div className="hidden md:flex md:w-[52%] lg:w-[55%] flex-col bg-[var(--app-nav)] px-10 py-8 lg:px-16 lg:py-12">
 
         {/* Top brand bar */}
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white shadow-sm overflow-hidden">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white">
             <Image src="/company-logo.png" alt="Logo" width={36} height={36} className="object-contain" />
           </div>
           <div>
-            <p className="text-sm font-bold leading-tight text-slate-900">Shivatex Yarn Limited</p>
-            <p className="text-[11px] text-slate-500 leading-tight">Enquiry Management System</p>
+            <p className="text-sm font-bold leading-tight text-white">{COMPANY_NAME}</p>
+            <p className="text-[11px] leading-tight text-[var(--app-nav-ink)]">{APP_NAME}</p>
           </div>
         </div>
 
         {/* Centre: logo card + headline */}
         <div className="flex flex-1 flex-col justify-center gap-8">
           {/* Logo card */}
-          <div className="w-[160px] h-[160px] rounded-2xl bg-white/70 flex items-center justify-center shadow-sm border border-white/60">
+          <div className="w-[160px] h-[160px] rounded-2xl bg-white flex items-center justify-center border border-white/20">
             <Image src="/company-logo.png" alt="Company Logo" width={110} height={110} className="object-contain" />
           </div>
 
           {/* Headline block */}
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-indigo-600 mb-4">
-              Enquiry Management System
+            <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-[var(--app-nav-ink)] mb-4">
+              {APP_NAME}
             </p>
-            <h1 className="text-5xl font-extrabold leading-[1.05] tracking-tight text-slate-900 lg:text-6xl">
+            <h1 className="text-5xl font-extrabold leading-[1.05] tracking-tight text-white lg:text-6xl">
               Manage<br />Every<br />
-              <span className="text-indigo-600">Enquiry.</span>
+              <span className="text-[#a5b4fc]">Enquiry.</span>
             </h1>
-            <p className="mt-5 text-slate-500 text-base leading-relaxed max-w-sm">
+            <p className="mt-5 max-w-sm text-base leading-relaxed text-[var(--app-nav-ink)]">
               Track, transfer, and manage all enquiries across divisions — from initial contact to final closure.
             </p>
           </div>
@@ -110,7 +111,7 @@ export default function LoginPage() {
             {["SLA Tracking", "Division Transfers", "Audit Logs", "Role Access", "Notifications"].map((f) => (
               <span
                 key={f}
-                className="rounded-full border border-slate-300/70 bg-white/60 px-3.5 py-1.5 text-xs font-medium text-slate-600"
+                className="rounded-full border border-white/15 bg-white/10 px-3.5 py-1.5 text-xs font-semibold text-[var(--app-nav-ink)]"
               >
                 {f}
               </span>
@@ -124,20 +125,20 @@ export default function LoginPage() {
 
         {/* Mobile brand */}
         <div className="mb-8 flex items-center gap-3 md:hidden">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white shadow-sm border border-slate-200 overflow-hidden">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white shadow-sm border border-[var(--app-line)] overflow-hidden">
             <Image src="/company-logo.png" alt="Logo" width={36} height={36} className="object-contain" />
           </div>
           <div>
-            <p className="text-sm font-bold leading-tight text-slate-900">Shivatex Yarn Limited</p>
-            <p className="text-[11px] text-slate-500">Enquiry Management System</p>
+            <p className="text-sm font-bold leading-tight text-[var(--app-ink)]">{COMPANY_NAME}</p>
+            <p className="text-[11px] text-[var(--app-ink-3)]">{APP_NAME}</p>
           </div>
         </div>
 
         <div className="w-full max-w-[400px]">
-          <h2 className="text-3xl font-extrabold tracking-tight text-slate-900">
+          <h2 className="text-3xl font-extrabold tracking-tight text-[var(--app-ink)]">
             Welcome back
           </h2>
-          <p className="mt-2 text-sm text-slate-500">
+          <p className="mt-2 text-sm text-[var(--app-ink-3)]">
             Sign in to your account to continue
           </p>
 
@@ -152,7 +153,7 @@ export default function LoginPage() {
             <div className="space-y-1.5">
               <label
                 htmlFor="email"
-                className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500"
+                className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--app-ink-3)]"
               >
                 Email Address
               </label>
@@ -164,7 +165,7 @@ export default function LoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 autoComplete="email"
-                className="w-full h-12 rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 placeholder:text-slate-400 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-shadow"
+                className="w-full h-12 rounded-xl border border-[var(--app-line)] bg-white px-4 text-sm text-[var(--app-ink)] placeholder:text-[var(--app-ink-3)] outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-shadow"
               />
             </div>
 
@@ -173,13 +174,13 @@ export default function LoginPage() {
               <div className="flex items-center justify-between">
                 <label
                   htmlFor="password"
-                  className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500"
+                  className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--app-ink-3)]"
                 >
                   Password
                 </label>
                 <Link
                   href="/forgot-password"
-                  className="text-xs text-slate-400 hover:text-indigo-600 transition-colors"
+                  className="text-xs text-[var(--app-ink-3)] hover:text-[var(--app-brand)] transition-colors"
                   tabIndex={-1}
                 >
                   Forgot password?
@@ -194,12 +195,12 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   autoComplete="current-password"
-                  className="w-full h-12 rounded-xl border border-slate-200 bg-white px-4 pr-12 text-sm text-slate-900 placeholder:text-slate-400 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-shadow"
+                  className="w-full h-12 rounded-xl border border-[var(--app-line)] bg-white px-4 pr-12 text-sm text-[var(--app-ink)] placeholder:text-[var(--app-ink-3)] outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-shadow"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-lg text-[var(--app-ink-3)] hover:text-[var(--app-ink-2)] hover:bg-[var(--app-line-soft)] transition-colors"
                   aria-label={showPassword ? "Hide password" : "Show password"}
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" aria-hidden /> : <Eye className="h-4 w-4" aria-hidden />}
@@ -211,14 +212,14 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full h-12 rounded-xl bg-indigo-600 text-white text-sm font-semibold tracking-wide hover:bg-indigo-700 active:bg-indigo-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed mt-2"
+              className="w-full h-12 rounded-xl bg-[var(--app-brand)] text-white text-sm font-semibold tracking-wide hover:bg-[var(--app-brand-strong)] active:bg-indigo-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed mt-2"
             >
               {loading ? "Signing in…" : "Sign in"}
             </button>
           </form>
 
-          <p className="mt-10 text-center text-xs text-slate-400">
-            Shivatex Yarn Limited · EMS
+          <p className="mt-10 text-center text-xs text-[var(--app-ink-3)]">
+            {COMPANY_NAME} · {APP_NAME}
           </p>
         </div>
       </div>
