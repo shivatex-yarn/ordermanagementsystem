@@ -39,7 +39,7 @@ export function IdleWarningDialog({
           <DialogTitle>Session expiring soon</DialogTitle>
           <DialogDescription>
             You&apos;ve been inactive for a while. You&apos;ll be automatically signed out in{" "}
-            <span className="font-semibold text-slate-900">
+            <span className="font-semibold text-[var(--app-ink)]">
               {secondsLeft}s
             </span>
             .

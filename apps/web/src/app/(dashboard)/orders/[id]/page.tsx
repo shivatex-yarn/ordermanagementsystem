@@ -21,6 +21,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useState, useMemo, useEffect, useRef } from "react";
+import { NextStep, StepTracker, MissingAssignee } from "@/components/ui/guidance";
+import { Panel, PanelHeader } from "@/components/ui/panel";
+import { StatusPill } from "@/components/ui/status-pill";
+import { buildEnquiryGuidance } from "@/lib/enquiry-guidance";
 import { formatEnquiryNumber, formatEnquiryNumberShort } from "@/lib/enquiry-display";
 import { userMayViewEnquiryExecInsights } from "@/lib/enquiry-access";
 import { EnquiryTimeline } from "@/components/enquiry-timeline";
@@ -33,23 +37,14 @@ import {
 import { ChevronDown, FileDown, FileSpreadsheet } from "lucide-react";
 import { downloadOrderExcel } from "@/lib/order-excel";
 
-const statusVariant: Record<string, "default" | "secondary" | "destructive" | "success" | "warning"> = {
-  PLACED: "secondary",
-  IN_PROGRESS: "default",
-  TRANSFERRED: "warning",
-  REJECTED: "destructive",
-  COMPLETED: "success",
-  CANCELLED: "secondary",
-};
-
 /** Visual emphasis for placed date: SLA-aware when deadline exists (uses client clock only after mount to avoid SSR mismatch). */
 function placedDateClass(
   order: { status: string; slaDeadline?: string | null; createdAt: string },
   nowMs: number | null
 ): string {
   const terminal = order.status === "COMPLETED" || order.status === "REJECTED" || order.status === "CANCELLED";
-  if (terminal) return "text-slate-600";
-  if (nowMs == null) return "font-medium text-slate-700";
+  if (terminal) return "text-[var(--app-ink-2)]";
+  if (nowMs == null) return "font-medium text-[var(--app-ink-2)]";
 
   if (order.slaDeadline) {
     const deadline = new Date(order.slaDeadline).getTime();
@@ -59,7 +54,7 @@ function placedDateClass(
     if (hoursLeft < 24) return "font-medium text-amber-700";
     return "font-medium text-emerald-700";
   }
-  return "font-medium text-indigo-700";
+  return "font-medium text-[var(--app-brand-strong)]";
 }
 
 /** Values from `<input type="date" />` (YYYY-MM-DD). Noon avoids DST off-by-one when formatting. */
@@ -311,12 +306,12 @@ function auditTimelineStyles(action: string): {
   switch (action) {
     case "OrderCreated":
       return {
-        card: `${base} border-slate-200/90 bg-gradient-to-br from-slate-50 via-white to-violet-50/30 ring-1 ring-slate-500/5`,
+        card: `${base} border-[var(--app-line)]/90 bg-gradient-to-br from-slate-50 via-white to-violet-50/30 ring-1 ring-slate-500/5`,
         label:
           "inline-flex items-center rounded-full bg-slate-800 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-white shadow-sm",
-        time: "font-mono text-xs font-medium text-slate-600 tabular-nums",
-        user: "mt-2 text-slate-700",
-        extra: "mt-2 border-t border-slate-100/80 pt-2 text-slate-600",
+        time: "font-mono text-xs font-medium text-[var(--app-ink-2)] tabular-nums",
+        user: "mt-2 text-[var(--app-ink-2)]",
+        extra: "mt-2 border-t border-[var(--app-line-soft)]/80 pt-2 text-[var(--app-ink-2)]",
       };
     case "OrderAccepted":
       return {
@@ -392,12 +387,12 @@ function auditTimelineStyles(action: string): {
       };
     case "SampleShipped":
       return {
-        card: `${base} border-indigo-200/80 bg-gradient-to-br from-indigo-50/85 via-white to-blue-50/35 ring-1 ring-indigo-400/12`,
+        card: `${base} border-[var(--app-brand-line)]/80 bg-gradient-to-br from-indigo-50/85 via-white to-blue-50/35 ring-1 ring-indigo-400/12`,
         label:
-          "inline-flex items-center rounded-full bg-indigo-600 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-white shadow-sm shadow-indigo-600/20",
-        time: "font-mono text-xs font-medium text-indigo-900/70 tabular-nums",
+          "inline-flex items-center rounded-full bg-[var(--app-brand)] px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-white shadow-sm shadow-indigo-600/20",
+        time: "font-mono text-xs font-medium text-[var(--app-brand-strong)]/70 tabular-nums",
         user: "mt-2 text-indigo-950/80",
-        extra: "mt-2 border-t border-indigo-100/80 pt-2 text-indigo-900/75",
+        extra: "mt-2 border-t border-indigo-100/80 pt-2 text-[var(--app-brand-strong)]/75",
       };
     case "SalesFeedbackRecorded":
       return {
@@ -419,12 +414,12 @@ function auditTimelineStyles(action: string): {
       };
     default:
       return {
-        card: `${base} border-slate-200/80 bg-gradient-to-br from-slate-50/80 via-white to-slate-100/30 ring-1 ring-slate-400/10`,
+        card: `${base} border-[var(--app-line)] bg-gradient-to-br from-slate-50/80 via-white to-slate-100/30 ring-1 ring-slate-400/10`,
         label:
           "inline-flex items-center rounded-full bg-slate-600 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-white shadow-sm",
-        time: "font-mono text-xs font-medium text-slate-600 tabular-nums",
-        user: "mt-2 text-slate-700",
-        extra: "mt-2 border-t border-slate-100 pt-2 text-slate-600",
+        time: "font-mono text-xs font-medium text-[var(--app-ink-2)] tabular-nums",
+        user: "mt-2 text-[var(--app-ink-2)]",
+        extra: "mt-2 border-t border-[var(--app-line-soft)] pt-2 text-[var(--app-ink-2)]",
       };
   }
 }
@@ -483,7 +478,7 @@ function EnquiryPipelineStrip({
             ? "bg-red-50 text-red-700 border-red-200 ring-1 ring-red-100"
             : s.done
               ? "bg-emerald-50 text-emerald-700 border-emerald-200 ring-1 ring-emerald-100"
-              : "bg-white text-slate-400 border-slate-200";
+              : "bg-white text-[var(--app-ink-3)] border-[var(--app-line)]";
         return (
           <span
             key={s.label}
@@ -1279,23 +1274,23 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <Link href={backHref} className="inline-flex items-center gap-1 text-xs font-medium text-slate-400">
+        <Link href={backHref} className="inline-flex items-center gap-1 text-xs font-medium text-[var(--app-ink-3)]">
           {backLabel}
         </Link>
         <div className="space-y-3">
           <div className="flex items-center gap-3">
-            <div className="h-8 w-36 animate-pulse rounded-lg bg-slate-100" />
-            <div className="h-6 w-24 animate-pulse rounded-full bg-slate-100" />
+            <div className="h-8 w-36 animate-pulse rounded-lg bg-[var(--app-line-soft)]" />
+            <div className="h-6 w-24 animate-pulse rounded-full bg-[var(--app-line-soft)]" />
           </div>
-          <div className="h-4 w-56 animate-pulse rounded bg-slate-100" />
+          <div className="h-4 w-56 animate-pulse rounded bg-[var(--app-line-soft)]" />
         </div>
-        <div className="overflow-hidden rounded-xl border border-slate-200">
-          <div className="h-12 animate-pulse bg-slate-50" />
-          <div className="divide-y divide-slate-100">
+        <div className="overflow-hidden rounded-xl border border-[var(--app-line)]">
+          <div className="h-12 animate-pulse bg-[var(--app-surface-sunk)]" />
+          <div className="divide-y divide-[var(--app-line-soft)]">
             {[1, 2, 3].map((i) => (
               <div key={i} className="flex items-center gap-4 px-5 py-4">
-                <div className="h-4 w-32 animate-pulse rounded bg-slate-100" />
-                <div className="h-4 w-48 animate-pulse rounded bg-slate-100" />
+                <div className="h-4 w-32 animate-pulse rounded bg-[var(--app-line-soft)]" />
+                <div className="h-4 w-48 animate-pulse rounded bg-[var(--app-line-soft)]" />
               </div>
             ))}
           </div>
@@ -1312,9 +1307,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           <CardHeader>
             <CardTitle>Could not load enquiry</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3 text-sm text-slate-600">
+          <CardContent className="space-y-3 text-sm text-[var(--app-ink-2)]">
             <p>{orderError instanceof Error ? orderError.message : "This enquiry may not exist or you may not have access."}</p>
-            <p className="text-slate-500">
+            <p className="text-[var(--app-ink-3)]">
               If you recently upgraded the app, ask your admin to run database migrations and clear the enquiry cache.
             </p>
             <Button type="button" variant="outline" size="sm" onClick={() => refetchOrder()}>
@@ -1326,13 +1321,15 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     );
   }
 
+  const guidance = buildEnquiryGuidance(order, user?.role);
+
   return (
     <div className="space-y-6">
       {/* Page header */}
       <header className="space-y-3">
         <Link
           href={backHref}
-          className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 transition-colors hover:text-indigo-600"
+          className="inline-flex items-center gap-1 text-xs font-medium text-[var(--app-ink-3)] transition-colors hover:text-[var(--app-brand)]"
         >
           {backLabel}
         </Link>
@@ -1341,20 +1338,15 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             <div className="flex flex-wrap items-center gap-2">
               <span
                 title={order.orderNumber ? formatEnquiryNumber(order.orderNumber) : "—"}
-                className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 font-mono text-sm font-bold text-indigo-800 shadow-sm"
+                className="rounded-lg border border-[var(--app-brand-line)] bg-[var(--app-brand-tint)] px-3 py-1.5 font-mono text-sm font-bold text-indigo-800 shadow-sm"
               >
                 {order.orderNumber ? formatEnquiryNumberShort(order.orderNumber) : "—"}
               </span>
-              <Badge
-                variant={statusVariant[order.status] ?? "secondary"}
-                className="text-xs font-semibold uppercase tracking-wide"
-              >
-                {order.status.replace("_", " ")}
-              </Badge>
+              <StatusPill status={order.status} />
             </div>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-500">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-[var(--app-ink-3)]">
               {order.currentDivision?.name?.trim() ? (
-                <span className="font-medium text-slate-700">{order.currentDivision.name}</span>
+                <span className="font-medium text-[var(--app-ink-2)]">{order.currentDivision.name}</span>
               ) : null}
               <span className="text-slate-300" aria-hidden>·</span>
               <time
@@ -1396,9 +1388,47 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         </div>
       </header>
 
-      <Card className="overflow-hidden border border-slate-200 shadow-sm">
-        <CardHeader className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/60 px-5 py-4 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
-          <CardTitle className="text-base font-semibold text-slate-800">Enquiry details</CardTitle>
+      {/* ── What happens next ──────────────────────────────────────────
+          The single most useful thing on this page: whose move it is, what
+          that move is, and the whole journey with the current stage marked. */}
+      {!isAuditView ? (
+        <>
+          {guidance.next ? (
+            <NextStep
+              tone={guidance.next.tone}
+              eyebrow={guidance.next.mine ? "Your next step" : "Current stage"}
+              title={guidance.next.title}
+              description={guidance.next.description}
+            />
+          ) : null}
+
+          {needsHandoff ? (
+            <MissingAssignee
+              message="Nobody in production is assigned to this enquiry. It will not move until you assign someone."
+              actionLabel="Assign below"
+              onAction={() => {
+                document
+                  .getElementById("handoff-assignment-card")
+                  ?.scrollIntoView({ behavior: "smooth", block: "center" });
+              }}
+            />
+          ) : null}
+
+          <Panel>
+            <PanelHeader
+              title="Where this enquiry has got to"
+              caption="Every stage, and whose job each one is"
+            />
+            <div className="px-5 py-5">
+              <StepTracker steps={guidance.steps} />
+            </div>
+          </Panel>
+        </>
+      ) : null}
+
+      <Card className="overflow-hidden border border-[var(--app-line)] shadow-sm">
+        <CardHeader className="flex flex-col gap-3 border-b border-[var(--app-line-soft)] bg-[var(--app-surface-sunk)]/60 px-5 py-4 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+          <CardTitle className="text-base font-semibold text-[var(--app-ink)]">Enquiry details</CardTitle>
           <div className="flex flex-wrap items-center gap-2 sm:justify-end">
             {canAct && showInteractiveUi ? (
               <>
@@ -1492,12 +1522,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         </CardHeader>
         <CardContent className="p-0">
           <div className="flex flex-col gap-1 border-b border-indigo-100 bg-gradient-to-r from-indigo-50/80 to-violet-50/50 px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-indigo-700">Enquiry number</span>
-            <span className="font-mono text-sm font-bold tracking-tight text-indigo-900">
+            <span className="text-xs font-semibold uppercase tracking-wider text-[var(--app-brand-strong)]">Enquiry number</span>
+            <span className="font-mono text-sm font-bold tracking-tight text-[var(--app-brand-strong)]">
               {order.orderNumber ? formatEnquiryNumber(order.orderNumber) : "—"}
             </span>
           </div>
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-[var(--app-line-soft)]">
           {/* Customer identity fields — editable by salesperson while PLACED */}
           {(() => {
             const canEditEnquiry =
@@ -1598,7 +1628,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                     <button
                       type="button"
                       onClick={openEdit}
-                      className="rounded-md border border-blue-200 bg-white/60 px-2.5 py-1 text-xs font-medium text-blue-700 transition-colors hover:bg-white hover:text-indigo-600"
+                      className="rounded-md border border-blue-200 bg-white/60 px-2.5 py-1 text-xs font-medium text-blue-700 transition-colors hover:bg-white hover:text-[var(--app-brand)]"
                     >
                       Edit details
                     </button>
@@ -1609,46 +1639,46 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                   <div className="space-y-3">
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div className="space-y-1">
-                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Customer name</label>
-                        <input value={editCustomerName} onChange={(e) => setEditCustomerName(e.target.value)} className="flex h-8 w-full rounded border border-slate-200 bg-white px-2.5 text-sm" />
+                        <label className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Customer name</label>
+                        <input value={editCustomerName} onChange={(e) => setEditCustomerName(e.target.value)} className="flex h-8 w-full rounded border border-[var(--app-line)] bg-white px-2.5 text-sm" />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Phone</label>
-                        <input value={editCustomerPhone} onChange={(e) => setEditCustomerPhone(e.target.value)} className="flex h-8 w-full rounded border border-slate-200 bg-white px-2.5 text-sm" />
+                        <label className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Phone</label>
+                        <input value={editCustomerPhone} onChange={(e) => setEditCustomerPhone(e.target.value)} className="flex h-8 w-full rounded border border-[var(--app-line)] bg-white px-2.5 text-sm" />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Email ID</label>
-                        <input type="email" value={editCustomerEmail} onChange={(e) => setEditCustomerEmail(e.target.value)} className="flex h-8 w-full rounded border border-slate-200 bg-white px-2.5 text-sm" />
+                        <label className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Email ID</label>
+                        <input type="email" value={editCustomerEmail} onChange={(e) => setEditCustomerEmail(e.target.value)} className="flex h-8 w-full rounded border border-[var(--app-line)] bg-white px-2.5 text-sm" />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Company name</label>
-                        <input value={editCompanyName} onChange={(e) => setEditCompanyName(e.target.value)} className="flex h-8 w-full rounded border border-slate-200 bg-white px-2.5 text-sm" />
+                        <label className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Company name</label>
+                        <input value={editCompanyName} onChange={(e) => setEditCompanyName(e.target.value)} className="flex h-8 w-full rounded border border-[var(--app-line)] bg-white px-2.5 text-sm" />
                       </div>
                       <div className="space-y-1 sm:col-span-2">
-                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Address</label>
-                        <textarea value={editCustomerAddress} onChange={(e) => setEditCustomerAddress(e.target.value)} rows={2} className="flex min-h-[52px] w-full rounded border border-slate-200 bg-white px-2.5 py-1.5 text-sm" />
+                        <label className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Address</label>
+                        <textarea value={editCustomerAddress} onChange={(e) => setEditCustomerAddress(e.target.value)} rows={2} className="flex min-h-[52px] w-full rounded border border-[var(--app-line)] bg-white px-2.5 py-1.5 text-sm" />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Customer enquiry date</label>
-                        <input type="date" value={editCustomerOrderDate} onChange={(e) => setEditCustomerOrderDate(e.target.value)} className="flex h-8 w-full rounded border border-slate-200 bg-white px-2.5 text-sm" />
+                        <label className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Customer enquiry date</label>
+                        <input type="date" value={editCustomerOrderDate} onChange={(e) => setEditCustomerOrderDate(e.target.value)} className="flex h-8 w-full rounded border border-[var(--app-line)] bg-white px-2.5 text-sm" />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">GST number <span className="font-normal text-slate-300">(optional)</span></label>
-                        <input value={editGstNumber} onChange={(e) => setEditGstNumber(e.target.value.toUpperCase())} className="flex h-8 w-full rounded border border-slate-200 bg-white px-2.5 font-mono text-sm" />
+                        <label className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">GST number <span className="font-normal text-slate-300">(optional)</span></label>
+                        <input value={editGstNumber} onChange={(e) => setEditGstNumber(e.target.value.toUpperCase())} className="flex h-8 w-full rounded border border-[var(--app-line)] bg-white px-2.5 font-mono text-sm" />
                       </div>
                       <div className="space-y-1 sm:col-span-2">
-                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">GST certificate <span className="font-normal text-slate-300">(optional)</span></label>
+                        <label className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">GST certificate <span className="font-normal text-slate-300">(optional)</span></label>
                         {editGstCopyUrl ? (
                           <div className="flex items-center gap-2 rounded border border-emerald-200 bg-emerald-50 px-2.5 py-1.5">
                             <span className="flex-1 truncate text-xs font-medium text-emerald-800">{editGstFileName || "File uploaded"}</span>
-                            <button type="button" onClick={() => { setEditGstCopyUrl(""); setEditGstFileName(""); }} className="text-[10px] text-slate-500 hover:text-red-600 underline">Remove</button>
+                            <button type="button" onClick={() => { setEditGstCopyUrl(""); setEditGstFileName(""); }} className="text-[10px] text-[var(--app-ink-3)] hover:text-red-600 underline">Remove</button>
                           </div>
                         ) : (
                           <button
                             type="button"
                             onClick={() => editGstFileRef.current?.click()}
                             disabled={editGstUploading}
-                            className="flex h-8 w-full items-center justify-center rounded border border-dashed border-slate-300 bg-white px-2.5 text-xs text-slate-500 hover:border-slate-400 hover:bg-slate-50 disabled:opacity-60"
+                            className="flex h-8 w-full items-center justify-center rounded border border-dashed border-slate-300 bg-white px-2.5 text-xs text-[var(--app-ink-3)] hover:border-slate-400 hover:bg-[var(--app-surface-sunk)] disabled:opacity-60"
                           >
                             {editGstUploading ? "Uploading…" : "Click to upload PDF / JPG / PNG"}
                           </button>
@@ -1663,16 +1693,16 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                         {editGstUploadError && <p className="text-[10px] text-red-600">{editGstUploadError}</p>}
                       </div>
                       <div className="space-y-1 sm:col-span-2">
-                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Product description</label>
-                        <input value={editDescription} onChange={(e) => setEditDescription(e.target.value)} className="flex h-8 w-full rounded border border-slate-200 bg-white px-2.5 text-sm" />
+                        <label className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Product description</label>
+                        <input value={editDescription} onChange={(e) => setEditDescription(e.target.value)} className="flex h-8 w-full rounded border border-[var(--app-line)] bg-white px-2.5 text-sm" />
                       </div>
                     </div>
                     {editEnquiryError && <p className="text-xs text-red-600">{editEnquiryError}</p>}
                     <div className="flex gap-2">
-                      <button type="button" onClick={() => void saveEdit()} disabled={editEnquirySaving} className="rounded bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-60">
+                      <button type="button" onClick={() => void saveEdit()} disabled={editEnquirySaving} className="rounded bg-[var(--app-brand)] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[var(--app-brand-strong)] disabled:opacity-60">
                         {editEnquirySaving ? "Saving…" : "Save changes"}
                       </button>
-                      <button type="button" onClick={() => setEditingEnquiry(false)} className="rounded border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50">
+                      <button type="button" onClick={() => setEditingEnquiry(false)} className="rounded border border-[var(--app-line)] px-3 py-1.5 text-xs font-semibold text-[var(--app-ink-2)] hover:bg-[var(--app-surface-sunk)]">
                         Cancel
                       </button>
                     </div>
@@ -1681,49 +1711,49 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                   <div className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
                     {order.customerName ? (
                       <p className="flex flex-col">
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Customer name</span>
-                        <span className="text-sm font-medium text-slate-800">{order.customerName}</span>
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Customer name</span>
+                        <span className="text-sm font-medium text-[var(--app-ink)]">{order.customerName}</span>
                       </p>
                     ) : null}
                     {order.customerPhone ? (
                       <p className="flex flex-col">
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Phone</span>
-                        <span className="text-sm font-medium text-slate-800">{order.customerPhone}</span>
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Phone</span>
+                        <span className="text-sm font-medium text-[var(--app-ink)]">{order.customerPhone}</span>
                       </p>
                     ) : null}
                     {order.customerEmail ? (
                       <p className="flex flex-col">
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Email ID</span>
-                        <span className="text-sm font-medium text-slate-800">{order.customerEmail}</span>
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Email ID</span>
+                        <span className="text-sm font-medium text-[var(--app-ink)]">{order.customerEmail}</span>
                       </p>
                     ) : null}
                     {order.companyName ? (
                       <p className="flex flex-col">
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Company name</span>
-                        <span className="text-sm font-semibold text-slate-900">{order.companyName}</span>
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Company name</span>
+                        <span className="text-sm font-semibold text-[var(--app-ink)]">{order.companyName}</span>
                       </p>
                     ) : null}
                     {order.customerAddress ? (
                       <p className="flex flex-col sm:col-span-2">
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Address</span>
-                        <span className="text-sm font-medium text-slate-800 whitespace-pre-wrap">{order.customerAddress}</span>
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Address</span>
+                        <span className="text-sm font-medium text-[var(--app-ink)] whitespace-pre-wrap">{order.customerAddress}</span>
                       </p>
                     ) : null}
                     {order.customerOrderDate ? (
                       <p className="flex flex-col">
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Customer enquiry date</span>
-                        <span className="text-sm font-medium text-slate-800">{new Date(order.customerOrderDate).toLocaleDateString()}</span>
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Customer enquiry date</span>
+                        <span className="text-sm font-medium text-[var(--app-ink)]">{new Date(order.customerOrderDate).toLocaleDateString()}</span>
                       </p>
                     ) : null}
                     {order.gstNumber ? (
                       <p className="flex flex-col">
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">GST number</span>
-                        <span className="font-mono text-sm font-medium text-slate-800">{order.gstNumber}</span>
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">GST number</span>
+                        <span className="font-mono text-sm font-medium text-[var(--app-ink)]">{order.gstNumber}</span>
                       </p>
                     ) : (
                       <p className="flex flex-col">
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">GST</span>
-                        <span className="text-sm text-slate-400 italic">N/A</span>
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">GST</span>
+                        <span className="text-sm text-[var(--app-ink-3)] italic">N/A</span>
                       </p>
                     )}
                     {(() => {
@@ -1732,21 +1762,21 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                       const gstServeUrl = `/api/orders/${order.id}/gst-certificate`;
                       return (
                         <div className="flex flex-col sm:col-span-2">
-                          <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">GST certificate</span>
-                          <div className="mt-1 flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                            <span className="flex-1 truncate text-sm font-medium text-slate-800">{gst.name}</span>
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">GST certificate</span>
+                          <div className="mt-1 flex flex-wrap items-center gap-2 rounded-xl border border-[var(--app-line)] bg-[var(--app-surface-sunk)] px-3 py-2">
+                            <span className="flex-1 truncate text-sm font-medium text-[var(--app-ink)]">{gst.name}</span>
                             <a
                               href={gstServeUrl}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="rounded bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-indigo-600"
+                              className="rounded bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-[var(--app-brand)]"
                             >
                               View
                             </a>
                             <a
                               href={gstServeUrl}
                               download={gst.name}
-                              className="rounded border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                              className="rounded border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-[var(--app-ink-2)] hover:bg-[var(--app-line-soft)]"
                             >
                               Download
                             </a>
@@ -1760,39 +1790,39 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             );
           })()}
           <p className="flex flex-col gap-0.5 px-5 py-3.5 sm:flex-row sm:items-baseline sm:gap-3">
-            <span className="min-w-[10rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">Product description</span>
-            <span className="text-sm font-medium text-slate-800">
+            <span className="min-w-[10rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Product description</span>
+            <span className="text-sm font-medium text-[var(--app-ink)]">
             {order.description?.trim() ? order.description : "—"}
             </span>
           </p>
           <p className="flex flex-col gap-0.5 px-5 py-3.5 sm:flex-row sm:items-baseline sm:gap-3">
-            <span className="min-w-[10rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">Created by</span>
-            <span className="text-sm font-semibold text-slate-900">{order.createdBy?.name} <span className="font-normal text-slate-500">({order.createdBy?.email})</span></span>
+            <span className="min-w-[10rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Created by</span>
+            <span className="text-sm font-semibold text-[var(--app-ink)]">{order.createdBy?.name} <span className="font-normal text-[var(--app-ink-3)]">({order.createdBy?.email})</span></span>
           </p>
           {order.acceptanceReason?.trim() ? (
             <p className="flex flex-col gap-0.5 px-5 py-3.5 sm:flex-row sm:items-baseline sm:gap-3">
-              <span className="min-w-[10rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">Acceptance reason</span>
-              <span className="text-sm text-slate-700 whitespace-pre-wrap">{order.acceptanceReason}</span>
+              <span className="min-w-[10rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Acceptance reason</span>
+              <span className="text-sm text-[var(--app-ink-2)] whitespace-pre-wrap">{order.acceptanceReason}</span>
             </p>
           ) : null}
           {order.receiveReason?.trim() ? (
             <p className="flex flex-col gap-0.5 px-5 py-3.5 sm:flex-row sm:items-baseline sm:gap-3">
-              <span className="min-w-[10rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">Receive reason</span>
-              <span className="text-sm text-slate-700 whitespace-pre-wrap">{order.receiveReason}</span>
+              <span className="min-w-[10rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Receive reason</span>
+              <span className="text-sm text-[var(--app-ink-2)] whitespace-pre-wrap">{order.receiveReason}</span>
             </p>
           ) : null}
           {order.assignedSupervisor ? (
             <p className="flex flex-col gap-0.5 px-5 py-3.5 sm:flex-row sm:items-baseline sm:gap-3">
-              <span className="min-w-[10rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">Assigned production</span>
-              <span className="text-sm font-semibold text-slate-900">
-                {order.assignedSupervisor.name} <span className="font-normal text-slate-500">({order.assignedSupervisor.email})</span>
+              <span className="min-w-[10rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Assigned production</span>
+              <span className="text-sm font-semibold text-[var(--app-ink)]">
+                {order.assignedSupervisor.name} <span className="font-normal text-[var(--app-ink-3)]">({order.assignedSupervisor.email})</span>
               </span>
             </p>
           ) : null}
           {order.enquiryHandoff && typeof order.enquiryHandoff === "object" ? (
             <div className="px-5 py-3.5">
               <div className="mb-2 flex items-center justify-between gap-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Development classification</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Development classification</p>
                 {showInteractiveUi && user && (
                   ["MANAGER", "DIVISION_HEAD", "SUPER_ADMIN"].includes(user.role) ||
                   (assignedSupervisorMe && ["SUPERVISOR", "ASM"].includes(user.role))
@@ -1828,17 +1858,17 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                   </button>
                 ) : null}
               </div>
-              <div className="rounded-xl border border-slate-100 bg-gradient-to-br from-slate-50/80 to-white p-3 space-y-2">
-                <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ring-1 ${order.enquiryHandoff.developmentKind === "existing" ? "bg-indigo-50 text-blue-700 ring-blue-200" : "bg-violet-50 text-violet-700 ring-violet-200"}`}>
-                  <span className={`h-1.5 w-1.5 rounded-full ${order.enquiryHandoff.developmentKind === "existing" ? "bg-indigo-500" : "bg-violet-500"}`} />
+              <div className="rounded-xl border border-[var(--app-line-soft)] bg-gradient-to-br from-slate-50/80 to-white p-3 space-y-2">
+                <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ring-1 ${order.enquiryHandoff.developmentKind === "existing" ? "bg-[var(--app-brand-tint)] text-blue-700 ring-blue-200" : "bg-violet-50 text-violet-700 ring-violet-200"}`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${order.enquiryHandoff.developmentKind === "existing" ? "bg-[var(--app-brand-tint)]0" : "bg-violet-500"}`} />
                   {order.enquiryHandoff.developmentKind === "existing" ? "Existing development" : "New development"}
                 </span>
                 {typeof order.enquiryHandoff.existingProductDetails === "string" && order.enquiryHandoff.existingProductDetails.trim() ? (
-                  <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{order.enquiryHandoff.existingProductDetails}</p>
+                  <p className="text-sm text-[var(--app-ink-2)] whitespace-pre-wrap leading-relaxed">{order.enquiryHandoff.existingProductDetails}</p>
                 ) : null}
                 {/* New Development Plan details */}
                 {order.enquiryHandoff.developmentKind === "new" && effectiveNewDevPlan ? (
-                  <div className="mt-2 space-y-2 border-t border-slate-100 pt-2">
+                  <div className="mt-2 space-y-2 border-t border-[var(--app-line-soft)] pt-2">
                     {(["description","resourcesRequired","researchRequirements","planningNotes","estimatedTimeline","expectedCompletionDuration","reasonForNewDevelopment"] as const).map((key) => {
                       const labels: Record<string, string> = {
                         description: "Development description",
@@ -1857,8 +1887,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                           : val;
                       return (
                         <div key={key}>
-                          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{labels[key]}</p>
-                          <p className="text-sm text-slate-800 whitespace-pre-wrap">{displayText}</p>
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">{labels[key]}</p>
+                          <p className="text-sm text-[var(--app-ink)] whitespace-pre-wrap">{displayText}</p>
                         </div>
                       );
                     })}
@@ -1876,11 +1906,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                       const subAt = typeof p.planningSubmittedAt === "string" ? new Date(p.planningSubmittedAt) : null;
                       const durationHrs = recvAt && subAt ? Math.round((subAt.getTime() - recvAt.getTime()) / 36e5) : null;
                       return (
-                        <div className="rounded-lg border border-slate-100 bg-slate-50 p-2.5 space-y-0.5">
-                          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Planning timing (MD / Super Admin only)</p>
-                          {recvAt ? <p className="text-xs text-slate-600">Enquiry received: <span className="font-mono">{recvAt.toLocaleString()}</span></p> : null}
-                          {subAt ? <p className="text-xs text-slate-600">Planning submitted: <span className="font-mono">{subAt.toLocaleString()}</span></p> : null}
-                          {durationHrs !== null ? <p className="text-xs text-slate-600">Planning duration: <span className="font-semibold">{durationHrs}h</span></p> : null}
+                        <div className="rounded-lg border border-[var(--app-line-soft)] bg-[var(--app-surface-sunk)] p-2.5 space-y-0.5">
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Planning timing (MD / Super Admin only)</p>
+                          {recvAt ? <p className="text-xs text-[var(--app-ink-2)]">Enquiry received: <span className="font-mono">{recvAt.toLocaleString()}</span></p> : null}
+                          {subAt ? <p className="text-xs text-[var(--app-ink-2)]">Planning submitted: <span className="font-mono">{subAt.toLocaleString()}</span></p> : null}
+                          {durationHrs !== null ? <p className="text-xs text-[var(--app-ink-2)]">Planning duration: <span className="font-semibold">{durationHrs}h</span></p> : null}
                         </div>
                       );
                     })() : null}
@@ -1888,9 +1918,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 ) : order.enquiryHandoff.developmentKind === "new" &&
                   typeof order.enquiryHandoff.newDevelopmentDetails === "string" &&
                   order.enquiryHandoff.newDevelopmentDetails.trim() ? (
-                  <div className="mt-2 space-y-1 border-t border-slate-100 pt-2">
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Development description</p>
-                    <p className="text-sm text-slate-800 whitespace-pre-wrap">{order.enquiryHandoff.newDevelopmentDetails}</p>
+                  <div className="mt-2 space-y-1 border-t border-[var(--app-line-soft)] pt-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Development description</p>
+                    <p className="text-sm text-[var(--app-ink)] whitespace-pre-wrap">{order.enquiryHandoff.newDevelopmentDetails}</p>
                     <p className="text-xs text-amber-800">
                       Full planning fields are being restored from stored handoff data. Use &quot;Edit development plan&quot; if anything is missing.
                     </p>
@@ -1915,16 +1945,16 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             </div>
           ) : null}
           <p className="flex flex-col gap-0.5 px-5 py-3.5 sm:flex-row sm:items-baseline sm:gap-3">
-            <span className="min-w-[10rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">Sample requested</span>
-            <span className="text-sm font-semibold text-slate-900">
+            <span className="min-w-[10rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Sample requested</span>
+            <span className="text-sm font-semibold text-[var(--app-ink)]">
             {order.sampleRequested ? "Yes" : "No"}
             {order.sampleRequested && !order.sampleRequestNotes?.trim() ? " (no notes)" : null}
             </span>
           </p>
           {order.sampleRequested && order.sampleRequestNotes?.trim() ? (
             <p className="flex flex-col gap-0.5 px-5 py-3.5 sm:flex-row sm:items-baseline sm:gap-3">
-              <span className="min-w-[10rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">Sample request notes</span>
-              <span className="text-sm font-medium text-slate-800">{order.sampleRequestNotes}</span>
+              <span className="min-w-[10rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Sample request notes</span>
+              <span className="text-sm font-medium text-[var(--app-ink)]">{order.sampleRequestNotes}</span>
             </p>
           ) : null}
           {(() => {
@@ -1935,12 +1965,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             if (userFields.length === 0) return null;
             return (
               <div className="px-5 py-3.5">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Custom fields</span>
+                <span className="text-xs font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Custom fields</span>
                 <ul className="mt-2 space-y-1">
                   {userFields.map(([k, v]) => (
                     <li key={k} className="flex gap-2 text-sm">
-                      <span className="font-medium text-slate-600">{k}:</span>
-                      <span className="text-slate-800">{typeof v === "object" ? JSON.stringify(v) : String(v)}</span>
+                      <span className="font-medium text-[var(--app-ink-2)]">{k}:</span>
+                      <span className="text-[var(--app-ink)]">{typeof v === "object" ? JSON.stringify(v) : String(v)}</span>
                     </li>
                   ))}
                 </ul>
@@ -1949,8 +1979,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           })()}
           {order.slaDeadline ? (
             <p className="flex flex-col gap-0.5 px-5 py-3.5 sm:flex-row sm:items-baseline sm:gap-3">
-              <span className="min-w-[10rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">SLA deadline</span>
-              <time className="text-sm font-semibold text-slate-900" dateTime={order.slaDeadline} suppressHydrationWarning>
+              <span className="min-w-[10rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">SLA deadline</span>
+              <time className="text-sm font-semibold text-[var(--app-ink)]" dateTime={order.slaDeadline} suppressHydrationWarning>
                 {new Date(order.slaDeadline).toLocaleString()}
               </time>
             </p>
@@ -1963,9 +1993,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 {openSlaBreach.division?.name ?? order.currentDivision?.name ?? "—"}
               </p>
               {openSlaBreach.headRejectedAt ? (
-                <div className="mt-2 text-xs text-slate-700">
+                <div className="mt-2 text-xs text-[var(--app-ink-2)]">
                   <p>
-                    <span className="text-slate-500">Head rejection submitted:</span>{" "}
+                    <span className="text-[var(--app-ink-3)]">Head rejection submitted:</span>{" "}
                     <span className="font-mono">{new Date(openSlaBreach.headRejectedAt).toLocaleString()}</span>
                     {openSlaBreach.headRejectedBy?.name ? (
                       <>
@@ -1992,7 +2022,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                   <textarea
                     value={slaHeadRejectionMessage}
                     onChange={(e) => setSlaHeadRejectionMessage(e.target.value)}
-                    className="w-full min-h-[90px] rounded-md border border-amber-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                    className="w-full min-h-[90px] rounded-md border border-amber-200 bg-white px-3 py-2 text-sm text-[var(--app-ink)] shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-500/30"
                     placeholder="Explain the reason for the delay / breach and the decision."
                   />
                   {slaHeadRejectionError ? (
@@ -2011,44 +2041,44 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           ) : null}
           {!isAuditView ? (
             <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1 px-5 py-3.5 text-sm">
-              <span className="font-medium text-slate-500">Transfers</span>
-              <span className="font-semibold tabular-nums text-slate-900">{order.transferCount}</span>
+              <span className="font-medium text-[var(--app-ink-3)]">Transfers</span>
+              <span className="font-semibold tabular-nums text-[var(--app-ink)]">{order.transferCount}</span>
               <span className="text-slate-300" aria-hidden>
                 ·
               </span>
-              <span className="font-medium text-slate-500">
+              <span className="font-medium text-[var(--app-ink-3)]">
                 {isEnquirySubmitter ? "Declined by division" : "Rejections"}
               </span>
-              <span className="font-semibold tabular-nums text-slate-900">{order.rejectionCount}</span>
+              <span className="font-semibold tabular-nums text-[var(--app-ink)]">{order.rejectionCount}</span>
             </p>
           ) : (
-            <div className="border-t border-slate-100 pt-4 space-y-4 text-sm">
+            <div className="border-t border-[var(--app-line-soft)] pt-4 space-y-4 text-sm">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">Project status</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--app-ink-3)] mb-2">Project status</p>
                 <ul className="space-y-2 list-none pl-0">
                   <li>
-                    <span className="text-slate-500">Accepted by division:</span>{" "}
+                    <span className="text-[var(--app-ink-3)]">Accepted by division:</span>{" "}
                     {order.acceptedBy ? (
                       <>
                         Yes — {order.acceptedBy.name} ({order.acceptedBy.email})
                       </>
                     ) : (
-                      <span className="text-slate-800">Not yet accepted (or pending receive after transfer)</span>
+                      <span className="text-[var(--app-ink)]">Not yet accepted (or pending receive after transfer)</span>
                     )}
                   </li>
                   <li>
-                    <span className="text-slate-500">Completed:</span>{" "}
+                    <span className="text-[var(--app-ink-3)]">Completed:</span>{" "}
                     {order.completedAt && order.completedBy ? (
                       <>
                         Yes — {order.completedBy.name} ({order.completedBy.email}) on{" "}
                         {new Date(order.completedAt).toLocaleString()}
                       </>
                     ) : (
-                      <span className="text-slate-800">No</span>
+                      <span className="text-[var(--app-ink)]">No</span>
                     )}
                   </li>
                   <li>
-                    <span className="text-slate-500">Final rejection:</span>{" "}
+                    <span className="text-[var(--app-ink-3)]">Final rejection:</span>{" "}
                     {order.status === "REJECTED" && order.rejectedBy ? (
                       <>
                         {order.rejectedBy.name} ({order.rejectedBy.email})
@@ -2057,16 +2087,16 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                           : ""}
                       </>
                     ) : (
-                      <span className="text-slate-800">—</span>
+                      <span className="text-[var(--app-ink)]">—</span>
                     )}
                   </li>
                   <li>
-                    <span className="text-slate-500">Workflow position:</span>{" "}
-                    <span className="font-medium text-slate-900">{order.status.replace("_", " ")}</span>
+                    <span className="text-[var(--app-ink-3)]">Workflow position:</span>{" "}
+                    <span className="font-medium text-[var(--app-ink)]">{order.status.replace("_", " ")}</span>
                     {user?.role !== "MANAGER" ? (
                       <>
                         {" · "}
-                        <span className="text-slate-500">Current division:</span> {order.currentDivision?.name ?? "—"}
+                        <span className="text-[var(--app-ink-3)]">Current division:</span> {order.currentDivision?.name ?? "—"}
                       </>
                     ) : null}
                   </li>
@@ -2074,7 +2104,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               </div>
               {(order.transfers?.length ?? 0) > 0 && (
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-[var(--app-ink-3)] mb-2">
                     Transfer history ({order.transfers?.length ?? 0})
                   </p>
                   <ul className="space-y-3 list-none pl-0">
@@ -2084,20 +2114,20 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                           ?.map((m) => `${m.user?.name ?? "—"} (${m.user?.email ?? "—"})`)
                           .join(", ") || "No division heads assigned";
                       return (
-                        <li key={t.id ?? `${t.createdAt}-${idx}`} className="rounded-lg border border-slate-100 bg-slate-50/60 p-3">
-                          <p className="font-medium text-slate-900">
+                        <li key={t.id ?? `${t.createdAt}-${idx}`} className="rounded-lg border border-[var(--app-line-soft)] bg-[var(--app-surface-sunk)]/60 p-3">
+                          <p className="font-medium text-[var(--app-ink)]">
                             {t.fromDivision?.name ?? "—"} → {t.toDivision?.name ?? "—"}
                           </p>
-                          <p className="mt-1 text-slate-600">
-                            <span className="text-slate-500">Transferred by:</span> {t.transferredBy?.name ?? "—"} (
+                          <p className="mt-1 text-[var(--app-ink-2)]">
+                            <span className="text-[var(--app-ink-3)]">Transferred by:</span> {t.transferredBy?.name ?? "—"} (
                             {t.transferredBy?.email ?? "—"})
                           </p>
-                          <p className="text-slate-600">
-                            <span className="text-slate-500">Division responsible (heads):</span> {heads}
+                          <p className="text-[var(--app-ink-2)]">
+                            <span className="text-[var(--app-ink-3)]">Division responsible (heads):</span> {heads}
                           </p>
-                          <p className="mt-1 text-slate-500 text-xs">{new Date(t.createdAt).toLocaleString()}</p>
+                          <p className="mt-1 text-[var(--app-ink-3)] text-xs">{new Date(t.createdAt).toLocaleString()}</p>
                           {t.reason?.trim() ? (
-                            <p className="mt-2 text-slate-700 border-t border-slate-100 pt-2">{t.reason}</p>
+                            <p className="mt-2 text-[var(--app-ink-2)] border-t border-[var(--app-line-soft)] pt-2">{t.reason}</p>
                           ) : null}
                         </li>
                       );
@@ -2107,21 +2137,21 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               )}
               {(order.rejections?.length ?? 0) > 0 && (
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-[var(--app-ink-3)] mb-2">
                     Rejection events ({order.rejections?.length ?? 0})
                   </p>
                   <ul className="space-y-2 list-none pl-0">
                     {(order.rejections ?? []).map((r, idx) => (
                       <li key={r.id ?? `${r.createdAt}-${idx}`} className="rounded-lg border border-red-100 bg-red-50/40 p-3">
-                        <p className="text-slate-900">
-                          <span className="text-slate-500">Rejected by:</span> {r.rejectedBy?.name ?? "—"} (
+                        <p className="text-[var(--app-ink)]">
+                          <span className="text-[var(--app-ink-3)]">Rejected by:</span> {r.rejectedBy?.name ?? "—"} (
                           {r.rejectedBy?.email ?? "—"})
                         </p>
-                        <p className="text-slate-600">
-                          <span className="text-slate-500">Division:</span> {r.division?.name ?? "—"}
+                        <p className="text-[var(--app-ink-2)]">
+                          <span className="text-[var(--app-ink-3)]">Division:</span> {r.division?.name ?? "—"}
                         </p>
-                        <p className="text-slate-500 text-xs mt-1">{new Date(r.createdAt).toLocaleString()}</p>
-                        {r.reason?.trim() ? <p className="mt-2 text-slate-800">{r.reason}</p> : null}
+                        <p className="text-[var(--app-ink-3)] text-xs mt-1">{new Date(r.createdAt).toLocaleString()}</p>
+                        {r.reason?.trim() ? <p className="mt-2 text-[var(--app-ink)]">{r.reason}</p> : null}
                       </li>
                     ))}
                   </ul>
@@ -2133,14 +2163,14 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       </Card>
 
       {!isAuditView && showHandoffCard ? (
-        <Card id="handoff-assignment-card" className="overflow-hidden border border-indigo-100 shadow-sm ring-1 ring-indigo-50">
-          <CardHeader className="border-b border-indigo-100 bg-gradient-to-r from-indigo-50/80 to-violet-50/50 px-5 py-4">
+        <Card id="handoff-assignment-card" className="overflow-hidden border border-[var(--app-brand-line)]">
+          <CardHeader className="border-b border-[var(--app-brand-line)] bg-[var(--app-brand-tint)] px-5 py-4">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <CardTitle className="text-base font-semibold text-indigo-900">
+                <CardTitle className="text-base font-semibold text-[var(--app-brand-strong)]">
                   {needsHandoff ? "Assign production staff & development" : "Production staff & development assignment"}
                 </CardTitle>
-                <p className="mt-0.5 text-xs text-indigo-700/70">
+                <p className="mt-0.5 text-xs text-[var(--app-brand-strong)]/70">
                   {needsHandoff
                     ? "Choose production staff from this division only, then classify the enquiry as new or existing development."
                     : "Assignment saved. Click Edit to update."}
@@ -2150,7 +2180,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 <button
                   type="button"
                   onClick={() => setShowHandoffEditForm(true)}
-                  className="shrink-0 rounded-md border border-indigo-200 bg-white/60 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-white hover:text-indigo-900 transition-colors"
+                  className="shrink-0 rounded-md border border-[var(--app-brand-line)] bg-white/60 px-3 py-1.5 text-xs font-medium text-[var(--app-brand-strong)] hover:bg-white hover:text-[var(--app-brand-strong)] transition-colors"
                 >
                   Edit assignment
                 </button>
@@ -2162,31 +2192,31 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               <div className="space-y-3">
                 {order.assignedSupervisor ? (
                   <div className="flex items-baseline gap-3">
-                    <span className="min-w-[9rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">Production</span>
-                    <span className="text-sm font-semibold text-slate-900">
+                    <span className="min-w-[9rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Production</span>
+                    <span className="text-sm font-semibold text-[var(--app-ink)]">
                       {order.assignedSupervisor.name}{" "}
-                      <span className="font-normal text-slate-500">({order.assignedSupervisor.email})</span>
+                      <span className="font-normal text-[var(--app-ink-3)]">({order.assignedSupervisor.email})</span>
                     </span>
                   </div>
                 ) : null}
                 {order.enquiryHandoff && typeof order.enquiryHandoff === "object" ? (
                   <>
                     <div className="flex items-baseline gap-3">
-                      <span className="min-w-[9rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">Development</span>
-                      <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ${order.enquiryHandoff.developmentKind === "existing" ? "bg-indigo-50 text-blue-700 ring-blue-200" : "bg-violet-50 text-violet-700 ring-violet-200"}`}>
+                      <span className="min-w-[9rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Development</span>
+                      <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ${order.enquiryHandoff.developmentKind === "existing" ? "bg-[var(--app-brand-tint)] text-blue-700 ring-blue-200" : "bg-violet-50 text-violet-700 ring-violet-200"}`}>
                         {order.enquiryHandoff.developmentKind === "existing" ? "Existing development" : "New development"}
                       </span>
                     </div>
                     {typeof order.enquiryHandoff.existingProductDetails === "string" && order.enquiryHandoff.existingProductDetails.trim() ? (
                       <div className="flex items-start gap-3">
-                        <span className="min-w-[9rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">Details</span>
-                        <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{order.enquiryHandoff.existingProductDetails}</p>
+                        <span className="min-w-[9rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Details</span>
+                        <p className="text-sm text-[var(--app-ink-2)] whitespace-pre-wrap leading-relaxed">{order.enquiryHandoff.existingProductDetails}</p>
                       </div>
                     ) : null}
                     {order.enquiryHandoff.developmentKind === "new" && typeof order.enquiryHandoff.newDevelopmentDetails === "string" && order.enquiryHandoff.newDevelopmentDetails.trim() ? (
                       <div className="flex items-start gap-3">
-                        <span className="min-w-[9rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">Description</span>
-                        <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{order.enquiryHandoff.newDevelopmentDetails}</p>
+                        <span className="min-w-[9rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Description</span>
+                        <p className="text-sm text-[var(--app-ink-2)] whitespace-pre-wrap leading-relaxed">{order.enquiryHandoff.newDevelopmentDetails}</p>
                       </div>
                     ) : null}
                   </>
@@ -2234,7 +2264,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 <div className="space-y-2">
                   <Label>Development type</Label>
                   <div className="flex flex-wrap gap-4">
-                    <label className="flex items-center gap-2 text-slate-800">
+                    <label className="flex items-center gap-2 text-[var(--app-ink)]">
                       <input
                         type="radio"
                         name="handoff-dev"
@@ -2243,7 +2273,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                       />
                       New development
                     </label>
-                    <label className="flex items-center gap-2 text-slate-800">
+                    <label className="flex items-center gap-2 text-[var(--app-ink)]">
                       <input
                         type="radio"
                         name="handoff-dev"
@@ -2347,19 +2377,19 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
       {!isAuditView && userMayViewEnquiryExecInsights(user?.role) && (
         <>
-          <Card className="overflow-hidden border border-slate-200 shadow-sm">
-            <CardHeader className="border-b border-slate-100 bg-slate-50/60 px-5 py-4">
-              <CardTitle className="text-base font-semibold text-slate-800">Enquiry pipeline</CardTitle>
-              <p className="mt-0.5 text-xs text-slate-500">Stages for this enquiry at a glance.</p>
+          <Card className="overflow-hidden border border-[var(--app-line)] shadow-sm">
+            <CardHeader className="border-b border-[var(--app-line-soft)] bg-[var(--app-surface-sunk)]/60 px-5 py-4">
+              <CardTitle className="text-base font-semibold text-[var(--app-ink)]">Enquiry pipeline</CardTitle>
+              <p className="mt-0.5 text-xs text-[var(--app-ink-3)]">Stages for this enquiry at a glance.</p>
             </CardHeader>
             <CardContent className="px-5 py-4">
               <EnquiryPipelineStrip order={order} />
             </CardContent>
           </Card>
-          <Card className="overflow-hidden border border-slate-200 shadow-sm">
-            <CardHeader className="border-b border-slate-100 bg-slate-50/60 px-5 py-4">
-              <CardTitle className="text-base font-semibold text-slate-800">Detailed timestamps</CardTitle>
-              <p className="mt-0.5 text-xs text-slate-500">
+          <Card className="overflow-hidden border border-[var(--app-line)] shadow-sm">
+            <CardHeader className="border-b border-[var(--app-line-soft)] bg-[var(--app-surface-sunk)]/60 px-5 py-4">
+              <CardTitle className="text-base font-semibold text-[var(--app-ink)]">Detailed timestamps</CardTitle>
+              <p className="mt-0.5 text-xs text-[var(--app-ink-3)]">
                 Placed, accept, transfer, rejection, sample, and responses — from the activity log (oldest first).
               </p>
             </CardHeader>
@@ -2367,7 +2397,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               {auditQueryError ? (
                 <p className="text-sm text-red-600">Could not load activity log.</p>
               ) : auditLoading && auditLogsAsc.length === 0 ? (
-                <p className="text-sm text-slate-500">Loading activity…</p>
+                <p className="text-sm text-[var(--app-ink-3)]">Loading activity…</p>
               ) : auditLogsAsc.length ? (
                 <div className="relative">
                   <div
@@ -2404,7 +2434,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                                 {log.user.email}
                               </p>
                             ) : (
-                              <p className="mt-2 text-xs font-medium text-slate-400">System</p>
+                              <p className="mt-2 text-xs font-medium text-[var(--app-ink-3)]">System</p>
                             )}
                             {extra ? <p className={st.extra}>{extra}</p> : null}
                           </div>
@@ -2414,7 +2444,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                   </ul>
                 </div>
               ) : (
-                <p className="text-sm text-slate-500">No logged events yet.</p>
+                <p className="text-sm text-[var(--app-ink-3)]">No logged events yet.</p>
               )}
             </CardContent>
           </Card>
@@ -2425,7 +2455,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         <Card>
           <CardHeader>
             <CardTitle>Activity timeline</CardTitle>
-            <p className="text-sm text-slate-500 font-normal">
+            <p className="text-sm text-[var(--app-ink-3)] font-normal">
               Chronological audit log for this enquiry (newest events appear at the bottom).
             </p>
           </CardHeader>
@@ -2433,9 +2463,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             {auditQueryError ? (
               <p className="text-sm text-red-600">Could not load activity log.</p>
             ) : auditLoading && auditLogsAsc.length === 0 ? (
-              <p className="text-sm text-slate-500">Loading timeline…</p>
+              <p className="text-sm text-[var(--app-ink-3)]">Loading timeline…</p>
             ) : auditLogsAsc.length === 0 ? (
-              <p className="text-sm text-slate-500">No audit entries recorded.</p>
+              <p className="text-sm text-[var(--app-ink-3)]">No audit entries recorded.</p>
             ) : (
               <ul className="space-y-2">
                 {auditLogsAsc.map((log) => {
@@ -2443,25 +2473,25 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                   return (
                     <li
                       key={log.id}
-                      className="rounded-xl border border-slate-100 bg-white px-4 py-3 shadow-sm"
+                      className="rounded-xl border border-[var(--app-line-soft)] bg-white px-4 py-3 shadow-sm"
                     >
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <Badge variant="secondary" className="text-[11px] font-medium">
                           {auditActionLabel(log.action)}
                         </Badge>
-                        <span className="font-mono text-[11px] text-slate-400">
+                        <span className="font-mono text-[11px] text-[var(--app-ink-3)]">
                           {new Date(log.createdAt).toLocaleString()}
                         </span>
                       </div>
                       {log.user ? (
-                        <p className="mt-1.5 text-xs text-slate-600">
+                        <p className="mt-1.5 text-xs text-[var(--app-ink-2)]">
                           <span className="font-medium">{log.user.name}</span>
-                          <span className="text-slate-400"> · {log.user.email}</span>
+                          <span className="text-[var(--app-ink-3)]"> · {log.user.email}</span>
                         </p>
                       ) : (
-                        <p className="mt-1.5 text-xs text-slate-400">System</p>
+                        <p className="mt-1.5 text-xs text-[var(--app-ink-3)]">System</p>
                       )}
-                      {extra ? <p className="mt-1.5 text-xs text-slate-600">{extra}</p> : null}
+                      {extra ? <p className="mt-1.5 text-xs text-[var(--app-ink-2)]">{extra}</p> : null}
                     </li>
                   );
                 })}
@@ -2472,12 +2502,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       )}
 
       {order.sampleRequested && user?.role !== "ACCOUNTS" && (
-        <Card className="overflow-hidden border border-slate-200 shadow-sm">
+        <Card className="overflow-hidden border border-[var(--app-line)] shadow-sm">
           <CardHeader className="border-b border-violet-100 bg-gradient-to-br from-violet-50/70 via-purple-50/30 to-slate-50/50 px-5 py-4">
             <div className="flex items-start gap-3">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-sm font-bold text-violet-700">S</div>
               <div className="min-w-0">
-                <CardTitle className="text-base font-semibold text-slate-800">Sample workflow</CardTitle>
+                <CardTitle className="text-base font-semibold text-[var(--app-ink)]">Sample workflow</CardTitle>
                 <p className="mt-0.5 text-xs text-violet-700/70">
                   Head approves request → supervisor submits details → head approves details → ship → sales records feedback
                 </p>
@@ -2486,7 +2516,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           </CardHeader>
 
           {/* Status badges strip */}
-          <div className="flex flex-wrap gap-2 border-b border-slate-100 bg-slate-50/40 px-5 py-3">
+          <div className="flex flex-wrap gap-2 border-b border-[var(--app-line-soft)] bg-[var(--app-surface-sunk)]/40 px-5 py-3">
             {order.headSampleRequestApprovedAt ? (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
@@ -2507,8 +2537,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               </span>
             )}
             {order.sampleShippedAt && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700 ring-1 ring-indigo-200">
-                <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--app-brand-tint)] px-3 py-1 text-xs font-semibold text-[var(--app-brand-strong)] ring-1 ring-indigo-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-[var(--app-brand-tint)]0" />
                 Shipped · {new Date(order.sampleShippedAt).toLocaleDateString()}
               </span>
             )}
@@ -2549,16 +2579,16 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
             {/* Development type */}
             {sampleDevelopment && (
-              <div className="border-b border-slate-100 px-5 py-4">
+              <div className="border-b border-[var(--app-line-soft)] px-5 py-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Development classification</p>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-[var(--app-ink-3)]">Development classification</p>
                   {sampleDevelopmentUpdatedAtLabel && (
-                    <span className="text-xs text-slate-400">Updated {sampleDevelopmentUpdatedAtLabel}</span>
+                    <span className="text-xs text-[var(--app-ink-3)]">Updated {sampleDevelopmentUpdatedAtLabel}</span>
                   )}
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-3">
-                  <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ring-1 ${sampleDevelopment.type === "existing" ? "bg-indigo-50 text-blue-700 ring-blue-200" : "bg-violet-50 text-violet-700 ring-violet-200"}`}>
-                    <span className={`h-1.5 w-1.5 rounded-full ${sampleDevelopment.type === "existing" ? "bg-indigo-500" : "bg-violet-500"}`} />
+                  <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ring-1 ${sampleDevelopment.type === "existing" ? "bg-[var(--app-brand-tint)] text-blue-700 ring-blue-200" : "bg-violet-50 text-violet-700 ring-violet-200"}`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${sampleDevelopment.type === "existing" ? "bg-[var(--app-brand-tint)]0" : "bg-violet-500"}`} />
                     {sampleDevelopment.type === "existing" ? "Existing development" : "New development"}
                   </span>
                   {sampleDevelopment.type === "new" && (
@@ -2568,8 +2598,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                   )}
                 </div>
                 {sampleDevelopment.type === "existing" && typeof sampleDevelopment.existingReference === "string" && sampleDevelopment.existingReference.trim() && (
-                  <p className="mt-2 text-sm text-slate-700">
-                    <span className="text-slate-400">Reference: </span>{sampleDevelopment.existingReference}
+                  <p className="mt-2 text-sm text-[var(--app-ink-2)]">
+                    <span className="text-[var(--app-ink-3)]">Reference: </span>{sampleDevelopment.existingReference}
                   </p>
                 )}
               </div>
@@ -2577,9 +2607,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
             {/* Sample details display */}
             {canSeeSampleDetails && (order.sampleDetails || order.sampleQuantity || order.sampleWeight || (order as { sampleRemarks?: string | null }).sampleRemarks || (order as { sampleDeliveryDate?: string | null }).sampleDeliveryDate) && (
-              <div className="border-b border-slate-100 px-5 py-4">
+              <div className="border-b border-[var(--app-line-soft)] px-5 py-4">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-700">Sample details</p>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-[var(--app-ink-2)]">Sample details</p>
                   {showInteractiveUi && assignedSupervisorMe && !editingSample && (
                     <button
                       type="button"
@@ -2602,7 +2632,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                         setEditSampleError("");
                         setEditingSample(true);
                       }}
-                      className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
+                      className="rounded-md border border-[var(--app-line)] px-2.5 py-1 text-xs font-medium text-[var(--app-ink-2)] transition-colors hover:bg-[var(--app-surface-sunk)] hover:text-[var(--app-ink)]"
                     >
                       Edit details
                     </button>
@@ -2612,24 +2642,24 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                   <div className="mt-3 space-y-3 rounded-xl border border-violet-100 bg-violet-50/30 p-4">
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div className="space-y-1 sm:col-span-2">
-                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Sample details</label>
-                        <textarea value={editSampleDetails} onChange={(e) => setEditSampleDetails(e.target.value)} rows={2} className="flex w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300" />
+                        <label className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Sample details</label>
+                        <textarea value={editSampleDetails} onChange={(e) => setEditSampleDetails(e.target.value)} rows={2} className="flex w-full rounded-xl border border-[var(--app-line)] bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300" />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Quantity</label>
-                        <input value={editSampleQuantity} onChange={(e) => setEditSampleQuantity(e.target.value)} className="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300" />
+                        <label className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Quantity</label>
+                        <input value={editSampleQuantity} onChange={(e) => setEditSampleQuantity(e.target.value)} className="flex h-9 w-full rounded-xl border border-[var(--app-line)] bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300" />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Weight</label>
-                        <input value={editSampleWeight} onChange={(e) => setEditSampleWeight(e.target.value)} className="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300" />
+                        <label className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Weight</label>
+                        <input value={editSampleWeight} onChange={(e) => setEditSampleWeight(e.target.value)} className="flex h-9 w-full rounded-xl border border-[var(--app-line)] bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300" />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Delivery date</label>
-                        <input type="date" value={editSampleDeliveryDate} onChange={(e) => setEditSampleDeliveryDate(e.target.value)} className="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300" />
+                        <label className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Delivery date</label>
+                        <input type="date" value={editSampleDeliveryDate} onChange={(e) => setEditSampleDeliveryDate(e.target.value)} className="flex h-9 w-full rounded-xl border border-[var(--app-line)] bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300" />
                       </div>
                       <div className="space-y-1 sm:col-span-2">
-                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Delivery method</label>
-                        <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                        <label className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Delivery method</label>
+                        <label className="flex items-center gap-2 text-sm text-[var(--app-ink-2)] cursor-pointer">
                           <input type="checkbox" checked={editSampleByCourier} onChange={(e) => setEditSampleByCourier(e.target.checked)} className="rounded" />
                           By courier
                         </label>
@@ -2637,32 +2667,32 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                       {editSampleByCourier ? (
                         <>
                           <div className="space-y-1">
-                            <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Courier name</label>
-                            <input value={editCourierName} onChange={(e) => setEditCourierName(e.target.value)} className="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300" />
+                            <label className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Courier name</label>
+                            <input value={editCourierName} onChange={(e) => setEditCourierName(e.target.value)} className="flex h-9 w-full rounded-xl border border-[var(--app-line)] bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300" />
                           </div>
                           <div className="space-y-1">
-                            <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Tracking ID</label>
-                            <input value={editTrackingId} onChange={(e) => setEditTrackingId(e.target.value)} className="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300" />
+                            <label className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Tracking ID</label>
+                            <input value={editTrackingId} onChange={(e) => setEditTrackingId(e.target.value)} className="flex h-9 w-full rounded-xl border border-[var(--app-line)] bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300" />
                           </div>
                         </>
                       ) : (
                         <>
                           <div className="space-y-1">
-                            <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Handover person name</label>
-                            <input value={editHandoverPersonName} onChange={(e) => setEditHandoverPersonName(e.target.value)} placeholder="Required" className="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300" />
+                            <label className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Handover person name</label>
+                            <input value={editHandoverPersonName} onChange={(e) => setEditHandoverPersonName(e.target.value)} placeholder="Required" className="flex h-9 w-full rounded-xl border border-[var(--app-line)] bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300" />
                           </div>
                           <div className="space-y-1">
-                            <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Contact number</label>
-                            <input value={editHandoverPersonPhone} onChange={(e) => setEditHandoverPersonPhone(e.target.value)} placeholder="Optional" className="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300" />
+                            <label className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Contact number</label>
+                            <input value={editHandoverPersonPhone} onChange={(e) => setEditHandoverPersonPhone(e.target.value)} placeholder="Optional" className="flex h-9 w-full rounded-xl border border-[var(--app-line)] bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300" />
                           </div>
                           <div className="space-y-1 sm:col-span-2">
-                            <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Person type</label>
+                            <label className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Person type</label>
                             <div className="flex items-center gap-4">
-                              <label className="flex items-center gap-1.5 text-sm text-slate-700 cursor-pointer">
+                              <label className="flex items-center gap-1.5 text-sm text-[var(--app-ink-2)] cursor-pointer">
                                 <input type="radio" name="editHandoverType" value="inhouse" checked={editHandoverPersonType === "inhouse"} onChange={() => setEditHandoverPersonType("inhouse")} className="accent-amber-600" />
                                 In-house (our company)
                               </label>
-                              <label className="flex items-center gap-1.5 text-sm text-slate-700 cursor-pointer">
+                              <label className="flex items-center gap-1.5 text-sm text-[var(--app-ink-2)] cursor-pointer">
                                 <input type="radio" name="editHandoverType" value="thirdparty" checked={editHandoverPersonType === "thirdparty"} onChange={() => setEditHandoverPersonType("thirdparty")} className="accent-amber-600" />
                                 Third-party company
                               </label>
@@ -2671,8 +2701,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                         </>
                       )}
                       <div className="space-y-1 sm:col-span-2">
-                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Remarks</label>
-                        <input value={editSampleRemarks} onChange={(e) => setEditSampleRemarks(e.target.value)} className="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300" />
+                        <label className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Remarks</label>
+                        <input value={editSampleRemarks} onChange={(e) => setEditSampleRemarks(e.target.value)} className="flex h-9 w-full rounded-xl border border-[var(--app-line)] bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300" />
                       </div>
                     </div>
                     {editSampleError && <p className="text-xs text-red-600">{editSampleError}</p>}
@@ -2716,7 +2746,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                       >
                         {editSampleSaving ? "Saving…" : "Save changes"}
                       </button>
-                      <button type="button" onClick={() => setEditingSample(false)} className="rounded-lg border border-slate-200 px-4 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50">
+                      <button type="button" onClick={() => setEditingSample(false)} className="rounded-xl border border-[var(--app-line)] px-4 py-1.5 text-xs font-semibold text-[var(--app-ink-2)] transition-colors hover:bg-[var(--app-surface-sunk)]">
                         Cancel
                       </button>
                     </div>
@@ -2725,44 +2755,44 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                   <div className="mt-3 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
                     {order.sampleDetails && (
                       <p className="flex flex-col sm:col-span-2">
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Details</span>
-                        <span className="text-slate-800">{order.sampleDetails}</span>
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Details</span>
+                        <span className="text-[var(--app-ink)]">{order.sampleDetails}</span>
                       </p>
                     )}
                     {order.sampleQuantity && (
                       <p className="flex flex-col">
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Quantity</span>
-                        <span className="text-slate-800">{order.sampleQuantity}</span>
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Quantity</span>
+                        <span className="text-[var(--app-ink)]">{order.sampleQuantity}</span>
                       </p>
                     )}
                     {order.sampleWeight && (
                       <p className="flex flex-col">
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Weight</span>
-                        <span className="text-slate-800">{order.sampleWeight}</span>
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Weight</span>
+                        <span className="text-[var(--app-ink)]">{order.sampleWeight}</span>
                       </p>
                     )}
                     {(order as { sampleDeliveryDate?: string | null }).sampleDeliveryDate && (
                       <p className="flex flex-col">
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Delivery date</span>
-                        <span className="text-slate-800">{new Date((order as { sampleDeliveryDate: string }).sampleDeliveryDate).toLocaleDateString()}</span>
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Delivery date</span>
+                        <span className="text-[var(--app-ink)]">{new Date((order as { sampleDeliveryDate: string }).sampleDeliveryDate).toLocaleDateString()}</span>
                       </p>
                     )}
                     {(order as { sampleRemarks?: string | null }).sampleRemarks && (
                       <p className="flex flex-col sm:col-span-2">
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Remarks</span>
-                        <span className="text-slate-800">{(order as { sampleRemarks: string }).sampleRemarks}</span>
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Remarks</span>
+                        <span className="text-[var(--app-ink)]">{(order as { sampleRemarks: string }).sampleRemarks}</span>
                       </p>
                     )}
                     {order.courierName && (
                       <p className="flex flex-col">
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Courier</span>
-                        <span className="text-slate-800">{order.courierName}{order.trackingId ? ` · ${order.trackingId}` : ""}</span>
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Courier</span>
+                        <span className="text-[var(--app-ink)]">{order.courierName}{order.trackingId ? ` · ${order.trackingId}` : ""}</span>
                       </p>
                     )}
                     {!order.courierName && order.handoverPersonName && (
                       <p className="flex flex-col sm:col-span-2">
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Handover person</span>
-                        <span className="text-slate-800">
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Handover person</span>
+                        <span className="text-[var(--app-ink)]">
                           {order.handoverPersonName}
                           {order.handoverPersonPhone ? ` · ${order.handoverPersonPhone}` : ""}
                           {order.handoverPersonType ? ` · ${order.handoverPersonType === "inhouse" ? "In-house" : "Third-party"}` : ""}
@@ -2775,8 +2805,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             )}
 
             {!canSeeSampleDetails && (order.sampleDetails || order.sampleQuantity || order.sampleWeight) ? (
-              <div className="border-b border-slate-100 px-5 py-4">
-                <p className="rounded-xl border border-slate-100 bg-slate-50/70 px-4 py-3 text-sm text-slate-600">
+              <div className="border-b border-[var(--app-line-soft)] px-5 py-4">
+                <p className="rounded-xl border border-[var(--app-line-soft)] bg-[var(--app-surface-sunk)]/70 px-4 py-3 text-sm text-[var(--app-ink-2)]">
                   Sample details are pending head approval and will appear here after approval.
                 </p>
               </div>
@@ -2788,47 +2818,47 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-emerald-700">Shipment record</p>
                 <div className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
                   <p className="flex flex-col">
-                    <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Shipped on</span>
-                    <span className="text-slate-800">{new Date(order.sampleShippedAt).toLocaleString()}</span>
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Shipped on</span>
+                    <span className="text-[var(--app-ink)]">{new Date(order.sampleShippedAt).toLocaleString()}</span>
                   </p>
                   <p className="flex flex-col">
-                    <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Method</span>
-                    <span className="text-slate-800">{order.sampleShippedByCourier === false ? "Hand delivery" : "By courier"}</span>
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Method</span>
+                    <span className="text-[var(--app-ink)]">{order.sampleShippedByCourier === false ? "Hand delivery" : "By courier"}</span>
                   </p>
                   {order.courierName && (
                     <p className="flex flex-col">
-                      <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Courier</span>
-                      <span className="text-slate-800">{order.courierName}</span>
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Courier</span>
+                      <span className="text-[var(--app-ink)]">{order.courierName}</span>
                     </p>
                   )}
                   {order.trackingId && (
                     <p className="flex flex-col">
-                      <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Tracking ID</span>
-                      <span className="font-mono text-slate-800">{order.trackingId}</span>
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Tracking ID</span>
+                      <span className="font-mono text-[var(--app-ink)]">{order.trackingId}</span>
                     </p>
                   )}
                   {order.sampleShippedByCourier === false && order.handoverPersonName && (
                     <p className="flex flex-col">
-                      <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Handover person</span>
-                      <span className="text-slate-800">{order.handoverPersonName}</span>
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Handover person</span>
+                      <span className="text-[var(--app-ink)]">{order.handoverPersonName}</span>
                     </p>
                   )}
                   {order.sampleShippedByCourier === false && order.handoverPersonPhone && (
                     <p className="flex flex-col">
-                      <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Contact</span>
-                      <span className="text-slate-800">{order.handoverPersonPhone}</span>
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Contact</span>
+                      <span className="text-[var(--app-ink)]">{order.handoverPersonPhone}</span>
                     </p>
                   )}
                   {order.sampleShippedByCourier === false && order.handoverPersonType && (
                     <p className="flex flex-col">
-                      <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Person type</span>
-                      <span className="text-slate-800">{order.handoverPersonType === "inhouse" ? "In-house (our company)" : "Third-party company"}</span>
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Person type</span>
+                      <span className="text-[var(--app-ink)]">{order.handoverPersonType === "inhouse" ? "In-house (our company)" : "Third-party company"}</span>
                     </p>
                   )}
                   {order.sampleProofUrl && (
                     <p className="flex flex-col sm:col-span-2">
-                      <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Proof</span>
-                      <a className="text-sm font-medium text-indigo-600 underline underline-offset-2" href={order.sampleProofUrl} target="_blank" rel="noreferrer">
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Proof</span>
+                      <a className="text-sm font-medium text-[var(--app-brand)] underline underline-offset-2" href={order.sampleProofUrl} target="_blank" rel="noreferrer">
                         View proof ↗
                       </a>
                     </p>
@@ -2836,20 +2866,20 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 </div>
                 {order.sampleProofUrl && sampleProofUrlKind(order.sampleProofUrl) === "image" && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={order.sampleProofUrl} alt="Sample shipment proof" className="mt-3 max-h-96 w-full max-w-lg rounded-xl border border-slate-200 bg-white object-contain" />
+                  <img src={order.sampleProofUrl} alt="Sample shipment proof" className="mt-3 max-h-96 w-full max-w-lg rounded-xl border border-[var(--app-line)] bg-white object-contain" />
                 )}
                 {order.sampleProofUrl && sampleProofUrlKind(order.sampleProofUrl) === "pdf" && (
-                  <iframe title="Sample shipment proof" src={order.sampleProofUrl} className="mt-3 h-112 w-full max-w-2xl rounded-xl border border-slate-200 bg-white" />
+                  <iframe title="Sample shipment proof" src={order.sampleProofUrl} className="mt-3 h-112 w-full max-w-2xl rounded-xl border border-[var(--app-line)] bg-white" />
                 )}
               </div>
             )}
 
             {/* Sales feedback display */}
             {order.salesFeedback && (
-              <div className="border-b border-slate-100 px-5 py-4">
-                <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">Sales feedback</p>
-                <p className="text-sm text-slate-800">{order.salesFeedback}</p>
-                {order.salesFeedbackAt && <p className="mt-1 text-xs text-slate-400">{new Date(order.salesFeedbackAt).toLocaleString()}</p>}
+              <div className="border-b border-[var(--app-line-soft)] px-5 py-4">
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-[var(--app-ink-3)]">Sales feedback</p>
+                <p className="text-sm text-[var(--app-ink)]">{order.salesFeedback}</p>
+                {order.salesFeedbackAt && <p className="mt-1 text-xs text-[var(--app-ink-3)]">{new Date(order.salesFeedbackAt).toLocaleString()}</p>}
               </div>
             )}
 
@@ -2862,15 +2892,15 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             {showInteractiveUi && mightManageSample && (
               <div className="border-t-2 border-indigo-100 bg-gradient-to-br from-indigo-50/60 via-blue-50/30 to-slate-50/40 px-5 py-5 space-y-4">
                 <div className="flex items-center gap-2">
-                  <div className="h-6 w-1 rounded-full bg-indigo-500" />
-                  <p className="text-xs font-bold uppercase tracking-widest text-indigo-700">Head Actions</p>
+                  <div className="h-6 w-1 rounded-full bg-[var(--app-brand-tint)]0" />
+                  <p className="text-xs font-bold uppercase tracking-widest text-[var(--app-brand-strong)]">Head Actions</p>
                 </div>
 
                 {order.sampleRequested && !order.headSampleRequestApprovedAt && mightManageSample ? (
-                  <div className="rounded-xl border border-indigo-200 bg-white/90 p-4 shadow-sm space-y-3">
+                  <div className="rounded-xl border border-[var(--app-brand-line)] bg-white/90 p-4 shadow-sm space-y-3">
                     <div>
-                      <p className="text-sm font-semibold text-slate-900">Approve sample request</p>
-                      <p className="mt-0.5 text-xs text-slate-500">Marketing / Sales has requested a sample. Approve so the assigned production staff can submit sample specifications.</p>
+                      <p className="text-sm font-semibold text-[var(--app-ink)]">Approve sample request</p>
+                      <p className="mt-0.5 text-xs text-[var(--app-ink-3)]">Marketing / Sales has requested a sample. Approve so the assigned production staff can submit sample specifications.</p>
                     </div>
                     {sampleRequestApprovalPrereqMet ? (
                       <Button type="button" size="sm" disabled={sampleMutation.isPending} onClick={() => sampleMutation.mutate({ action: "approveSampleRequest" })}>
@@ -2885,11 +2915,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 ) : null}
 
                 {sampleGateOk && !order.sampleApprovedAt && mightManageSample && !assignedSupervisorMe && (
-                  <div className="rounded-xl border border-indigo-200 bg-white/90 p-4 shadow-sm space-y-3">
+                  <div className="rounded-xl border border-[var(--app-brand-line)] bg-white/90 p-4 shadow-sm space-y-3">
                     <div>
-                      <p className="text-sm font-semibold text-slate-900">Approve sample details</p>
+                      <p className="text-sm font-semibold text-[var(--app-ink)]">Approve sample details</p>
                       {!canApproveSampleNow ? (
-                        <p className="mt-0.5 text-xs text-slate-500">Wait for the production team to submit sample details first, then approve here.</p>
+                        <p className="mt-0.5 text-xs text-[var(--app-ink-3)]">Wait for the production team to submit sample details first, then approve here.</p>
                       ) : (
                         <p className="mt-0.5 text-xs text-emerald-700">Sample details have been submitted — ready to review and approve.</p>
                       )}
@@ -2907,51 +2937,51 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                     <div className="flex items-center gap-2">
                       <span className="h-2 w-2 rounded-full bg-emerald-500" />
                       <p className="text-sm font-semibold text-emerald-900">Shipment recorded</p>
-                      <span className="ml-auto text-xs text-slate-400">{new Date(order.sampleShippedAt).toLocaleString()}</span>
+                      <span className="ml-auto text-xs text-[var(--app-ink-3)]">{new Date(order.sampleShippedAt).toLocaleString()}</span>
                     </div>
                     <div className="rounded-lg border border-emerald-100 bg-white px-4 py-3 space-y-2 text-sm">
                       <div className="flex items-center gap-2">
-                        <span className="w-20 text-xs font-medium text-slate-500">Method</span>
-                        <span className="text-slate-800">{order.sampleShippedByCourier === false ? "Hand delivery" : "By courier"}</span>
+                        <span className="w-20 text-xs font-medium text-[var(--app-ink-3)]">Method</span>
+                        <span className="text-[var(--app-ink)]">{order.sampleShippedByCourier === false ? "Hand delivery" : "By courier"}</span>
                       </div>
                       {order.courierName && (
                         <div className="flex items-center gap-2">
-                          <span className="w-24 text-xs font-medium text-slate-500">Courier</span>
-                          <span className="text-slate-800">{order.courierName}</span>
+                          <span className="w-24 text-xs font-medium text-[var(--app-ink-3)]">Courier</span>
+                          <span className="text-[var(--app-ink)]">{order.courierName}</span>
                         </div>
                       )}
                       {order.trackingId && (
                         <div className="flex items-center gap-2">
-                          <span className="w-24 text-xs font-medium text-slate-500">Tracking</span>
-                          <span className="font-mono text-slate-800">{order.trackingId}</span>
+                          <span className="w-24 text-xs font-medium text-[var(--app-ink-3)]">Tracking</span>
+                          <span className="font-mono text-[var(--app-ink)]">{order.trackingId}</span>
                         </div>
                       )}
                       {order.sampleShippedByCourier === false && order.handoverPersonName && (
                         <div className="flex items-center gap-2">
-                          <span className="w-24 text-xs font-medium text-slate-500">Person</span>
-                          <span className="text-slate-800">{order.handoverPersonName}</span>
+                          <span className="w-24 text-xs font-medium text-[var(--app-ink-3)]">Person</span>
+                          <span className="text-[var(--app-ink)]">{order.handoverPersonName}</span>
                         </div>
                       )}
                       {order.sampleShippedByCourier === false && order.handoverPersonPhone && (
                         <div className="flex items-center gap-2">
-                          <span className="w-24 text-xs font-medium text-slate-500">Contact</span>
-                          <span className="text-slate-800">{order.handoverPersonPhone}</span>
+                          <span className="w-24 text-xs font-medium text-[var(--app-ink-3)]">Contact</span>
+                          <span className="text-[var(--app-ink)]">{order.handoverPersonPhone}</span>
                         </div>
                       )}
                       {order.sampleShippedByCourier === false && order.handoverPersonType && (
                         <div className="flex items-center gap-2">
-                          <span className="w-24 text-xs font-medium text-slate-500">Type</span>
-                          <span className="text-slate-800">{order.handoverPersonType === "inhouse" ? "In-house (our company)" : "Third-party company"}</span>
+                          <span className="w-24 text-xs font-medium text-[var(--app-ink-3)]">Type</span>
+                          <span className="text-[var(--app-ink)]">{order.handoverPersonType === "inhouse" ? "In-house (our company)" : "Third-party company"}</span>
                         </div>
                       )}
                       {order.sampleProofUrl && (
                         <div className="flex items-center gap-2">
-                          <span className="w-24 text-xs font-medium text-slate-500">Proof</span>
+                          <span className="w-24 text-xs font-medium text-[var(--app-ink-3)]">Proof</span>
                           <a
                             href={`/api/orders/${orderId}/sample-proof`}
                             target="_blank"
                             rel="noreferrer"
-                            className="text-sm font-medium text-indigo-600 underline underline-offset-2"
+                            className="text-sm font-medium text-[var(--app-brand)] underline underline-offset-2"
                           >
                             View proof ↗
                           </a>
@@ -2962,51 +2992,51 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 )}
 
                 {sampleGateOk && order.sampleApprovedAt && !order.sampleShippedAt && (
-                  <div className="rounded-xl border border-indigo-200 bg-white/90 p-4 shadow-sm space-y-3">
-                    <p className="text-sm font-semibold text-slate-900">Mark sample shipped</p>
+                  <div className="rounded-xl border border-[var(--app-brand-line)] bg-white/90 p-4 shadow-sm space-y-3">
+                    <p className="text-sm font-semibold text-[var(--app-ink)]">Mark sample shipped</p>
                     {/* Shipment details were captured by the supervisor when they submitted sample details */}
                     {order.courierName ? (
-                      <div className="rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 space-y-1 text-sm">
+                      <div className="rounded-lg bg-[var(--app-surface-sunk)] border border-[var(--app-line)] px-3 py-2 space-y-1 text-sm">
                         <div className="flex items-center gap-2">
-                          <span className="text-xs font-medium text-slate-500 w-20">Method</span>
-                          <span className="text-slate-800">By courier</span>
+                          <span className="text-xs font-medium text-[var(--app-ink-3)] w-20">Method</span>
+                          <span className="text-[var(--app-ink)]">By courier</span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-xs font-medium text-slate-500 w-20">Courier</span>
-                          <span className="text-slate-800">{order.courierName}</span>
+                          <span className="text-xs font-medium text-[var(--app-ink-3)] w-20">Courier</span>
+                          <span className="text-[var(--app-ink)]">{order.courierName}</span>
                         </div>
                         {order.trackingId && (
                           <div className="flex items-center gap-2">
-                            <span className="text-xs font-medium text-slate-500 w-20">Tracking</span>
-                            <span className="font-mono text-slate-800">{order.trackingId}</span>
+                            <span className="text-xs font-medium text-[var(--app-ink-3)] w-20">Tracking</span>
+                            <span className="font-mono text-[var(--app-ink)]">{order.trackingId}</span>
                           </div>
                         )}
                       </div>
                     ) : order.handoverPersonName ? (
                       <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 space-y-1 text-sm">
                         <div className="flex items-center gap-2">
-                          <span className="text-xs font-medium text-slate-500 w-24">Method</span>
-                          <span className="text-slate-800">Hand delivery</span>
+                          <span className="text-xs font-medium text-[var(--app-ink-3)] w-24">Method</span>
+                          <span className="text-[var(--app-ink)]">Hand delivery</span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-xs font-medium text-slate-500 w-24">Person</span>
-                          <span className="text-slate-800">{order.handoverPersonName}</span>
+                          <span className="text-xs font-medium text-[var(--app-ink-3)] w-24">Person</span>
+                          <span className="text-[var(--app-ink)]">{order.handoverPersonName}</span>
                         </div>
                         {order.handoverPersonPhone && (
                           <div className="flex items-center gap-2">
-                            <span className="text-xs font-medium text-slate-500 w-24">Contact</span>
-                            <span className="text-slate-800">{order.handoverPersonPhone}</span>
+                            <span className="text-xs font-medium text-[var(--app-ink-3)] w-24">Contact</span>
+                            <span className="text-[var(--app-ink)]">{order.handoverPersonPhone}</span>
                           </div>
                         )}
                         {order.handoverPersonType && (
                           <div className="flex items-center gap-2">
-                            <span className="text-xs font-medium text-slate-500 w-24">Type</span>
-                            <span className="text-slate-800">{order.handoverPersonType === "inhouse" ? "In-house (our company)" : "Third-party company"}</span>
+                            <span className="text-xs font-medium text-[var(--app-ink-3)] w-24">Type</span>
+                            <span className="text-[var(--app-ink)]">{order.handoverPersonType === "inhouse" ? "In-house (our company)" : "Third-party company"}</span>
                           </div>
                         )}
                       </div>
                     ) : (
-                      <p className="text-xs text-slate-500">Direct handover (no courier). Enter handover person details in sample details to continue.</p>
+                      <p className="text-xs text-[var(--app-ink-3)]">Direct handover (no courier). Enter handover person details in sample details to continue.</p>
                     )}
                     <Button
                       type="button" size="sm"
@@ -3051,8 +3081,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                   <div className="rounded-xl border border-violet-200 bg-white/90 p-4 shadow-sm space-y-2">
                     <div className="flex items-center justify-between gap-2">
                       <div>
-                        <p className="text-sm font-semibold text-slate-900">Sample details submitted</p>
-                        <p className="mt-0.5 text-xs text-slate-500">Details have been saved. Use the Edit button to update them.</p>
+                        <p className="text-sm font-semibold text-[var(--app-ink)]">Sample details submitted</p>
+                        <p className="mt-0.5 text-xs text-[var(--app-ink-3)]">Details have been saved. Use the Edit button to update them.</p>
                       </div>
                       {!editingSample && (
                         <button
@@ -3083,14 +3113,14 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                       )}
                     </div>
                     {editingSample ? (
-                      <p className="text-xs text-slate-400">Use the edit form in the Sample details section above to update your details.</p>
+                      <p className="text-xs text-[var(--app-ink-3)]">Use the edit form in the Sample details section above to update your details.</p>
                     ) : null}
                   </div>
                 ) : (
                   <div className="rounded-xl border border-violet-200 bg-white/90 p-4 shadow-sm space-y-3">
                     <div>
-                      <p className="text-sm font-semibold text-slate-900">Submit sample details</p>
-                      <p className="mt-0.5 text-xs text-slate-500">Save details here — the division head will approve after reviewing.</p>
+                      <p className="text-sm font-semibold text-[var(--app-ink)]">Submit sample details</p>
+                      <p className="mt-0.5 text-xs text-[var(--app-ink-3)]">Save details here — the division head will approve after reviewing.</p>
                     </div>
                     <div className="space-y-2">
                       <textarea
@@ -3098,7 +3128,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                         onChange={(e) => setSampleDetails(e.target.value)}
                         placeholder="Sample specifications, color, finish, fabric…"
                         rows={2}
-                        className="flex min-h-[56px] w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300"
+                        className="flex min-h-[56px] w-full rounded-xl border border-[var(--app-line)] bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300"
                       />
                       <div className="grid gap-2 sm:grid-cols-2">
                         <Input value={sampleQuantity} onChange={(e) => setSampleQuantity(e.target.value)} placeholder="Quantity (e.g. 2 meters)" />
@@ -3107,7 +3137,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
                       {/* Shipment method — captured here so head just approves and clicks ship */}
                       <div className="pt-1 border-t border-violet-100 space-y-2">
-                        <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                        <label className="flex items-center gap-2 text-sm text-[var(--app-ink-2)] cursor-pointer">
                           <input type="checkbox" checked={sentByCourier} onChange={(e) => setSentByCourier(e.target.checked)} className="rounded" />
                           Sent by courier (requires courier name + tracking ID)
                         </label>
@@ -3130,7 +3160,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                               placeholder="Contact number (optional)"
                             />
                             <div className="flex items-center gap-4 pt-0.5">
-                              <label className="flex items-center gap-1.5 text-sm text-slate-700 cursor-pointer">
+                              <label className="flex items-center gap-1.5 text-sm text-[var(--app-ink-2)] cursor-pointer">
                                 <input
                                   type="radio"
                                   name="handoverType-new"
@@ -3141,7 +3171,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                                 />
                                 In-house (our company)
                               </label>
-                              <label className="flex items-center gap-1.5 text-sm text-slate-700 cursor-pointer">
+                              <label className="flex items-center gap-1.5 text-sm text-[var(--app-ink-2)] cursor-pointer">
                                 <input
                                   type="radio"
                                   name="handoverType-new"
@@ -3156,7 +3186,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                           </div>
                         )}
                         <div className="space-y-0.5">
-                          <Label className="text-xs text-slate-500">Proof (optional · png/jpg/pdf, max 5MB)</Label>
+                          <Label className="text-xs text-[var(--app-ink-3)]">Proof (optional · png/jpg/pdf, max 5MB)</Label>
                           <input type="file" accept=".png,.jpg,.jpeg,.webp,.pdf" onChange={(e) => setSampleProofFile(e.target.files?.[0] ?? null)} className="text-xs" />
                         </div>
                       </div>
@@ -3214,12 +3244,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
       {/* ── Customer Feedback Card (always visible) ── */}
       {user?.role !== "ACCOUNTS" && (order.customerFeedback || (showInteractiveUi && mightSubmitFeedback)) && (
-        <Card className="overflow-hidden border border-slate-200 shadow-sm">
+        <Card className="overflow-hidden border border-[var(--app-line)] shadow-sm">
           <CardHeader className="border-b border-fuchsia-100 bg-gradient-to-br from-fuchsia-50/70 via-pink-50/30 to-slate-50/50 px-5 py-4">
             <div className="flex items-start gap-3">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-fuchsia-100 text-sm font-bold text-fuchsia-700">CF</div>
               <div className="min-w-0">
-                <CardTitle className="text-base font-semibold text-slate-800">Customer Feedback</CardTitle>
+                <CardTitle className="text-base font-semibold text-[var(--app-ink)]">Customer Feedback</CardTitle>
                 <p className="mt-0.5 text-xs text-fuchsia-700/70">Record and view customer response after sample delivery</p>
               </div>
             </div>
@@ -3227,29 +3257,29 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           <CardContent className="p-0">
             {/* Customer feedback display */}
             {order.customerFeedback && (
-              <div className="border-b border-slate-100 px-5 py-4">
+              <div className="border-b border-[var(--app-line-soft)] px-5 py-4">
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-700">Customer feedback</p>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-[var(--app-ink-2)]">Customer feedback</p>
                   {order.customerResponseStatus && (
                     <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ${{
                       POSITIVE: "bg-emerald-50 text-emerald-700 ring-emerald-200",
                       NEUTRAL: "bg-amber-50 text-amber-700 ring-amber-200",
                       NEGATIVE: "bg-red-50 text-red-700 ring-red-200",
-                      PENDING: "bg-indigo-50 text-blue-700 ring-blue-200",
-                    }[order.customerResponseStatus] ?? "bg-slate-50 text-slate-600 ring-slate-200"}`}>
+                      PENDING: "bg-[var(--app-brand-tint)] text-blue-700 ring-blue-200",
+                    }[order.customerResponseStatus] ?? "bg-[var(--app-surface-sunk)] text-[var(--app-ink-2)] ring-slate-200"}`}>
                       <span className={`h-1.5 w-1.5 rounded-full ${{
                         POSITIVE: "bg-emerald-500",
                         NEUTRAL: "bg-amber-500",
                         NEGATIVE: "bg-red-500",
-                        PENDING: "bg-indigo-500",
+                        PENDING: "bg-[var(--app-brand-tint)]0",
                       }[order.customerResponseStatus] ?? "bg-slate-400"}`} />
                       {order.customerResponseStatus}
                     </span>
                   )}
                 </div>
-                <p className="text-sm text-slate-800 leading-relaxed">{order.customerFeedback}</p>
-                {order.customerFeedbackRemarks && <p className="mt-1.5 text-xs text-slate-500">{order.customerFeedbackRemarks}</p>}
-                {order.customerFeedbackAt && <p className="mt-1 text-xs text-slate-400">{new Date(order.customerFeedbackAt).toLocaleString()}</p>}
+                <p className="text-sm text-[var(--app-ink)] leading-relaxed">{order.customerFeedback}</p>
+                {order.customerFeedbackRemarks && <p className="mt-1.5 text-xs text-[var(--app-ink-3)]">{order.customerFeedbackRemarks}</p>}
+                {order.customerFeedbackAt && <p className="mt-1 text-xs text-[var(--app-ink-3)]">{new Date(order.customerFeedbackAt).toLocaleString()}</p>}
               </div>
             )}
 
@@ -3259,12 +3289,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 <div className="rounded-xl border border-fuchsia-100 bg-white/90 p-4 shadow-sm space-y-3">
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="space-y-1">
-                      <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Sample received date</label>
-                      <input type="date" value={feedbackReceivedDate} onChange={(e) => setFeedbackReceivedDate(e.target.value)} className="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-fuchsia-200" />
+                      <label className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Sample received date</label>
+                      <input type="date" value={feedbackReceivedDate} onChange={(e) => setFeedbackReceivedDate(e.target.value)} className="flex h-9 w-full rounded-xl border border-[var(--app-line)] bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-fuchsia-200" />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Response status</label>
-                      <select value={feedbackResponseStatus} onChange={(e) => setFeedbackResponseStatus(e.target.value)} className="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-fuchsia-200">
+                      <label className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Response status</label>
+                      <select value={feedbackResponseStatus} onChange={(e) => setFeedbackResponseStatus(e.target.value)} className="flex h-9 w-full rounded-xl border border-[var(--app-line)] bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-fuchsia-200">
                         <option value="">Select status…</option>
                         <option value="POSITIVE">Positive — customer interested</option>
                         <option value="NEUTRAL">Neutral — under consideration</option>
@@ -3274,12 +3304,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                     </div>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Customer feedback <span className="normal-case text-red-400">*</span></label>
-                    <textarea value={salesFeedback} onChange={(e) => setSalesFeedback(e.target.value)} placeholder="Customer reaction, sample quality remarks, follow-up needed…" rows={3} className="flex min-h-[72px] w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-fuchsia-200" />
+                    <label className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Customer feedback <span className="normal-case text-red-400">*</span></label>
+                    <textarea value={salesFeedback} onChange={(e) => setSalesFeedback(e.target.value)} placeholder="Customer reaction, sample quality remarks, follow-up needed…" rows={3} className="flex min-h-[72px] w-full rounded-xl border border-[var(--app-line)] bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-fuchsia-200" />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Additional remarks (optional)</label>
-                    <textarea value={feedbackRemarks} onChange={(e) => setFeedbackRemarks(e.target.value)} placeholder="Any additional notes for Division Head…" rows={2} className="flex min-h-[56px] w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-fuchsia-200" />
+                    <label className="text-[10px] font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Additional remarks (optional)</label>
+                    <textarea value={feedbackRemarks} onChange={(e) => setFeedbackRemarks(e.target.value)} placeholder="Any additional notes for Division Head…" rows={2} className="flex min-h-[56px] w-full rounded-xl border border-[var(--app-line)] bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-fuchsia-200" />
                   </div>
                   <Button
                     type="button" size="sm"
@@ -3301,9 +3331,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           <CardContent>
             <ul className="space-y-2 text-sm">
               {(order.editHistory ?? []).map((h) => (
-                <li key={h.id} className="rounded border border-slate-100 p-2">
+                <li key={h.id} className="rounded border border-[var(--app-line-soft)] p-2">
                   <span className="font-medium">{h.fieldName}</span>: &quot;{h.oldValue ?? "—"}&quot; → &quot;{h.newValue ?? "—"}&quot;
-                  <span className="text-slate-500 ml-2">by {h.user.name} at {new Date(h.createdAt).toLocaleString()}</span>
+                  <span className="text-[var(--app-ink-3)] ml-2">by {h.user.name} at {new Date(h.createdAt).toLocaleString()}</span>
                 </li>
               ))}
             </ul>
@@ -3321,7 +3351,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                   {t.fromDivision?.name ?? "—"} → {t.toDivision?.name ?? "—"} by {t.transferredBy?.name ?? "—"}:{" "}
                   {t.reason ?? "—"}
                   {t.transferDetails?.trim() ? (
-                    <span className="block text-slate-600 mt-1">Details: {t.transferDetails}</span>
+                    <span className="block text-[var(--app-ink-2)] mt-1">Details: {t.transferDetails}</span>
                   ) : null}{" "}
                   ({new Date(t.createdAt).toLocaleString()})
                 </li>
@@ -3525,56 +3555,56 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           </DialogHeader>
 
           {/* Sample details review */}
-          <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 space-y-3 text-sm">
+          <div className="rounded-xl border border-[var(--app-line)] bg-[var(--app-surface-sunk)] px-4 py-3 space-y-3 text-sm">
             {/* Development type */}
             {sampleDevelopment && (
               <div className="flex items-start gap-2">
-                <span className="w-28 shrink-0 text-xs font-medium text-slate-500 pt-0.5">Dev type</span>
-                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ${sampleDevelopment.type === "existing" ? "bg-indigo-50 text-blue-700 ring-blue-200" : "bg-violet-50 text-violet-700 ring-violet-200"}`}>
-                  <span className={`h-1.5 w-1.5 rounded-full ${sampleDevelopment.type === "existing" ? "bg-indigo-500" : "bg-violet-500"}`} />
+                <span className="w-28 shrink-0 text-xs font-medium text-[var(--app-ink-3)] pt-0.5">Dev type</span>
+                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ${sampleDevelopment.type === "existing" ? "bg-[var(--app-brand-tint)] text-blue-700 ring-blue-200" : "bg-violet-50 text-violet-700 ring-violet-200"}`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${sampleDevelopment.type === "existing" ? "bg-[var(--app-brand-tint)]0" : "bg-violet-500"}`} />
                   {sampleDevelopment.type === "existing" ? "Existing development" : "New development"}
                 </span>
               </div>
             )}
             {sampleDevelopment?.type === "existing" && typeof sampleDevelopment.existingReference === "string" && sampleDevelopment.existingReference.trim() && (
               <div className="flex items-start gap-2">
-                <span className="w-28 shrink-0 text-xs font-medium text-slate-500 pt-0.5">Reference</span>
-                <span className="text-slate-800">{sampleDevelopment.existingReference}</span>
+                <span className="w-28 shrink-0 text-xs font-medium text-[var(--app-ink-3)] pt-0.5">Reference</span>
+                <span className="text-[var(--app-ink)]">{sampleDevelopment.existingReference}</span>
               </div>
             )}
             {sampleDevelopment?.type === "new" && typeof sampleDevelopment.whyNewDevelopment === "string" && sampleDevelopment.whyNewDevelopment.trim() && (
               <div className="flex items-start gap-2">
-                <span className="w-28 shrink-0 text-xs font-medium text-slate-500 pt-0.5">Why new</span>
-                <span className="text-slate-800 whitespace-pre-wrap">{sampleDevelopment.whyNewDevelopment}</span>
+                <span className="w-28 shrink-0 text-xs font-medium text-[var(--app-ink-3)] pt-0.5">Why new</span>
+                <span className="text-[var(--app-ink)] whitespace-pre-wrap">{sampleDevelopment.whyNewDevelopment}</span>
               </div>
             )}
             {sampleDevelopment?.type === "new" && typeof sampleDevelopment.technicalDetails === "string" && sampleDevelopment.technicalDetails.trim() && (
               <div className="flex items-start gap-2">
-                <span className="w-28 shrink-0 text-xs font-medium text-slate-500 pt-0.5">Technical</span>
-                <span className="text-slate-800 whitespace-pre-wrap">{sampleDevelopment.technicalDetails}</span>
+                <span className="w-28 shrink-0 text-xs font-medium text-[var(--app-ink-3)] pt-0.5">Technical</span>
+                <span className="text-[var(--app-ink)] whitespace-pre-wrap">{sampleDevelopment.technicalDetails}</span>
               </div>
             )}
             {/* Physical sample fields */}
             {order?.sampleDetails?.trim() && (
               <div className="flex items-start gap-2">
-                <span className="w-28 shrink-0 text-xs font-medium text-slate-500 pt-0.5">Details</span>
-                <span className="text-slate-800">{order.sampleDetails}</span>
+                <span className="w-28 shrink-0 text-xs font-medium text-[var(--app-ink-3)] pt-0.5">Details</span>
+                <span className="text-[var(--app-ink)]">{order.sampleDetails}</span>
               </div>
             )}
             {order?.sampleQuantity?.trim() && (
               <div className="flex items-start gap-2">
-                <span className="w-28 shrink-0 text-xs font-medium text-slate-500 pt-0.5">Quantity</span>
-                <span className="text-slate-800">{order.sampleQuantity}</span>
+                <span className="w-28 shrink-0 text-xs font-medium text-[var(--app-ink-3)] pt-0.5">Quantity</span>
+                <span className="text-[var(--app-ink)]">{order.sampleQuantity}</span>
               </div>
             )}
             {order?.sampleWeight?.trim() && (
               <div className="flex items-start gap-2">
-                <span className="w-28 shrink-0 text-xs font-medium text-slate-500 pt-0.5">Weight</span>
-                <span className="text-slate-800">{order.sampleWeight}</span>
+                <span className="w-28 shrink-0 text-xs font-medium text-[var(--app-ink-3)] pt-0.5">Weight</span>
+                <span className="text-[var(--app-ink)]">{order.sampleWeight}</span>
               </div>
             )}
             {!sampleDevelopment && !order?.sampleDetails?.trim() && !order?.sampleQuantity?.trim() && !order?.sampleWeight?.trim() && (
-              <p className="text-xs text-slate-400 italic">No sample details on record.</p>
+              <p className="text-xs text-[var(--app-ink-3)] italic">No sample details on record.</p>
             )}
           </div>
 
@@ -3683,25 +3713,25 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2 text-sm">
-            <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Why new development</p>
-              <p className="whitespace-pre-wrap text-slate-800">
+            <div className="rounded-xl border border-[var(--app-line)] bg-white p-3 space-y-1">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Why new development</p>
+              <p className="whitespace-pre-wrap text-[var(--app-ink)]">
                 {typeof sampleDevelopment?.whyNewDevelopment === "string"
                   ? sampleDevelopment.whyNewDevelopment
                   : "—"}
               </p>
             </div>
-            <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Technical details</p>
-              <p className="whitespace-pre-wrap text-slate-800">
+            <div className="rounded-xl border border-[var(--app-line)] bg-white p-3 space-y-1">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Technical details</p>
+              <p className="whitespace-pre-wrap text-[var(--app-ink)]">
                 {typeof sampleDevelopment?.technicalDetails === "string"
                   ? sampleDevelopment.technicalDetails
                   : "—"}
               </p>
             </div>
-            <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Details to submit</p>
-              <p className="whitespace-pre-wrap text-slate-800">
+            <div className="rounded-xl border border-[var(--app-line)] bg-white p-3 space-y-1">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Details to submit</p>
+              <p className="whitespace-pre-wrap text-[var(--app-ink)]">
                 {typeof sampleDevelopment?.requestedDetailsToSubmit === "string"
                   ? sampleDevelopment.requestedDetailsToSubmit
                   : "—"}
@@ -3725,7 +3755,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           </DialogHeader>
           <div className="py-2 space-y-3">
             <div className="space-y-1">
-              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Existing product / reference details</label>
+              <label className="text-xs font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">Existing product / reference details</label>
               <textarea
                 value={existingDevEditText}
                 onChange={(e) => setExistingDevEditText(e.target.value)}
@@ -3734,7 +3764,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 placeholder="Style code, prior enquiry reference, specifications…"
                 autoFocus
               />
-              <p className="text-xs text-slate-400">Minimum 10 characters required.</p>
+              <p className="text-xs text-[var(--app-ink-3)]">Minimum 10 characters required.</p>
             </div>
             {existingDevEditError ? <p className="text-sm text-red-600">{existingDevEditError}</p> : null}
           </div>
@@ -3793,7 +3823,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Research requirements <span className="text-slate-400 text-xs">(optional)</span></Label>
+              <Label>Research requirements <span className="text-[var(--app-ink-3)] text-xs">(optional)</span></Label>
               <textarea
                 value={newDevResearch}
                 onChange={(e) => setNewDevResearch(e.target.value)}
@@ -3804,7 +3834,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Planning notes <span className="text-slate-400 text-xs">(optional)</span></Label>
+              <Label>Planning notes <span className="text-[var(--app-ink-3)] text-xs">(optional)</span></Label>
               <textarea
                 value={newDevPlanningNotes}
                 onChange={(e) => setNewDevPlanningNotes(e.target.value)}
@@ -3825,7 +3855,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                   data-gramm_editor="false"
                   data-enable-grammarly="false"
                 />
-                <p className="text-xs text-slate-500">Target date for the estimated timeline (calendar).</p>
+                <p className="text-xs text-[var(--app-ink-3)]">Target date for the estimated timeline (calendar).</p>
               </div>
               <div className="space-y-1.5">
                 <Label>Expected completion <span className="text-red-500">*</span></Label>
@@ -3838,7 +3868,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                   data-gramm_editor="false"
                   data-enable-grammarly="false"
                 />
-                <p className="text-xs text-slate-500">Expected completion date (must be on or after timeline date).</p>
+                <p className="text-xs text-[var(--app-ink-3)]">Expected completion date (must be on or after timeline date).</p>
               </div>
             </div>
             <div className="space-y-1.5">
@@ -3953,7 +3983,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Cancel this enquiry</DialogTitle>
-            <p className="text-sm font-normal text-slate-600 pt-1">
+            <p className="text-sm font-normal text-[var(--app-ink-2)] pt-1">
               Division heads will be notified with the reason you provide. This cannot be undone.
             </p>
           </DialogHeader>

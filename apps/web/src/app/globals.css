@@ -1,23 +1,80 @@
 @import "tailwindcss";
 
 /*
- * Enquiry Management Application — premium black/white executive design tokens.
- * Existing slate-based components keep working; new pages use these accents
- * for SLA breach, approval, rejection, sample, and priority highlights.
+ * Shiva TexYarn Limited — Enquiry Management System design tokens.
+ *
+ * Two layers live here:
+ *   1. `--app-*`  the current design language (surfaces, ink, brand, status, charts)
+ *   2. `--enq-*`  legacy accent tokens kept so older screens keep rendering
  */
 
 :root {
   --background: #ffffff;
-  --foreground: #0a0a0a;
+  --foreground: #101828;
 
-  /* Workflow accent tokens */
-  --enq-ink: #4F46E5;             /* primary ink — indigo */
-  --enq-ink-soft: #4338CA;        /* secondary ink — indigo hover */
-  --enq-muted: #64748b;            /* muted slate */
-  --enq-line: #e5e7eb;             /* hairline */
-  --enq-surface: #f8fafc;          /* card backdrop */
+  /* ── Surfaces ───────────────────────────────────────────────── */
+  --app-plane: #f6f7f9;          /* page background behind cards */
+  --app-surface: #ffffff;        /* card surface */
+  --app-surface-sunk: #fafbfc;   /* table headers, inset panels */
+  --app-line: #e6e8ec;           /* hairline border */
+  --app-line-soft: #f0f1f4;      /* inner dividers */
 
-  /* Status tones */
+  /* ── Ink ────────────────────────────────────────────────────── */
+  --app-ink: #101828;            /* headings, primary values */
+  --app-ink-2: #475467;          /* body copy */
+  --app-ink-3: #667085;          /* captions, axis labels (4.5:1 on white) */
+
+  /* ── Brand ──────────────────────────────────────────────────── */
+  --app-brand: #4f46e5;
+  --app-brand-strong: #4338ca;
+  --app-brand-tint: #eef0ff;
+  --app-brand-line: #d6d9fb;
+
+  /* ── Navigation shell ───────────────────────────────────────── */
+  --app-nav: #1e1b4b;
+  --app-nav-2: #272265;          /* hover row */
+  --app-nav-ink: #b9bbe4;
+  --app-nav-ink-strong: #ffffff;
+  --app-nav-line: rgba(255, 255, 255, 0.1);
+
+  /* ── Workflow states ────────────────────────────────────────────
+     Each pairs a tinted ground with ink that clears 4.5:1 on it, and the
+     four differ in lightness as well as hue so they survive colour-blindness. */
+  --app-act-bg: #fdf3e3;         /* needs you — amber */
+  --app-act-line: #f0d7a6;
+  --app-act-ink: #8a5200;
+
+  --app-wait-bg: #edf2fe;        /* waiting on someone else — blue */
+  --app-wait-line: #c7d7fb;
+  --app-wait-ink: #1e429f;
+
+  --app-late-bg: #fdf0ef;        /* overdue / breached — red */
+  --app-late-line: #f7cfcb;
+  --app-late-ink: #9f1d16;
+
+  --app-done-bg: #e9f7f4;        /* finished — teal */
+  --app-done-line: #bce4dc;
+  --app-done-ink: #0b6b5d;
+
+  /* ── Chart palette ──────────────────────────────────────────────
+     Validated for the white card surface: lightness band, chroma floor,
+     CVD separation and normal-vision floor all pass. The three lighter
+     slots sit under 3:1 against white, so every chart using them ships
+     direct labels or a legend — colour never carries meaning alone. */
+  --chart-1: #4f46e5;
+  --chart-2: #eb6834;
+  --chart-3: #1baf7a;
+  --chart-4: #eda100;
+  --chart-5: #e87ba4;
+  --chart-grid: #eceef2;
+  --chart-axis: #667085;
+
+  /* ── Legacy accent tokens (older screens still reference these) ── */
+  --enq-ink: #4f46e5;
+  --enq-ink-soft: #4338ca;
+  --enq-muted: #64748b;
+  --enq-line: #e5e7eb;
+  --enq-surface: #f8fafc;
   --enq-success: #047857;
   --enq-warn: #b45309;
   --enq-danger: #b91c1c;
@@ -32,7 +89,7 @@
 }
 
 body {
-  background: var(--background);
+  background: var(--app-plane);
   color: var(--foreground);
   font-family: var(--font-plus-jakarta), system-ui, sans-serif;
   font-feature-settings: "rlig" 1, "calt" 1;
@@ -40,9 +97,33 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-/* Smooth motion baseline for executive UI */
-* {
-  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease, box-shadow 160ms ease;
+/* Keyboard focus is always visible, on every interactive element. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--app-brand);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Columns of figures align; standalone values keep proportional figures. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Quiet scrollbars inside panels. */
+.scroll-soft {
+  scrollbar-width: thin;
+  scrollbar-color: #d7dae1 transparent;
+}
+.scroll-soft::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scroll-soft::-webkit-scrollbar-thumb {
+  background: #d7dae1;
+  border-radius: 999px;
+}
+.scroll-soft::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 /* Status pill helper classes — used as fallbacks where Tailwind utility composition is verbose. */
@@ -56,4 +137,9 @@ body {
 /* Subtle card surface used on premium dashboards */
 .enq-card {
   @apply rounded-xl border border-slate-200/70 bg-white shadow-none ring-1 ring-slate-200/60;
+}
+
+@media print {
+  .no-print { display: none !important; }
+  body { background: #fff; }
 }

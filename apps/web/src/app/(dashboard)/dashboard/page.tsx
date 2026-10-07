@@ -2,492 +2,418 @@
 
 import { useState } from "react";
 import dynamic from "next/dynamic";
-import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Label } from "@/components/ui/label";
+import { useQuery } from "@tanstack/react-query";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Package, AlertTriangle, CheckCircle, ChevronDown, FileDown, FileSpreadsheet } from "lucide-react";
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+  FileSpreadsheet,
+  Inbox,
+  Package,
+  Plus,
+  UserPlus,
+} from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
-import type { EnquiryPeriodFilter } from "@/lib/date-period";
-import { PERIOD_LABELS } from "@/lib/date-period";
-import { formatEnquiryNumber } from "@/lib/enquiry-display";
+import { Panel, PanelHeader, PanelLink, PageHeader, PanelSkeleton } from "@/components/ui/panel";
+import { StatTile } from "@/components/ui/stat-tile";
+import { NextStep } from "@/components/ui/guidance";
+import { WorkQueue, type ActionItem } from "@/components/dashboard/work-queue";
+import { AgentsPanel, type Agent } from "@/components/dashboard/agents-panel";
+import { CalendarPanel, type CalendarMap } from "@/components/dashboard/calendar-panel";
+import { Legend } from "@/components/dashboard/charts";
+import { SERIES } from "@/lib/chart-palette";
 import { downloadEnquiriesExcel, fetchAllOrdersForExport } from "@/lib/enquiry-export";
-import type { DashboardChartDatum } from "./dashboard-charts";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { roleLabel } from "@/lib/roles";
+import { userMayCreateEnquiry } from "@/lib/enquiry-access";
 
-const DashboardCharts = dynamic(() => import("./dashboard-charts").then((m) => m.DashboardCharts), {
+const VolumeChart = dynamic(() => import("@/components/dashboard/charts").then((m) => m.VolumeChart), {
   ssr: false,
-  loading: () => (
-    <div className="grid gap-6 lg:grid-cols-2">
-      <div className="h-72 animate-pulse rounded-xl border border-slate-100 bg-slate-50" />
-      <div className="h-72 animate-pulse rounded-xl border border-slate-100 bg-slate-50" />
-    </div>
-  ),
+  loading: () => <div className="h-[260px] animate-pulse rounded-xl bg-[var(--app-surface-sunk)]" />,
+});
+const StatusDonut = dynamic(() => import("@/components/dashboard/charts").then((m) => m.StatusDonut), {
+  ssr: false,
+  loading: () => <div className="h-[180px] animate-pulse rounded-xl bg-[var(--app-surface-sunk)]" />,
+});
+const CityBars = dynamic(() => import("@/components/dashboard/charts").then((m) => m.CityBars), {
+  ssr: false,
+  loading: () => <div className="h-[200px] animate-pulse rounded-xl bg-[var(--app-surface-sunk)]" />,
+});
+const DivisionBars = dynamic(() => import("@/components/dashboard/charts").then((m) => m.DivisionBars), {
+  ssr: false,
+  loading: () => <div className="h-[200px] animate-pulse rounded-xl bg-[var(--app-surface-sunk)]" />,
 });
 
-const STATUS_COLORS: Record<string, string> = {
-  PLACED: "#94a3b8",
-  IN_PROGRESS: "#3b82f6",
-  TRANSFERRED: "#f59e0b",
-  REJECTED: "#ef4444",
-  COMPLETED: "#22c55e",
-  CANCELLED: "#78716c",
-};
-
-const statusVariant: Record<string, "default" | "secondary" | "destructive" | "success" | "warning"> = {
-  PLACED: "secondary",
-  IN_PROGRESS: "default",
-  TRANSFERRED: "warning",
-  REJECTED: "destructive",
-  COMPLETED: "success",
-  CANCELLED: "secondary",
-};
-
-function buildOrdersQuery(period: EnquiryPeriodFilter, dateFrom: string, dateTo: string): string {
-  const useCustom = Boolean(dateFrom.trim() && dateTo.trim());
-  if (useCustom) {
-    return `&from=${encodeURIComponent(dateFrom.trim())}&to=${encodeURIComponent(dateTo.trim())}`;
-  }
-  if (period) {
-    return `&period=${encodeURIComponent(period)}`;
-  }
-  return "";
-}
-
-const SLA_ROLES = new Set(["SUPER_ADMIN", "MANAGING_DIRECTOR"]);
-
-async function fetchDashboard(
-  period: EnquiryPeriodFilter,
-  page: number,
-  dateFrom: string,
-  dateTo: string,
-  role: string
-) {
-  const q = buildOrdersQuery(period, dateFrom, dateTo);
-  const ordersUrl = `/api/orders?page=${page}&limit=5&stats=1${q}`;
-  if (!SLA_ROLES.has(role)) {
-    const pipeRes = await fetch(ordersUrl, { credentials: "include" });
-    const pipe = pipeRes.ok
-      ? await pipeRes.json()
-      : { total: 0, orders: [], statusCounts: {}, page: 1, limit: 5 };
-    return { ...pipe, slaBreaches: 0, enquiriesAtRisk: 0 };
-  }
-  /** `summary=1` skips SLA sync job + row scans — same numbers as dashboard cards, much faster. */
-  const [pipeRes, slaRes] = await Promise.all([
-    fetch(ordersUrl, { credentials: "include" }),
-    fetch("/api/sla?summary=1", { credentials: "include" }),
-  ]);
-  const pipe = pipeRes.ok
-    ? await pipeRes.json()
-    : { total: 0, orders: [], statusCounts: {}, page: 1, limit: 5 };
-  const slaData = slaRes.ok
-    ? await slaRes.json()
-    : { breachCount: 0, atRiskCount: 0 };
-  const slaBreaches =
-    typeof slaData.breachCount === "number" ? slaData.breachCount : (slaData.breaches?.length ?? 0);
-  const enquiriesAtRisk =
-    typeof slaData.atRiskCount === "number" ? slaData.atRiskCount : (slaData.ordersAtRisk?.length ?? 0);
-  return {
-    ...pipe,
-    slaBreaches,
-    enquiriesAtRisk,
+type Overview = {
+  totals: {
+    total: number;
+    open: number;
+    placed: number;
+    inProgress: number;
+    transferred: number;
+    completed: number;
+    rejected: number;
+    cancelled: number;
+    overdue: number;
+    createdThisWeek: number;
+    completedThisWeek: number;
+    thisMonth: number;
   };
-}
+  monthly: { month: string; year: number; submitted: number; completed: number }[];
+  statusSplit: { key: string; label: string; count: number }[];
+  byDivision: { name: string; count: number }[];
+  byCity: { name: string; count: number }[];
+  unknownCity: number;
+  calendar: CalendarMap;
+  topAgents: Agent[];
+  needsYou: ActionItem[];
+  waitingOn: ActionItem[];
+  needsYouTotal: number;
+  waitingOnTotal: number;
+};
 
 export default function DashboardPage() {
   const { user, isLoading: authLoading } = useAuth();
-  const [period, setPeriod] = useState<EnquiryPeriodFilter>("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [page, setPage] = useState(1);
   const [exporting, setExporting] = useState(false);
 
-  const useCustomRange = Boolean(dateFrom.trim() && dateTo.trim());
-
-  const { data, isLoading: dashboardLoading, isFetching } = useQuery({
-    queryKey: ["dashboard", period, page, dateFrom, dateTo, user?.role],
-    queryFn: () => fetchDashboard(period, page, dateFrom, dateTo, user?.role ?? "USER"),
-    staleTime: 60_000,
+  const { data: overview, isLoading: overviewLoading } = useQuery<Overview>({
+    queryKey: ["dashboard", "overview"],
+    queryFn: async () => {
+      const res = await fetch("/api/dashboard/overview", { credentials: "include" });
+      if (!res.ok) throw new Error("Could not load the dashboard");
+      return res.json();
+    },
     enabled: !!user,
-    placeholderData: (prev) => prev,
+    staleTime: 60_000,
   });
 
-  const hideDivision = user?.role === "MANAGER";
+  if (authLoading || !user) {
+    return (
+      <div className="space-y-5">
+        <PanelSkeleton className="h-24" />
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {[0, 1, 2, 3].map((i) => (
+            <PanelSkeleton key={i} className="h-32" />
+          ))}
+        </div>
+        <PanelSkeleton className="h-80" />
+      </div>
+    );
+  }
 
-  const handleExport = async () => {
+  const role = user.role as string;
+  const isSales = role === "USER";
+  const isHead = role === "DIVISION_HEAD" || role === "MANAGER";
+  const isProduction = role === "SUPERVISOR";
+  const isObserver = role === "ASM";
+  // ASM raises enquiries too, not just Marketing / Sales — keep this in step
+  // with the enquiry list and the server-side rule.
+  const canCreate = userMayCreateEnquiry(role);
+
+  const t = overview?.totals;
+  const needsCount = overview?.needsYouTotal ?? 0;
+  const waitingCount = overview?.waitingOnTotal ?? 0;
+  const first = overview?.needsYou[0];
+
+  async function handleExport() {
     setExporting(true);
     try {
-      const rows = await fetchAllOrdersForExport({
-        period: useCustomRange ? "" : period,
-        from: dateFrom.trim() || undefined,
-        to: dateTo.trim() || undefined,
-      });
-      const label = useCustomRange
-        ? `custom-${dateFrom.trim()}-to-${dateTo.trim()}`
-        : PERIOD_LABELS.find((p) => p.value === period)?.label?.toLowerCase().replace(/\s+/g, "-") ?? "all";
-      downloadEnquiriesExcel(rows, label, hideDivision);
+      const rows = await fetchAllOrdersForExport({ period: "" });
+      downloadEnquiriesExcel(rows, "All time", isSales);
+    } catch {
+      // The button returns to its resting state; the enquiry list is the fallback.
     } finally {
       setExporting(false);
     }
-  };
-
-  const statusCounts = data?.statusCounts ?? {};
-  const pieData: DashboardChartDatum[] = Object.entries(statusCounts)
-    .map(([name, value]) => ({
-      name: name.replace(/_/g, " "),
-      value: value as number,
-      fill: STATUS_COLORS[name] ?? "#94a3b8",
-      count: value as number,
-    }))
-    .filter((d) => d.value > 0);
-
-  const barData = pieData.map((d) => ({ ...d, count: d.value }));
-
-  if (authLoading) {
-    return (
-      <div className="space-y-8">
-        <div className="h-8 w-48 rounded bg-slate-200 animate-pulse" />
-        <div className="grid gap-6 sm:grid-cols-2 md:grid-cols-3">
-          {[1, 2, 3].map((i) => (
-            <Card key={i} className="animate-pulse">
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <div className="h-4 w-32 rounded bg-slate-200" />
-              </CardHeader>
-              <CardContent>
-                <div className="h-8 w-16 rounded bg-slate-200" />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
-    );
   }
-
-  if (!user) {
-    return null;
-  }
-
-  const isAccountsView = user.role === "ACCOUNTS";
-
-  const dataPending = dashboardLoading || !data;
-
-  if (dataPending) {
-    return (
-      <div className="space-y-8">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-          <p className="mt-1 text-slate-500">
-            Welcome back, {user.name}. Loading your overview…
-            {isFetching ? <span className="ml-2 inline-block h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-indigo-600 align-middle" aria-hidden /> : null}
-          </p>
-        </div>
-        <div className="grid gap-6 sm:grid-cols-2 md:grid-cols-3">
-          {[1, 2, 3].map((i) => (
-            <Card key={i} className="animate-pulse">
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <div className="h-4 w-32 rounded bg-slate-200" />
-              </CardHeader>
-              <CardContent>
-                <div className="h-8 w-16 rounded bg-slate-200" />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-        <div className="h-40 rounded-xl bg-slate-100 animate-pulse" />
-      </div>
-    );
-  }
-
-  const placedCount = Number(statusCounts.PLACED ?? 0);
-  const inProgressCount = Number(statusCounts.IN_PROGRESS ?? 0);
-  const completedCount = Number(statusCounts.COMPLETED ?? 0);
-
-  const metricCards = isAccountsView
-    ? [
-        { title: "Placed", value: placedCount, icon: Package, color: "blue" as const },
-        { title: "In progress", value: inProgressCount, icon: CheckCircle, color: "indigo" as const },
-        { title: "Completed", value: completedCount, icon: CheckCircle, color: "emerald" as const },
-      ]
-    : [
-        { title: "Total enquiries", value: data.total, icon: Package, color: "blue" as const },
-        { title: "Service level violations breaches", value: data.slaBreaches, icon: AlertTriangle, alert: data.slaBreaches > 0, color: "red" as const },
-      ];
-
-  const pipelineSubtitle =
-    user?.role === "USER"
-      ? "Enquiries you raised (most recent first)."
-      : hideDivision
-        ? "Enquiries for your division (most recent first)."
-        : "Scoped to your account and divisions.";
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-xl font-bold tracking-tight text-slate-900">Dashboard</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Overview of enquiries{isAccountsView ? "" : " and SLA performance"}.
-        </p>
-      </div>
+    <div className="space-y-5">
+      {/* ── Who you are and what you can do here ─────────────────── */}
+      <PageHeader
+        title={`Good to see you, ${user.name.split(" ")[0]}`}
+        description={`${roleLabel(role as Parameters<typeof roleLabel>[0])} workspace — everything below is scoped to what you are responsible for.`}
+      >
+        <button
+          type="button"
+          onClick={handleExport}
+          disabled={exporting}
+          className="inline-flex h-10 items-center gap-2 rounded-xl border border-[var(--app-line)] bg-white px-3.5 text-sm font-semibold text-[var(--app-ink-2)] hover:bg-[var(--app-surface-sunk)] disabled:opacity-60"
+        >
+          <FileSpreadsheet className="h-4 w-4" aria-hidden />
+          {exporting ? "Preparing…" : "Export"}
+        </button>
+        {canCreate ? (
+          <Link
+            href="/orders/new"
+            className="inline-flex h-10 items-center gap-2 rounded-xl bg-[var(--app-brand)] px-4 text-sm font-semibold text-white hover:bg-[var(--app-brand-strong)]"
+          >
+            <Plus className="h-4 w-4" aria-hidden />
+            New enquiry
+          </Link>
+        ) : null}
+      </PageHeader>
 
-      <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
-        {metricCards.map((card) => {
-          const Icon = card.icon;
-          const isAlert = "alert" in card && card.alert;
-          const colorMap = {
-            blue:   { border: "border-blue-200",   bg: "bg-blue-50",   icon: "bg-blue-500",   iconText: "text-white", label: "text-blue-600",   value: "text-blue-900",   stripe: "bg-blue-500"   },
-            indigo: { border: "border-indigo-200", bg: "bg-indigo-50", icon: "bg-indigo-500", iconText: "text-white", label: "text-indigo-600", value: "text-indigo-900", stripe: "bg-indigo-500" },
-            emerald:{ border: "border-emerald-200",bg: "bg-emerald-50",icon: "bg-emerald-500",iconText: "text-white", label: "text-emerald-600",value: "text-emerald-900",stripe: "bg-emerald-500"},
-            red:    { border: isAlert ? "border-red-300"   : "border-slate-200", bg: isAlert ? "bg-red-50"    : "bg-white", icon: isAlert ? "bg-red-500"    : "bg-slate-100", iconText: isAlert ? "text-white" : "text-slate-500", label: isAlert ? "text-red-600"    : "text-slate-500", value: isAlert ? "text-red-900"    : "text-slate-900", stripe: isAlert ? "bg-red-500"    : "bg-slate-200" },
-            amber:  { border: isAlert ? "border-amber-300" : "border-slate-200", bg: isAlert ? "bg-amber-50"  : "bg-white", icon: isAlert ? "bg-amber-500"  : "bg-slate-100", iconText: isAlert ? "text-white" : "text-slate-500", label: isAlert ? "text-amber-600"  : "text-slate-500", value: isAlert ? "text-amber-900"  : "text-slate-900", stripe: isAlert ? "bg-amber-500"  : "bg-slate-200" },
-          };
-          const c = colorMap[card.color];
-          return (
-            <Card key={card.title} className={`relative overflow-hidden border shadow-sm ${c.border} ${c.bg}`}>
-              <div className={`absolute left-0 top-0 h-full w-1 ${c.stripe}`} />
-              <CardHeader className="flex flex-row items-center justify-between pb-2 pl-6 pr-5 pt-5">
-                <CardTitle className={`text-xs font-semibold uppercase tracking-wide ${c.label}`}>{card.title}</CardTitle>
-                <div className={`rounded-lg p-2 ${c.icon}`}>
-                  <Icon className={`h-4 w-4 ${c.iconText}`} />
-                </div>
-              </CardHeader>
-              <CardContent className="pb-5 pl-6 pr-5">
-                <div className={`text-3xl font-bold tabular-nums ${c.value}`}>{card.value}</div>
-                {isAlert && (card.value as number) > 0 ? (
-                  <p className={`mt-1 text-xs font-semibold ${c.label}`}>Requires attention</p>
-                ) : (
-                  <p className="mt-1 text-xs text-slate-400">Total count</p>
-                )}
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
-
-      {isAccountsView ? null : (
-      <Card className="border-slate-200/90 shadow-sm">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Filters</CardTitle>
-          <p className="text-sm text-slate-500 font-normal">
-            Use a quick period <span className="text-slate-400">or</span> a custom from/to range. Custom range
-            applies when both dates are set.
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-col gap-4 lg:flex-row lg:flex-wrap lg:items-end">
-            <div className="space-y-2">
-              <Label className="text-xs uppercase tracking-wide text-slate-500">Quick period</Label>
-              <Select
-                value={period || "all"}
-                disabled={useCustomRange}
-                onValueChange={(v) => {
-                  setDateFrom("");
-                  setDateTo("");
-                  setPeriod(v === "all" ? "" : (v as EnquiryPeriodFilter));
-                  setPage(1);
-                }}
-              >
-                <SelectTrigger className="w-full min-w-0 sm:w-[200px]">
-                  <SelectValue placeholder="Period" />
-                </SelectTrigger>
-                <SelectContent>
-                  {PERIOD_LABELS.map((p) => (
-                    <SelectItem key={p.value || "all"} value={p.value || "all"}>
-                      {p.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-              <div className="space-y-2">
-                <Label className="text-xs uppercase tracking-wide text-slate-500">From date</Label>
-                <input
-                  type="date"
-                  value={dateFrom}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setDateFrom(v);
-                    if (v && dateTo) setPeriod("");
-                    setPage(1);
-                  }}
-                  className="flex h-9 w-full min-w-40 rounded-md border-2 border-slate-400/70 bg-white px-3 py-1 text-sm shadow-sm focus-visible:border-indigo-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 sm:w-40"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-xs uppercase tracking-wide text-slate-500">To date</Label>
-                <input
-                  type="date"
-                  value={dateTo}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setDateTo(v);
-                    if (dateFrom && v) setPeriod("");
-                    setPage(1);
-                  }}
-                  className="flex h-9 w-full min-w-40 rounded-md border-2 border-slate-400/70 bg-white px-3 py-1 text-sm shadow-sm focus-visible:border-indigo-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 sm:w-40"
-                />
-              </div>
-              {(dateFrom || dateTo) && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="text-slate-600"
-                  onClick={() => {
-                    setDateFrom("");
-                    setDateTo("");
-                    setPage(1);
-                  }}
-                >
-                  Clear dates
-                </Button>
-              )}
-            </div>
-
-            <div className="lg:ml-auto">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button type="button" variant="outline" size="sm" disabled={exporting} className="gap-1.5">
-                    <FileDown className="h-3.5 w-3.5" />
-                    {exporting ? "Preparing…" : "Download"}
-                    <ChevronDown className="h-3.5 w-3.5" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-48">
-                  <DropdownMenuItem
-                    className="gap-2 cursor-pointer"
-                    disabled={exporting}
-                    onClick={() => void handleExport()}
-                  >
-                    <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
-                    Download as Excel
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-      )}
-
-      {isAccountsView ? null : (
-        <DashboardCharts
-          pieData={pieData}
-          barData={barData}
-          useCustomRange={useCustomRange}
-          dateFrom={dateFrom}
-          dateTo={dateTo}
+      {/* ── The one thing to do next ──────────────────────────────── */}
+      {overviewLoading ? (
+        <PanelSkeleton className="h-28" />
+      ) : needsCount > 0 && first ? (
+        <NextStep
+          tone={first.overdue ? "late" : "act"}
+          eyebrow="Your next step"
+          title={
+            needsCount === 1
+              ? "One enquiry is waiting on you"
+              : `${needsCount} enquiries are waiting on you`
+          }
+          description={`Start with ${first.company || first.customer || "the oldest one"}: ${first.reason}`}
+          actionLabel={first.actionLabel}
+          actionHref={`/orders/${first.id}`}
+        />
+      ) : waitingCount > 0 ? (
+        <NextStep
+          tone="wait"
+          eyebrow="Nothing needs you right now"
+          title="You are up to date"
+          description={`${waitingCount} enquir${waitingCount === 1 ? "y is" : "ies are"} moving with someone else. You will be notified the moment one comes back to you.`}
+          actionLabel="See what they are waiting on"
+          actionHref="/orders"
+        />
+      ) : (
+        <NextStep
+          tone="done"
+          eyebrow="All clear"
+          title="No open work in your queue"
+          description={
+            canCreate
+              ? "When you submit a new enquiry it will appear here with its next step."
+              : "New enquiries will appear here as soon as they reach you."
+          }
+          actionLabel={canCreate ? "Create an enquiry" : "Browse enquiries"}
+          actionHref={canCreate ? "/orders/new" : "/orders"}
         />
       )}
 
-      <Card className="overflow-hidden border border-slate-200 shadow-sm">
-        <div className="h-1 w-full bg-gradient-to-r from-slate-400 via-blue-500 to-indigo-500" />
-        <CardHeader className="border-b border-slate-100 bg-slate-50/60 px-5 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-sm font-semibold text-slate-800">
-                {isAccountsView ? "Enquiries" : "Enquiry pipeline"}
-              </CardTitle>
-              <p className="mt-0.5 text-xs text-slate-500">{pipelineSubtitle}</p>
-            </div>
-            {data.total > 0 && (
-              <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
-                {data.total} total
-              </span>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          {!data.orders?.length ? (
-            <div className="flex flex-col items-center gap-2 py-14 text-center">
-              <Package className="h-7 w-7 text-slate-300" />
-              <p className="text-sm text-slate-500">No enquiries in this view.</p>
+      {/* ── Headline numbers ──────────────────────────────────────── */}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatTile
+          label={isSales ? "Enquiries you submitted" : "Enquiries in your scope"}
+          value={t?.total ?? 0}
+          caption={t ? `${t.thisMonth} opened this month` : undefined}
+          icon={Package}
+          tone="brand"
+          href="/orders"
+          loading={overviewLoading}
+          delta={t && t.createdThisWeek > 0 ? `+${t.createdThisWeek} this week` : undefined}
+          deltaDirection="up"
+        />
+        <StatTile
+          label={isHead ? "Waiting for you to accept" : "Awaiting acceptance"}
+          value={t?.placed ?? 0}
+          caption={isHead ? "Nobody can start until you decide" : "With the division head"}
+          icon={Inbox}
+          tone={(t?.placed ?? 0) > 0 ? "act" : "neutral"}
+          href="/orders?status=PLACED"
+          loading={overviewLoading}
+        />
+        <StatTile
+          label="In progress"
+          value={t?.inProgress ?? 0}
+          caption={isProduction ? "Work on the floor" : "Accepted and being worked on"}
+          icon={Clock}
+          tone={(t?.inProgress ?? 0) > 0 ? "wait" : "neutral"}
+          href="/orders?status=IN_PROGRESS"
+          loading={overviewLoading}
+        />
+        {isObserver || isHead || !isSales ? (
+          <StatTile
+            label="Past deadline"
+            value={t?.overdue ?? 0}
+            caption={(t?.overdue ?? 0) > 0 ? "These need an explanation" : "Nothing is late"}
+            icon={AlertTriangle}
+            tone={(t?.overdue ?? 0) > 0 ? "late" : "done"}
+            href="/orders"
+            loading={overviewLoading}
+          />
+        ) : (
+          <StatTile
+            label="Completed"
+            value={t?.completed ?? 0}
+            caption={t ? `${t.completedThisWeek} closed this week` : undefined}
+            icon={CheckCircle2}
+            tone="done"
+            href="/orders?status=COMPLETED"
+            loading={overviewLoading}
+          />
+        )}
+      </div>
+
+      {/* ── The two queues: yours, and everyone else's ────────────── */}
+      <div className="grid gap-5 xl:grid-cols-2">
+        <Panel>
+          <PanelHeader
+            title="Needs you"
+            caption="You owe the next move on these"
+            action={needsCount > 0 ? <PanelLink href="/orders">All enquiries</PanelLink> : undefined}
+          />
+          {overviewLoading ? (
+            <div className="space-y-2 p-5">
+              <div className="h-16 animate-pulse rounded-xl bg-[var(--app-surface-sunk)]" />
+              <div className="h-16 animate-pulse rounded-xl bg-[var(--app-surface-sunk)]" />
             </div>
           ) : (
-            <div className="divide-y divide-slate-100">
-              {data.orders.map(
-                (order: {
-                  id: number;
-                  orderNumber: string;
-                  status: string;
-                  createdAt: string;
-                  createdBy?: { name: string };
-                  currentDivision?: { name: string };
-                }) => {
-                  const statusBar: Record<string, string> = {
-                    PLACED: "bg-slate-400",
-                    IN_PROGRESS: "bg-blue-500",
-                    TRANSFERRED: "bg-amber-500",
-                    REJECTED: "bg-red-500",
-                    COMPLETED: "bg-emerald-500",
-                    CANCELLED: "bg-stone-400",
-                  };
-                  return (
-                    <Link
-                      key={order.id}
-                      href={`/orders/${order.id}`}
-                      className="flex items-center gap-4 px-5 py-3.5 transition-colors hover:bg-blue-50/40"
-                    >
-                      <div className={`h-9 w-1.5 shrink-0 rounded-full ${statusBar[order.status] ?? "bg-slate-300"}`} />
-                      <div className="min-w-0 flex-1">
-                        <p className="flex flex-wrap items-center gap-2">
-                          <span className="rounded-md border border-blue-100 bg-blue-50 px-1.5 py-0.5 font-mono text-xs font-semibold text-blue-800">
-                            {formatEnquiryNumber(order.orderNumber)}
-                          </span>
-                          {!hideDivision && order.currentDivision?.name ? (
-                            <span className="text-xs text-slate-400">{order.currentDivision.name}</span>
-                          ) : null}
-                        </p>
-                        <p className="mt-0.5 truncate text-xs text-slate-500">
-                          {order.createdBy?.name ? (
-                            <span className="font-medium text-slate-600">{order.createdBy.name} · </span>
-                          ) : null}
-                          <time dateTime={order.createdAt} suppressHydrationWarning>
-                            {new Date(order.createdAt).toLocaleString()}
-                          </time>
-                        </p>
-                      </div>
-                      <Badge variant={statusVariant[order.status] ?? "secondary"} className="shrink-0 text-[11px]">
-                        {order.status.replace("_", " ")}
-                      </Badge>
-                    </Link>
-                  );
-                }
-              )}
-              {data.total > data.limit && (
-                <div className="flex items-center justify-between bg-slate-50 px-5 py-3">
-                  <span className="text-xs text-slate-500">
-                    Page {page} of {Math.max(1, Math.ceil(data.total / data.limit))}
-                  </span>
-                  <div className="flex gap-1.5">
-                    <Button variant="outline" size="sm" className="h-7 text-xs" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-                      Previous
-                    </Button>
-                    <Button variant="outline" size="sm" className="h-7 text-xs" disabled={page * data.limit >= data.total} onClick={() => setPage((p) => p + 1)}>
-                      Next
-                    </Button>
-                  </div>
-                </div>
+            <WorkQueue
+              items={overview?.needsYou ?? []}
+              total={needsCount}
+              kind="act"
+              emptyTitle="Nothing is waiting on you"
+              emptyDescription="Every enquiry in your scope is either finished or sitting with somebody else."
+            />
+          )}
+        </Panel>
+
+        <Panel>
+          <PanelHeader title="Waiting on someone else" caption="Named, so you know who to chase" />
+          {overviewLoading ? (
+            <div className="space-y-2 p-5">
+              <div className="h-16 animate-pulse rounded-xl bg-[var(--app-surface-sunk)]" />
+              <div className="h-16 animate-pulse rounded-xl bg-[var(--app-surface-sunk)]" />
+            </div>
+          ) : (
+            <WorkQueue
+              items={overview?.waitingOn ?? []}
+              total={waitingCount}
+              kind="wait"
+              emptyTitle="Nothing is pending elsewhere"
+              emptyDescription="No enquiry in your scope is currently blocked on another person."
+            />
+          )}
+        </Panel>
+      </div>
+
+      {/* ── Volume and mix ───────────────────────────────────────── */}
+      <div className="grid gap-5 xl:grid-cols-[1.6fr_1fr]">
+        <Panel>
+          <PanelHeader
+            title="Enquiry volume"
+            caption="Submitted against completed, by month"
+            action={
+              <Legend
+                items={[
+                  { label: "Submitted", color: SERIES.primary },
+                  { label: "Completed", color: SERIES.secondary },
+                ]}
+              />
+            }
+          />
+          <div className="p-5">
+            {overviewLoading ? (
+              <div className="h-[260px] animate-pulse rounded-xl bg-[var(--app-surface-sunk)]" />
+            ) : (
+              <VolumeChart data={overview?.monthly ?? []} />
+            )}
+          </div>
+        </Panel>
+
+        <Panel>
+          <PanelHeader title="Where everything sits" caption="Current status of every enquiry you can see" />
+          <div className="p-5">
+            {overviewLoading ? (
+              <div className="h-[180px] animate-pulse rounded-xl bg-[var(--app-surface-sunk)]" />
+            ) : (
+              <StatusDonut data={overview?.statusSplit ?? []} />
+            )}
+          </div>
+        </Panel>
+      </div>
+
+      {/* ── People, places, dates ─────────────────────────────────── */}
+      <div className="grid gap-5 xl:grid-cols-3">
+        <Panel>
+          <PanelHeader title="Customers by location" caption="Derived from the address text on each enquiry" />
+          <div className="p-5">
+            {overviewLoading ? (
+              <div className="h-[200px] animate-pulse rounded-xl bg-[var(--app-surface-sunk)]" />
+            ) : (
+              <>
+                <CityBars data={overview?.byCity ?? []} />
+                {overview && overview.unknownCity > 0 ? (
+                  <p className="mt-4 border-t border-[var(--app-line-soft)] pt-3 text-xs text-[var(--app-ink-3)]">
+                    {overview.unknownCity} enquir{overview.unknownCity === 1 ? "y has" : "ies have"} no
+                    usable address, so they are not counted above.
+                  </p>
+                ) : null}
+              </>
+            )}
+          </div>
+        </Panel>
+
+        {isSales ? (
+          <Panel>
+            <PanelHeader title="Divisions handling your work" caption="Where your enquiries currently sit" />
+            <div className="p-5">
+              {overviewLoading ? (
+                <div className="h-[200px] animate-pulse rounded-xl bg-[var(--app-surface-sunk)]" />
+              ) : (
+                <DivisionBars data={overview?.byDivision ?? []} />
               )}
             </div>
+          </Panel>
+        ) : (
+          <Panel>
+            <PanelHeader title="Top people" caption="Ranked by enquiries submitted" />
+            {overviewLoading ? (
+              <div className="space-y-2 p-5">
+                <div className="h-12 animate-pulse rounded-xl bg-[var(--app-surface-sunk)]" />
+                <div className="h-12 animate-pulse rounded-xl bg-[var(--app-surface-sunk)]" />
+                <div className="h-12 animate-pulse rounded-xl bg-[var(--app-surface-sunk)]" />
+              </div>
+            ) : (
+              <AgentsPanel agents={overview?.topAgents ?? []} />
+            )}
+          </Panel>
+        )}
+
+        <Panel>
+          <PanelHeader title="Deadlines calendar" caption="Which days have enquiries falling due" />
+          {overviewLoading ? (
+            <div className="m-5 h-[280px] animate-pulse rounded-xl bg-[var(--app-surface-sunk)]" />
+          ) : (
+            <CalendarPanel data={overview?.calendar ?? {}} />
           )}
-        </CardContent>
-      </Card>
+        </Panel>
+      </div>
+
+      {/* ── Division load, for anyone who oversees more than one ──── */}
+      {!isSales && (overview?.byDivision.length ?? 0) > 1 ? (
+        <Panel>
+          <PanelHeader title="Load by division" caption="Every enquiry you can see, grouped by where it sits" />
+          <div className="p-5">
+            <DivisionBars data={overview?.byDivision ?? []} />
+          </div>
+        </Panel>
+      ) : null}
+
+      {/* ── A plain explanation of how work reaches you ───────────── */}
+      <Panel className="bg-[var(--app-surface-sunk)]">
+        <div className="flex flex-wrap items-start gap-4 p-5">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white">
+            <UserPlus className="h-4.5 w-4.5 text-[var(--app-brand)]" aria-hidden />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold text-[var(--app-ink)]">How work reaches you</p>
+            <p className="mt-1 text-sm leading-relaxed text-[var(--app-ink-2)]">
+              {isSales
+                ? "You submit an enquiry, the division head accepts it and assigns production, a sample is prepared and sent, then you confirm receipt and record what the customer said. Each of those steps appears above the moment it becomes yours."
+                : isHead
+                  ? "Salespeople submit enquiries to your division. You accept or reject, assign a production person, and approve sample specifications. Anything sitting unassigned shows up in 'Needs you' until somebody owns it."
+                  : isProduction
+                    ? "The division head assigns enquiries to you. Prepare the sample, record the dispatch details, and the enquiry moves back to sales for customer feedback."
+                    : "Enquiries flow from sales to a division head, to production, and back to sales for customer feedback. Anything stuck at a step appears in the queues above."}
+            </p>
+          </div>
+        </div>
+      </Panel>
     </div>
   );
 }

@@ -1,5 +1,7 @@
 "use client";
 
+import { PageHeader } from "@/components/ui/panel";
+
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -206,18 +208,16 @@ export default function AdminDivisionsPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Divisions</h1>
-        <p className="text-slate-500 mt-1">
-          Add divisions and assign Division Heads. Super Admin can map users to divisions.
-        </p>
-      </div>
+      <PageHeader
+        title="Divisions"
+        description="The units enquiries can be routed to, and who heads each one."
+      />
 
       {!isViewOnly && (
       <Card>
         <CardHeader>
           <CardTitle>Add division</CardTitle>
-          <p className="text-sm text-slate-500">Only Super Admin can add new divisions.</p>
+          <p className="text-sm text-[var(--app-ink-3)]">Only Super Admin can add new divisions.</p>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="flex gap-4 items-end max-w-md">
@@ -244,28 +244,28 @@ export default function AdminDivisionsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Divisions & Division Heads</CardTitle>
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-[var(--app-ink-3)]">
             Assign users as Division Heads to a division. Only Super Admin can assign or remove.
           </p>
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-[var(--app-ink-3)]">
             Status: <strong>Active</strong> divisions appear in lists and dropdowns; use <strong>Edit</strong> to set a division to Active or Inactive.
           </p>
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <p className="text-slate-500">Loading...</p>
+            <p className="text-[var(--app-ink-3)]">Loading...</p>
           ) : !divisions.length ? (
-            <p className="text-slate-500">No divisions yet. Add one above.</p>
+            <p className="text-[var(--app-ink-3)]">No divisions yet. Add one above.</p>
           ) : (
             <ul className="space-y-4">
               {divisions.map((d) => (
                 <li
                   key={d.id}
-                  className="rounded-lg border border-slate-100 p-4 space-y-3"
+                  className="rounded-lg border border-[var(--app-line-soft)] p-4 space-y-3"
                 >
                   <div className="flex items-center justify-between flex-wrap gap-2">
                     <div className="flex items-center gap-2">
-                      <span className="font-medium text-slate-900">{d.name}</span>
+                      <span className="font-medium text-[var(--app-ink)]">{d.name}</span>
                       <Badge variant={d.active !== false ? "success" : "secondary"}>
                         {d.active !== false ? "Active" : "Inactive"}
                       </Badge>
@@ -312,17 +312,17 @@ export default function AdminDivisionsPage() {
                       {d.managers.map((m) => (
                         <li
                           key={m.user.id}
-                          className="flex items-center gap-2 rounded-md bg-slate-50 px-3 py-1.5 text-sm"
+                          className="flex items-center gap-2 rounded-md bg-[var(--app-surface-sunk)] px-3 py-1.5 text-sm"
                         >
                           <span>{m.user.name}</span>
-                          <span className="text-slate-500">({m.user.email})</span>
+                          <span className="text-[var(--app-ink-3)]">({m.user.email})</span>
                           {!isViewOnly && (
                           <button
                             type="button"
                             onClick={() =>
                               removeMutation.mutate({ divisionId: d.id, userId: m.user.id })
                             }
-                            className="text-slate-400 hover:text-red-600"
+                            className="text-[var(--app-ink-3)] hover:text-red-600"
                           >
                             <X className="h-4 w-4" />
                           </button>
@@ -331,7 +331,7 @@ export default function AdminDivisionsPage() {
                       ))}
                     </ul>
                   ) : (
-                    <p className="text-sm text-slate-500">No Division Head assigned.</p>
+                    <p className="text-sm text-[var(--app-ink-3)]">No Division Head assigned.</p>
                   )}
                 </li>
               ))}
@@ -357,10 +357,10 @@ export default function AdminDivisionsPage() {
           </DialogHeader>
           {divisionToDelete && (
             <>
-              <p className="text-slate-600">
+              <p className="text-[var(--app-ink-2)]">
                 <strong>{divisionToDelete.name}</strong> will be removed completely from the database. This cannot be undone.
               </p>
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-[var(--app-ink-3)]">
                 If this division has enquiries or is in use, delete will be blocked. Use <strong>Edit</strong> to set status to Inactive instead.
               </p>
             </>

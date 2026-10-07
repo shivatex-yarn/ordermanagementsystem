@@ -1,5 +1,7 @@
 "use client";
 
+import { PageHeader } from "@/components/ui/panel";
+
 import { useState } from "react";
 import { roleLabel } from "@/lib/roles";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -295,20 +297,17 @@ export default function AdminUsersPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Users</h1>
-          <p className="text-slate-500 mt-1">
-            Create users and map them to divisions. Division Heads (Managers) can be mapped to one or more divisions.
-          </p>
-        </div>
-        {!isViewOnly && (
+      <PageHeader
+        title="Users"
+        description="Everyone with an account, and the divisions they can work in. A division head can be mapped to more than one division."
+      >
+        {!isViewOnly ? (
           <Button onClick={() => setCreateOpen(true)}>
-            <UserPlus className="h-4 w-4 mr-2" />
+            <UserPlus className="h-4 w-4" />
             Create user
           </Button>
-        )}
-      </div>
+        ) : null}
+      </PageHeader>
 
       <Card>
         <CardHeader>
@@ -316,34 +315,34 @@ export default function AdminUsersPage() {
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <div className="py-8 text-center text-slate-500">Loading...</div>
+            <div className="py-8 text-center text-[var(--app-ink-3)]">Loading...</div>
           ) : !users.length ? (
-            <div className="py-8 text-center text-slate-500">No users yet.</div>
+            <div className="py-8 text-center text-[var(--app-ink-3)]">No users yet.</div>
           ) : (
-            <div className="rounded-xl border border-slate-100 overflow-hidden">
+            <div className="rounded-xl border border-[var(--app-line-soft)] overflow-hidden">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-slate-100 bg-slate-50/80">
-                    <th className="text-left p-3 font-medium text-slate-700">Name</th>
-                    <th className="text-left p-3 font-medium text-slate-700">Email</th>
-                    <th className="text-left p-3 font-medium text-slate-700">Role</th>
-                    <th className="text-left p-3 font-medium text-slate-700">Status</th>
-                    <th className="text-left p-3 font-medium text-slate-700">Division / Divisions</th>
-                    <th className="text-right p-3 font-medium text-slate-700">Actions</th>
+                  <tr className="border-b border-[var(--app-line-soft)] bg-[var(--app-surface-sunk)]/80">
+                    <th className="text-left p-3 font-medium text-[var(--app-ink-2)]">Name</th>
+                    <th className="text-left p-3 font-medium text-[var(--app-ink-2)]">Email</th>
+                    <th className="text-left p-3 font-medium text-[var(--app-ink-2)]">Role</th>
+                    <th className="text-left p-3 font-medium text-[var(--app-ink-2)]">Status</th>
+                    <th className="text-left p-3 font-medium text-[var(--app-ink-2)]">Division / Divisions</th>
+                    <th className="text-right p-3 font-medium text-[var(--app-ink-2)]">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {users.map((u) => (
                     <tr key={u.id} className="border-b border-slate-50">
                       <td className="p-3 font-medium">{u.name}</td>
-                      <td className="p-3 text-slate-600">{u.email}</td>
+                      <td className="p-3 text-[var(--app-ink-2)]">{u.email}</td>
                       <td className="p-3">{roleLabel(u.role as Parameters<typeof roleLabel>[0])}</td>
                       <td className="p-3">
                         <Badge variant={u.active !== false ? "success" : "secondary"}>
                           {u.active !== false ? "Active" : "Inactive"}
                         </Badge>
                       </td>
-                      <td className="p-3 text-slate-600">
+                      <td className="p-3 text-[var(--app-ink-2)]">
                         {u.role === "MANAGER" && u.managedDivisions?.length
                           ? u.managedDivisions.map((d) => d.name).join(", ")
                           : u.division?.name ?? "—"}
@@ -434,7 +433,7 @@ export default function AdminUsersPage() {
           </DialogHeader>
           {userToDeactivate && (
             <>
-              <p className="text-slate-600">
+              <p className="text-[var(--app-ink-2)]">
                 <strong>{userToDeactivate.name}</strong> ({userToDeactivate.email}) will no longer be able to log in. You can reactivate them later from Edit user.
               </p>
               {deactivateError && (
@@ -485,10 +484,10 @@ export default function AdminUsersPage() {
           </DialogHeader>
           {userToDelete && (
             <>
-              <p className="text-slate-600">
+              <p className="text-[var(--app-ink-2)]">
                 <strong>{userToDelete.name}</strong> ({userToDelete.email}) will be removed from the database. This cannot be undone.
               </p>
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-[var(--app-ink-3)]">
                 If this user is linked to enquiries or workflow history, deletion will be blocked — use <strong>Deactivate</strong> instead.
               </p>
               {deleteError && (
@@ -539,7 +538,7 @@ export default function AdminUsersPage() {
           </DialogHeader>
           {resetPwUser && (
             <>
-              <p className="text-sm text-slate-600">
+              <p className="text-sm text-[var(--app-ink-2)]">
                 Set a new password for <strong>{resetPwUser.name}</strong> ({resetPwUser.email}).
               </p>
               {resetPwSuccess ? (
@@ -559,7 +558,7 @@ export default function AdminUsersPage() {
                         className="pr-10"
                       />
                       <button type="button" onClick={() => setResetPwShowNew(v => !v)}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700">
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--app-ink-3)] hover:text-[var(--app-ink-2)]">
                         {resetPwShowNew ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </button>
                     </div>
@@ -575,7 +574,7 @@ export default function AdminUsersPage() {
                         className={`pr-10 ${resetPwConfirm && resetPwNew !== resetPwConfirm ? "border-red-400" : resetPwConfirm && resetPwNew === resetPwConfirm ? "border-emerald-400" : ""}`}
                       />
                       <button type="button" onClick={() => setResetPwShowConfirm(v => !v)}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700">
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--app-ink-3)] hover:text-[var(--app-ink-2)]">
                         {resetPwShowConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </button>
                     </div>
@@ -654,7 +653,7 @@ export default function AdminUsersPage() {
                 <Label>Map to divisions (Division Head of)</Label>
                 <div className="flex flex-wrap gap-2">
                   {divisions.map((d) => (
-                    <label key={d.id} className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2">
+                    <label key={d.id} className="flex items-center gap-2 rounded-xl border border-[var(--app-line)] px-3 py-2">
                       <input
                         type="checkbox"
                         checked={divisionIds.includes(d.id)}
@@ -738,7 +737,7 @@ export default function AdminUsersPage() {
                   <Label>Map to divisions (Division Head of)</Label>
                   <div className="flex flex-wrap gap-2">
                     {divisions.map((d) => (
-                      <label key={d.id} className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2">
+                      <label key={d.id} className="flex items-center gap-2 rounded-xl border border-[var(--app-line)] px-3 py-2">
                         <input
                           type="checkbox"
                           checked={editDivisionIds.includes(d.id)}

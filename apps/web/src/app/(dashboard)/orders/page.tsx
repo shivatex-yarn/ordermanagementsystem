@@ -1,11 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { useRouter, useSearchParams } from "next/navigation";
+import {
+  ChevronLeft,
+  ChevronRight,
+  FileSpreadsheet,
+  Package,
+  Plus,
+  Search,
+  X,
+} from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
+import { Panel, PageHeader, EmptyState } from "@/components/ui/panel";
+import { StatusPill, PriorityPill } from "@/components/ui/status-pill";
 import {
   Select,
   SelectContent,
@@ -13,59 +23,93 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, ChevronDown, FileDown, FileSpreadsheet, Package } from "lucide-react";
-import { useAuth } from "@/hooks/use-auth";
 import type { EnquiryPeriodFilter } from "@/lib/date-period";
 import { PERIOD_LABELS } from "@/lib/date-period";
-import { formatEnquiryNumber } from "@/lib/enquiry-display";
+import { formatEnquiryNumberShort } from "@/lib/enquiry-display";
 import { downloadEnquiriesExcel, fetchAllOrdersForExport } from "@/lib/enquiry-export";
 import { userMayCreateEnquiry } from "@/lib/enquiry-access";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
 
-const statusVariant: Record<string, "default" | "secondary" | "destructive" | "success" | "warning"> = {
-  PLACED: "secondary",
-  IN_PROGRESS: "default",
-  TRANSFERRED: "warning",
-  REJECTED: "destructive",
-  COMPLETED: "success",
-  CANCELLED: "secondary",
+const PAGE_SIZE = 15;
+
+const STATUS_TABS = [
+  { value: "", label: "All" },
+  { value: "PLACED", label: "Awaiting acceptance" },
+  { value: "IN_PROGRESS", label: "In progress" },
+  { value: "TRANSFERRED", label: "Transferred" },
+  { value: "COMPLETED", label: "Completed" },
+  { value: "REJECTED", label: "Rejected" },
+  { value: "CANCELLED", label: "Cancelled" },
+];
+
+type OrderRow = {
+  id: number;
+  orderNumber: string;
+  status: string;
+  priority: string;
+  companyName: string | null;
+  customerName: string | null;
+  slaDeadline: string | null;
+  assignedSupervisorId: number | null;
+  createdAt: string;
+  currentDivision?: { name: string } | null;
+  createdBy?: { name: string; email: string } | null;
 };
 
-async function fetchOrders(page: number, period: EnquiryPeriodFilter) {
-  const q = period ? `&period=${encodeURIComponent(period)}` : "";
-  const res = await fetch(`/api/orders?page=${page}&limit=5${q}`, { credentials: "include" });
-  if (!res.ok) throw new Error("Failed to fetch enquiries");
-  return res.json();
+function formatDate(value: string): string {
+  return new Date(value).toLocaleDateString(undefined, {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 }
 
-export default function OrdersPage() {
+function OrdersPageInner() {
   const { user } = useAuth();
+  const router = useRouter();
+  const params = useSearchParams();
+
+  const initialQuery = params.get("q") ?? "";
+  const initialStatus = params.get("status") ?? "";
+
   const [page, setPage] = useState(1);
+  const [search, setSearch] = useState(initialQuery);
+  const [appliedSearch, setAppliedSearch] = useState(initialQuery);
+  const [status, setStatus] = useState(initialStatus);
   const [period, setPeriod] = useState<EnquiryPeriodFilter>("");
   const [divisionId, setDivisionId] = useState("");
   const [exporting, setExporting] = useState(false);
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["orders", page, period, divisionId],
-    queryFn: async () => {
-      const q = period ? `&period=${encodeURIComponent(period)}` : "";
-      const div = divisionId ? `&divisionId=${encodeURIComponent(divisionId)}` : "";
-      const res = await fetch(`/api/orders?page=${page}&limit=5${q}${div}`, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch enquiries");
-      return res.json();
-    },
-    staleTime: 45_000,
-    enabled: Boolean(user),
-  });
+  // The header search box navigates here with ?q=…; pick that up on arrival.
+  useEffect(() => {
+    setSearch(initialQuery);
+    setAppliedSearch(initialQuery);
+    setPage(1);
+  }, [initialQuery]);
+  useEffect(() => {
+    setStatus(initialStatus);
+    setPage(1);
+  }, [initialStatus]);
 
   const isAccountsView = user?.role === "ACCOUNTS";
   const canCreate = Boolean(user && userMayCreateEnquiry(user.role) && !isAccountsView);
   const hideDivision = user?.role === "MANAGER";
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["orders", page, period, divisionId, status, appliedSearch],
+    queryFn: async () => {
+      const qs = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE) });
+      if (period) qs.set("period", period);
+      if (divisionId) qs.set("divisionId", divisionId);
+      if (status) qs.set("status", status);
+      if (appliedSearch) qs.set("q", appliedSearch);
+      const res = await fetch(`/api/orders?${qs.toString()}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch enquiries");
+      return res.json() as Promise<{ orders: OrderRow[]; total: number }>;
+    },
+    staleTime: 30_000,
+    enabled: Boolean(user),
+  });
 
   const { data: divisionsData } = useQuery({
     queryKey: ["divisions", "orders-filter"],
@@ -79,200 +123,327 @@ export default function OrdersPage() {
   });
   const divisions = divisionsData?.divisions ?? [];
 
-  const handleExport = async () => {
+  const orders = data?.orders ?? [];
+  const total = data?.total ?? 0;
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const now = Date.now();
+
+  async function handleExport() {
     setExporting(true);
     try {
-      const rows = await fetchAllOrdersForExport({ period, divisionId: divisionId || undefined });
-      const label =
-        PERIOD_LABELS.find((p) => p.value === period)?.label?.toLowerCase().replace(/\s+/g, "-") ?? "all";
+      const rows = await fetchAllOrdersForExport({ period, divisionId });
+      const label = PERIOD_LABELS.find((p) => p.value === period)?.label ?? "All time";
       downloadEnquiriesExcel(rows, label, hideDivision);
     } finally {
       setExporting(false);
     }
-  };
+  }
+
+  function applySearch(e: React.FormEvent) {
+    e.preventDefault();
+    setAppliedSearch(search.trim());
+    setPage(1);
+  }
+
+  function clearSearch() {
+    setSearch("");
+    setAppliedSearch("");
+    setPage(1);
+    router.replace("/orders");
+  }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight text-slate-900">Enquiries</h1>
-          <p className="mt-0.5 text-sm text-slate-500">All enquiries across your divisions.</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-slate-500">Period</span>
-            <Select
-              value={period || "all"}
-              onValueChange={(v) => {
-                setPeriod(v === "all" ? "" : (v as EnquiryPeriodFilter));
-                setPage(1);
-              }}
-            >
-              <SelectTrigger className="w-full min-w-0 sm:w-[160px]">
-                <SelectValue placeholder="Period" />
+    <div className="space-y-5">
+      <PageHeader
+        title="Enquiries"
+        description={
+          isAccountsView
+            ? "Every enquiry across all divisions, for commercial review."
+            : "Everything you are allowed to see, newest first."
+        }
+      >
+        <button
+          type="button"
+          onClick={handleExport}
+          disabled={exporting}
+          className="inline-flex h-10 items-center gap-2 rounded-xl border border-[var(--app-line)] bg-white px-3.5 text-sm font-semibold text-[var(--app-ink-2)] hover:bg-[var(--app-surface-sunk)] disabled:opacity-60"
+        >
+          <FileSpreadsheet className="h-4 w-4" aria-hidden />
+          {exporting ? "Preparing…" : "Export"}
+        </button>
+        {canCreate ? (
+          <Link
+            href="/orders/new"
+            className="inline-flex h-10 items-center gap-2 rounded-xl bg-[var(--app-brand)] px-4 text-sm font-semibold text-white hover:bg-[var(--app-brand-strong)]"
+          >
+            <Plus className="h-4 w-4" aria-hidden />
+            New enquiry
+          </Link>
+        ) : null}
+      </PageHeader>
+
+      {/* ── Filters ───────────────────────────────────────────────── */}
+      <Panel className="p-4">
+        <form onSubmit={applySearch} className="flex flex-wrap items-center gap-3" role="search">
+          <div className="relative min-w-[220px] flex-1">
+            <label htmlFor="orders-search" className="sr-only">
+              Search enquiries
+            </label>
+            <Search
+              className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--app-ink-3)]"
+              aria-hidden
+            />
+            <input
+              id="orders-search"
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Enquiry number, company, customer, phone or email"
+              className="h-10 w-full rounded-xl border border-[var(--app-line)] bg-white pl-10 pr-4 text-sm text-[var(--app-ink)] placeholder:text-[var(--app-ink-3)] focus:border-[var(--app-brand-line)] focus:outline-none"
+            />
+          </div>
+
+          <Select value={period || "all"} onValueChange={(v) => { setPeriod(v === "all" ? "" : (v as EnquiryPeriodFilter)); setPage(1); }}>
+            <SelectTrigger className="h-10 w-[150px] rounded-xl border-[var(--app-line)]">
+              <SelectValue placeholder="All time" />
+            </SelectTrigger>
+            <SelectContent>
+              {PERIOD_LABELS.map((p) => (
+                <SelectItem key={p.value || "all"} value={p.value || "all"}>
+                  {p.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {isAccountsView && divisions.length > 0 ? (
+            <Select value={divisionId || "all"} onValueChange={(v) => { setDivisionId(v === "all" ? "" : v); setPage(1); }}>
+              <SelectTrigger className="h-10 w-[180px] rounded-xl border-[var(--app-line)]">
+                <SelectValue placeholder="All divisions" />
               </SelectTrigger>
               <SelectContent>
-                {PERIOD_LABELS.map((p) => (
-                  <SelectItem key={p.value || "all"} value={p.value || "all"}>
-                    {p.label}
+                <SelectItem value="all">All divisions</SelectItem>
+                {divisions.map((d) => (
+                  <SelectItem key={d.id} value={String(d.id)}>
+                    {d.name}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-          </div>
-          {isAccountsView ? (
+          ) : null}
+
+          <button
+            type="submit"
+            className="inline-flex h-10 items-center rounded-xl bg-[var(--app-ink)] px-4 text-sm font-semibold text-white hover:bg-black"
+          >
+            Search
+          </button>
+          {appliedSearch ? (
+            <button
+              type="button"
+              onClick={clearSearch}
+              className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-[var(--app-line)] px-3 text-sm font-semibold text-[var(--app-ink-2)] hover:bg-[var(--app-surface-sunk)]"
+            >
+              <X className="h-3.5 w-3.5" aria-hidden />
+              Clear
+            </button>
+          ) : null}
+        </form>
+
+        <div className="mt-3 flex flex-wrap gap-1.5 border-t border-[var(--app-line-soft)] pt-3">
+          {STATUS_TABS.map((tab) => (
+            <button
+              key={tab.value || "all"}
+              type="button"
+              aria-pressed={status === tab.value}
+              onClick={() => {
+                setStatus(tab.value);
+                setPage(1);
+              }}
+              className={cn(
+                "rounded-full px-3 py-1.5 text-xs font-semibold",
+                status === tab.value
+                  ? "bg-[var(--app-brand)] text-white"
+                  : "border border-[var(--app-line)] text-[var(--app-ink-2)] hover:bg-[var(--app-surface-sunk)]"
+              )}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </Panel>
+
+      {/* ── Results ──────────────────────────────────────────────── */}
+      <Panel>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--app-line-soft)] px-5 py-3.5">
+          <p className="text-sm font-semibold text-[var(--app-ink-2)]">
+            {isLoading ? (
+              "Loading…"
+            ) : (
+              <>
+                <span className="tnum font-extrabold text-[var(--app-ink)]">{total}</span> enquir
+                {total === 1 ? "y" : "ies"}
+                {appliedSearch ? ` matching “${appliedSearch}”` : ""}
+              </>
+            )}
+          </p>
+          {pageCount > 1 ? (
             <div className="flex items-center gap-2">
-              <span className="text-sm text-slate-600">Division</span>
-              <Select
-                value={divisionId || "all"}
-                onValueChange={(v) => {
-                  setDivisionId(v === "all" ? "" : v);
-                  setPage(1);
-                }}
+              <button
+                type="button"
+                aria-label="Previous page"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--app-line)] text-[var(--app-ink-2)] disabled:opacity-40 hover:enabled:bg-[var(--app-surface-sunk)]"
               >
-                <SelectTrigger className="w-full min-w-0 sm:w-[200px]">
-                  <SelectValue placeholder="Division" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All divisions</SelectItem>
-                  {divisions.map((d) => (
-                    <SelectItem key={d.id} value={String(d.id)}>
-                      {d.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                <ChevronLeft className="h-4 w-4" aria-hidden />
+              </button>
+              <span className="tnum text-xs font-semibold text-[var(--app-ink-2)]">
+                Page {page} of {pageCount}
+              </span>
+              <button
+                type="button"
+                aria-label="Next page"
+                disabled={page >= pageCount}
+                onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--app-line)] text-[var(--app-ink-2)] disabled:opacity-40 hover:enabled:bg-[var(--app-surface-sunk)]"
+              >
+                <ChevronRight className="h-4 w-4" aria-hidden />
+              </button>
             </div>
           ) : null}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button type="button" variant="outline" size="sm" disabled={exporting} className="gap-1.5">
-                <FileDown className="h-3.5 w-3.5" />
-                {exporting ? "Preparing…" : "Download"}
-                <ChevronDown className="h-3.5 w-3.5" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem
-                className="gap-2 cursor-pointer"
-                disabled={exporting}
-                onClick={() => void handleExport()}
-              >
-                <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
-                Download as Excel
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          {canCreate && (
-            <Button asChild>
-              <Link href="/orders/new">
-                <Plus className="h-4 w-4 mr-2" />
-                New enquiry
-              </Link>
-            </Button>
-          )}
         </div>
-      </div>
-      <Card className="overflow-hidden border border-slate-200 shadow-sm">
-        <CardHeader className="border-b border-slate-100 bg-slate-50 px-5 py-4">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-sm font-semibold text-slate-800">All enquiries</CardTitle>
-            {data?.total ? (
-              <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
-                {data.total} total
-              </span>
-            ) : null}
+
+        {isLoading ? (
+          <div className="space-y-2 p-5">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-14 animate-pulse rounded-xl bg-[var(--app-surface-sunk)]" />
+            ))}
           </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          {isLoading ? (
-            <div className="divide-y divide-slate-100">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="flex items-center gap-4 px-5 py-4">
-                  <div className="h-8 w-1 animate-pulse rounded-full bg-slate-200" />
-                  <div className="flex-1 space-y-1.5">
-                    <div className="h-3.5 w-36 animate-pulse rounded bg-slate-100" />
-                    <div className="h-3 w-56 animate-pulse rounded bg-slate-100" />
-                  </div>
-                  <div className="h-5 w-20 animate-pulse rounded-full bg-slate-100" />
-                </div>
-              ))}
-            </div>
-          ) : !data?.orders?.length ? (
-            <div className="flex flex-col items-center gap-2 py-16 text-center">
-              <Package className="h-8 w-8 text-slate-300" />
-              <p className="text-sm text-slate-500">No enquiries yet.</p>
-            </div>
-          ) : (
-            <div className="divide-y divide-slate-100">
-              {data.orders.map(
-                (order: {
-                  id: number;
-                  orderNumber: string;
-                  status: string;
-                  currentDivision: { name: string };
-                  createdAt: string;
-                  createdBy?: { name: string; email: string };
-                }) => {
-                  const statusBar: Record<string, string> = {
-                    PLACED: "bg-slate-400",
-                    IN_PROGRESS: "bg-blue-500",
-                    TRANSFERRED: "bg-amber-500",
-                    REJECTED: "bg-red-500",
-                    COMPLETED: "bg-emerald-500",
-                    CANCELLED: "bg-stone-400",
-                  };
-                  return (
-                    <Link
-                      key={order.id}
-                      href={`/orders/${order.id}`}
-                      className="group flex items-center gap-4 px-5 py-4 transition-colors hover:bg-slate-50"
-                    >
-                      <div className={`h-9 w-1 shrink-0 rounded-full ${statusBar[order.status] ?? "bg-slate-300"}`} />
-                      <div className="min-w-0 flex-1">
-                        <p className="flex flex-wrap items-center gap-2">
-                          <span className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-xs font-semibold text-slate-800">
-                            {formatEnquiryNumber(order.orderNumber)}
-                          </span>
-                          {!hideDivision && order.currentDivision?.name ? (
-                            <span className="text-xs text-slate-400">{order.currentDivision.name}</span>
-                          ) : null}
-                        </p>
-                        <p className="mt-0.5 truncate text-xs text-slate-500">
-                          {order.createdBy?.name ? (
-                            <span className="font-medium text-slate-600">{order.createdBy.name} · </span>
-                          ) : null}
-                          <time dateTime={order.createdAt} suppressHydrationWarning>
-                            {new Date(order.createdAt).toLocaleString()}
-                          </time>
-                        </p>
-                      </div>
-                      <Badge variant={statusVariant[order.status] ?? "secondary"} className="shrink-0 text-[11px]">
-                        {order.status.replace("_", " ")}
-                      </Badge>
-                    </Link>
+        ) : orders.length === 0 ? (
+          <EmptyState
+            icon={Package}
+            title={appliedSearch ? "Nothing matched that search" : "No enquiries here yet"}
+            description={
+              appliedSearch
+                ? "Try the enquiry number without the Enq- prefix, or part of the company name."
+                : canCreate
+                  ? "Create one and it will show up here with its next step."
+                  : "Enquiries appear here as soon as they reach you."
+            }
+            action={
+              canCreate && !appliedSearch ? (
+                <Link
+                  href="/orders/new"
+                  className="inline-flex h-10 items-center gap-2 rounded-xl bg-[var(--app-brand)] px-4 text-sm font-semibold text-white hover:bg-[var(--app-brand-strong)]"
+                >
+                  <Plus className="h-4 w-4" aria-hidden />
+                  New enquiry
+                </Link>
+              ) : undefined
+            }
+          />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[820px] border-collapse text-left">
+              <thead>
+                <tr className="border-b border-[var(--app-line-soft)] bg-[var(--app-surface-sunk)]">
+                  <th scope="col" className="px-5 py-2.5 text-[11px] font-bold uppercase tracking-wide text-[var(--app-ink-3)]">
+                    Enquiry
+                  </th>
+                  <th scope="col" className="px-3 py-2.5 text-[11px] font-bold uppercase tracking-wide text-[var(--app-ink-3)]">
+                    Status
+                  </th>
+                  {!hideDivision ? (
+                    <th scope="col" className="px-3 py-2.5 text-[11px] font-bold uppercase tracking-wide text-[var(--app-ink-3)]">
+                      Division
+                    </th>
+                  ) : null}
+                  <th scope="col" className="px-3 py-2.5 text-[11px] font-bold uppercase tracking-wide text-[var(--app-ink-3)]">
+                    Submitted by
+                  </th>
+                  <th scope="col" className="px-3 py-2.5 text-[11px] font-bold uppercase tracking-wide text-[var(--app-ink-3)]">
+                    Created
+                  </th>
+                  <th scope="col" className="px-5 py-2.5 text-right text-[11px] font-bold uppercase tracking-wide text-[var(--app-ink-3)]">
+                    Deadline
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--app-line-soft)]">
+                {orders.map((o) => {
+                  const overdue = Boolean(
+                    o.slaDeadline &&
+                      new Date(o.slaDeadline).getTime() < now &&
+                      ["PLACED", "IN_PROGRESS", "TRANSFERRED"].includes(o.status)
                   );
-                }
-              )}
-              {data.total > data.limit && (
-                <div className="flex items-center justify-between bg-slate-50 px-5 py-3">
-                  <span className="text-xs text-slate-500">
-                    Page {page} of {Math.max(1, Math.ceil(data.total / data.limit))} · {data.total} total
-                  </span>
-                  <div className="flex gap-1.5">
-                    <Button variant="outline" size="sm" className="h-7 text-xs" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-                      Previous
-                    </Button>
-                    <Button variant="outline" size="sm" className="h-7 text-xs" disabled={page * data.limit >= data.total} onClick={() => setPage((p) => p + 1)}>
-                      Next
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                  return (
+                    <tr key={o.id} className="hover:bg-[var(--app-brand-tint)]/30">
+                      <td className="px-5 py-3">
+                        <Link href={`/orders/${o.id}`} className="block">
+                          <span className="flex flex-wrap items-center gap-2">
+                            <span className="tnum rounded-md bg-[var(--app-surface-sunk)] px-1.5 py-0.5 text-[11px] font-bold text-[var(--app-ink-2)]">
+                              {formatEnquiryNumberShort(o.orderNumber)}
+                            </span>
+                            <span className="text-sm font-bold text-[var(--app-ink)] hover:underline">
+                              {o.companyName || o.customerName || "Untitled enquiry"}
+                            </span>
+                            <PriorityPill priority={o.priority === "NORMAL" ? null : o.priority} />
+                          </span>
+                          {o.companyName && o.customerName ? (
+                            <span className="mt-0.5 block text-xs text-[var(--app-ink-3)]">
+                              {o.customerName}
+                            </span>
+                          ) : null}
+                        </Link>
+                      </td>
+                      <td className="px-3 py-3">
+                        <StatusPill status={o.status} size="sm" />
+                      </td>
+                      {!hideDivision ? (
+                        <td className="px-3 py-3 text-sm text-[var(--app-ink-2)]">
+                          {o.currentDivision?.name ?? "—"}
+                        </td>
+                      ) : null}
+                      <td className="px-3 py-3 text-sm text-[var(--app-ink-2)]">
+                        {o.createdBy?.name ?? "—"}
+                      </td>
+                      <td className="tnum px-3 py-3 text-sm text-[var(--app-ink-2)]">
+                        {formatDate(o.createdAt)}
+                      </td>
+                      <td className="px-5 py-3 text-right">
+                        {o.slaDeadline ? (
+                          <span
+                            className={cn(
+                              "tnum inline-flex rounded-md px-2 py-1 text-xs font-bold",
+                              overdue
+                                ? "bg-[var(--app-late-bg)] text-[var(--app-late-ink)]"
+                                : "text-[var(--app-ink-2)]"
+                            )}
+                          >
+                            {overdue ? "Overdue · " : ""}
+                            {formatDate(o.slaDeadline)}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-[var(--app-ink-3)]">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Panel>
     </div>
+  );
+}
+
+export default function OrdersPage() {
+  return (
+    <Suspense fallback={<div className="h-64 animate-pulse rounded-2xl bg-[var(--app-surface-sunk)]" />}>
+      <OrdersPageInner />
+    </Suspense>
   );
 }

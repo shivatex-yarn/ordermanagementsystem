@@ -1,8 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import type { OrderStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { withRole } from "@/lib/with-auth";
-import { runSlaBreachCheck } from "@/lib/sla-breach-job";
+import { runSlaBreachCheckThrottled } from "@/lib/sla-breach-job";
 import { parseCreatedAtRangeFromParams } from "@/lib/date-period";
 import { dbUnavailableJson, isDbUnavailableError } from "@/lib/db-errors";
 import { divisionSlaBreakdown } from "@/lib/sla-service";
@@ -81,95 +81,101 @@ export async function GET(req: Request) {
 
   try {
     /**
-     * Fire-and-forget: run the SLA breach sync in the background. The cron does this
-     * nightly; we just trigger an async run here for safety, never block the response.
+     * Safety-net SLA breach sync, deferred until after the response is sent.
+     *
+     * It used to be fired with `void` at the top of the handler. With the Neon
+     * pooler's single connection that is not fire-and-forget at all — the job
+     * took the only connection and every query below queued behind it, which
+     * made this endpoint take ~20s or fail outright. It now runs after the
+     * response is flushed, and at most once every few minutes. The nightly cron
+     * remains the primary run.
      */
-    void runSlaBreachCheck().catch((err) => {
-      console.error("[md/overview] SLA breach sync failed:", err);
-    });
+    after(() => runSlaBreachCheckThrottled());
 
     const { searchParams } = new URL(req.url);
     const pipelineWhere = buildPipelineWhere(searchParams);
 
     const now = new Date();
 
-    const [
-      statusCounts,
-      openBreachesCount,
-      delayedEnquiries,
-      recentBreaches,
-      pipelineOrders,
-      recentTransfers,
-    ] = await Promise.all([
-      prisma.order.groupBy({
-        by: ["status"],
-        _count: { id: true },
-      }),
-      prisma.sLABreach.count({ where: { resolvedAt: null } }),
-      prisma.order.findMany({
-        where: {
-          status: { in: ["PLACED", "TRANSFERRED"] },
-          slaDeadline: { lt: now },
-        },
-        select: {
-          id: true,
-          orderNumber: true,
-          status: true,
-          slaDeadline: true,
-          companyName: true,
-          currentDivision: { select: { id: true, name: true } },
-        },
-        orderBy: { slaDeadline: "asc" },
-        take: 20,
-      }),
-      prisma.sLABreach.findMany({
-        where: { resolvedAt: null },
-        select: {
-          id: true,
-          breachedAt: true,
-          headRejectedAt: true,
-          headRejectionMessage: true,
-          order: { select: { id: true, orderNumber: true, status: true } },
-          division: { select: { id: true, name: true } },
-          headRejectedBy: { select: { id: true, name: true, email: true } },
-        },
-        orderBy: { breachedAt: "desc" },
-        take: 20,
-      }),
-      // Pipeline: drop deep `transfers` + `slaBreaches` joins which weren't surfaced on the new MD UI.
-      // Keep one open breach for the escalation flag via a cheaper sub-query later.
-      prisma.order.findMany({
-        take: 30,
-        orderBy: { updatedAt: "desc" },
-        where: pipelineWhere,
-        select: {
-          id: true,
-          orderNumber: true,
-          status: true,
-          companyName: true,
-          description: true,
-          createdAt: true,
-          updatedAt: true,
-          slaDeadline: true,
-          transferCount: true,
-          currentDivision: { select: { id: true, name: true } },
-          createdBy: { select: { id: true, name: true, email: true } },
-          acceptedBy: { select: { id: true, name: true, email: true } },
-          receivedBy: { select: { id: true, name: true, email: true } },
-          completedBy: { select: { id: true, name: true, email: true } },
-        },
-      }),
-      prisma.orderTransfer.findMany({
-        take: 20,
-        orderBy: { createdAt: "desc" },
-        include: {
-          order: { select: { id: true, orderNumber: true, status: true } },
-          fromDivision: { select: { id: true, name: true } },
-          toDivision: { select: { id: true, name: true } },
-          transferredBy: { select: { id: true, name: true, email: true } },
-        },
-      }),
-    ]);
+    /**
+     * Sequential on purpose. The Neon pooler gives each instance a single
+     * connection (`connection_limit=1`), so running these concurrently starves
+     * the pool: the request either fails with P2024 or spends ~20s waiting for
+     * a free connection. Do not wrap these in `Promise.all`.
+     */
+    const statusCounts = await prisma.order.groupBy({
+      by: ["status"],
+      _count: { id: true },
+    });
+
+    const openBreachesCount = await prisma.sLABreach.count({ where: { resolvedAt: null } });
+
+    const delayedEnquiries = await prisma.order.findMany({
+      where: {
+        status: { in: ["PLACED", "TRANSFERRED"] },
+        slaDeadline: { lt: now },
+      },
+      select: {
+        id: true,
+        orderNumber: true,
+        status: true,
+        slaDeadline: true,
+        companyName: true,
+        currentDivision: { select: { id: true, name: true } },
+      },
+      orderBy: { slaDeadline: "asc" },
+      take: 20,
+    });
+
+    const recentBreaches = await prisma.sLABreach.findMany({
+      where: { resolvedAt: null },
+      select: {
+        id: true,
+        breachedAt: true,
+        headRejectedAt: true,
+        headRejectionMessage: true,
+        order: { select: { id: true, orderNumber: true, status: true } },
+        division: { select: { id: true, name: true } },
+        headRejectedBy: { select: { id: true, name: true, email: true } },
+      },
+      orderBy: { breachedAt: "desc" },
+      take: 20,
+    });
+
+    // Pipeline: drop deep `transfers` + `slaBreaches` joins which weren't surfaced on the new MD UI.
+    // Keep one open breach for the escalation flag via a cheaper sub-query later.
+    const pipelineOrders = await prisma.order.findMany({
+      take: 30,
+      orderBy: { updatedAt: "desc" },
+      where: pipelineWhere,
+      select: {
+        id: true,
+        orderNumber: true,
+        status: true,
+        companyName: true,
+        description: true,
+        createdAt: true,
+        updatedAt: true,
+        slaDeadline: true,
+        transferCount: true,
+        currentDivision: { select: { id: true, name: true } },
+        createdBy: { select: { id: true, name: true, email: true } },
+        acceptedBy: { select: { id: true, name: true, email: true } },
+        receivedBy: { select: { id: true, name: true, email: true } },
+        completedBy: { select: { id: true, name: true, email: true } },
+      },
+    });
+
+    const recentTransfers = await prisma.orderTransfer.findMany({
+      take: 20,
+      orderBy: { createdAt: "desc" },
+      include: {
+        order: { select: { id: true, orderNumber: true, status: true } },
+        fromDivision: { select: { id: true, name: true } },
+        toDivision: { select: { id: true, name: true } },
+        transferredBy: { select: { id: true, name: true, email: true } },
+      },
+    });
 
     // Single batch lookup of unresolved breach order-ids → used to flag pipeline escalation
     // without doing per-row sub-queries. Cheap and avoids the n+1 problem the old shape had.

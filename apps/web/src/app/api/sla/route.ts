@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { withAuth } from "@/lib/with-auth";
-import { runSlaBreachCheck } from "@/lib/sla-breach-job";
+import { runSlaBreachCheckThrottled } from "@/lib/sla-breach-job";
 import { dbUnavailableJson, isDbUnavailableError } from "@/lib/db-errors";
 
 const SLA_ROLES = new Set(["SUPER_ADMIN", "MANAGING_DIRECTOR"]);
@@ -27,10 +27,10 @@ export async function GET(req: Request) {
   const summaryOnly = searchParams.get("summary") === "1";
 
   try {
+    // Safety net between cron runs, throttled so a page load never pays for a
+    // full scan. The nightly cron is the primary run.
     if (!summaryOnly) {
-      await runSlaBreachCheck().catch((err) => {
-        console.error("[api/sla] SLA breach sync failed:", err);
-      });
+      await runSlaBreachCheckThrottled();
     }
 
     const divisionIdRaw = searchParams.get("divisionId");

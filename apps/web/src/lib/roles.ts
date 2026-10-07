@@ -1,5 +1,5 @@
 /**
- * Centralised role predicates for the Enquiry Management Application.
+ * Centralised role predicates for the Shiva TexYarn Limited Enquiry Management System.
  *
  * The spec calls out seven roles; in the database we keep the existing Role enum and
  * add DIVISION_HEAD and ASM. The mapping is:
