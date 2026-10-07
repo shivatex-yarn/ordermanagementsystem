@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/ui/panel";
+import { Callout } from "@/components/ui/guidance";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -188,42 +190,51 @@ export default function NewOrderPage() {
   if (authLoading || !user) {
     return (
       <div className="space-y-6">
-        <div className="text-slate-500 text-sm">{authLoading ? "Loading…" : "Please sign in."}</div>
+        <div className="text-[var(--app-ink-3)] text-sm">{authLoading ? "Loading…" : "Please sign in."}</div>
       </div>
     );
   }
   if (!userMayCreateEnquiry(user.role)) {
     return (
       <div className="space-y-6">
-        <div className="text-slate-500 text-sm">Redirecting to enquiries…</div>
+        <div className="text-[var(--app-ink-3)] text-sm">Redirecting to enquiries…</div>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" asChild>
-          <Link href="/orders">←</Link>
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">New enquiry</h1>
-          <p className="text-sm text-slate-500">All fields marked required must be filled.</p>
-        </div>
+      <div className="space-y-4">
+        <Link
+          href="/orders"
+          className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--app-ink-3)] hover:text-[var(--app-brand)]"
+        >
+          ← Enquiries
+        </Link>
+        <PageHeader
+          title="New enquiry"
+          description="Fill in what you know about the customer and what they are asking for. Once you submit it, the division head accepts it and assigns someone to work on it."
+        />
       </div>
+
+      <Callout tone="info" title="What happens after you submit">
+        The enquiry goes to the division you choose below. You will see it on your dashboard under
+        &ldquo;Waiting on someone else&rdquo; until the division head accepts it — then it moves back
+        to you when a sample is ready.
+      </Callout>
 
       <form onSubmit={onSubmit} className="space-y-6">
         {error && (
-          <div className="rounded-lg border border-red-200 bg-red-50 text-red-700 text-sm p-3">
+          <Callout tone="late" title="This enquiry was not submitted">
             {error}
-          </div>
+          </Callout>
         )}
 
         {/* ── Customer Details ── */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">Customer details</CardTitle>
-            <p className="text-sm text-slate-500 font-normal">
+            <p className="text-sm text-[var(--app-ink-3)] font-normal">
               Customer and company information attached to this enquiry.
             </p>
           </CardHeader>
@@ -256,7 +267,7 @@ export default function NewOrderPage() {
             {/* Row 2: Email + Company name */}
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="customerEmail">Email ID <span className="text-xs font-normal text-slate-400">(optional)</span></Label>
+                <Label htmlFor="customerEmail">Email ID <span className="text-xs font-normal text-[var(--app-ink-3)]">(optional)</span></Label>
                 <Input
                   id="customerEmail"
                   type="email"
@@ -279,14 +290,14 @@ export default function NewOrderPage() {
 
             {/* Row 3: Address (full width) */}
             <div className="space-y-2">
-              <Label htmlFor="customerAddress">Address <span className="text-xs font-normal text-slate-400">(optional)</span></Label>
+              <Label htmlFor="customerAddress">Address <span className="text-xs font-normal text-[var(--app-ink-3)]">(optional)</span></Label>
               <textarea
                 id="customerAddress"
                 value={customerAddress}
                 onChange={(e) => setCustomerAddress(e.target.value)}
                 placeholder="e.g. 123 MG Road, Bengaluru, Karnataka 560001"
                 rows={2}
-                className="flex min-h-[60px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400/30"
+                className="flex min-h-[60px] w-full rounded-md border border-[var(--app-line)] bg-white px-3 py-2 text-sm shadow-sm placeholder:text-[var(--app-ink-3)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400/30"
               />
             </div>
 
@@ -300,13 +311,13 @@ export default function NewOrderPage() {
                   value={customerOrderDate}
                   onChange={(e) => setCustomerOrderDate(e.target.value)}
                   required
-                  className="flex h-9 w-full rounded-md border border-slate-200 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400/30 focus-visible:border-slate-400"
+                  className="flex h-9 w-full rounded-md border border-[var(--app-line)] bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400/30 focus-visible:border-slate-400"
                 />
               </div>
             </div>
 
             {/* GST toggle */}
-            <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <div className="space-y-3 rounded-xl border border-[var(--app-line)] bg-[var(--app-surface-sunk)] p-4">
               <div className="flex items-start gap-3">
                 <input
                   id="hasGst"
@@ -327,7 +338,7 @@ export default function NewOrderPage() {
                   <Label htmlFor="hasGst" className="font-medium cursor-pointer">
                     Customer has GST registration
                   </Label>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-[var(--app-ink-3)]">
                     Check this to provide GST number and certificate. Leave unchecked to mark GST as N/A.
                   </p>
                 </div>
@@ -348,7 +359,7 @@ export default function NewOrderPage() {
 
                   {/* GST Certificate Upload */}
                   <div className="space-y-2">
-                    <Label>GST certificate <span className="text-xs font-normal text-slate-400">(optional)</span></Label>
+                    <Label>GST certificate <span className="text-xs font-normal text-[var(--app-ink-3)]">(optional)</span></Label>
                     {gstCopyUrl ? (
                       <div className="flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5">
                         <CheckCircle className="h-4 w-4 shrink-0 text-emerald-600" />
@@ -375,7 +386,7 @@ export default function NewOrderPage() {
                           type="button"
                           variant="ghost"
                           size="sm"
-                          className="shrink-0 text-slate-500 hover:text-red-600"
+                          className="shrink-0 text-[var(--app-ink-3)] hover:text-red-600"
                           onClick={() => { setGstCopyUrl(""); setGstFileUrl(""); setGstFileName(""); }}
                         >
                           <X className="h-3.5 w-3.5" />
@@ -383,7 +394,7 @@ export default function NewOrderPage() {
                       </div>
                     ) : (
                       <div
-                        className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-slate-300 bg-white py-6 text-center hover:border-slate-400 hover:bg-slate-50 transition-colors"
+                        className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-slate-300 bg-white py-6 text-center hover:border-slate-400 hover:bg-[var(--app-surface-sunk)] transition-colors"
                         onClick={() => fileInputRef.current?.click()}
                         onDragOver={(e) => e.preventDefault()}
                         onDrop={(e) => {
@@ -392,12 +403,12 @@ export default function NewOrderPage() {
                           if (file) void handleGstUpload(file);
                         }}
                       >
-                        <Upload className="h-6 w-6 text-slate-400" />
+                        <Upload className="h-6 w-6 text-[var(--app-ink-3)]" />
                         <div>
-                          <p className="text-sm font-medium text-slate-700">
+                          <p className="text-sm font-medium text-[var(--app-ink-2)]">
                             {uploading ? "Uploading…" : "Click to upload or drag & drop"}
                           </p>
-                          <p className="text-xs text-slate-400">PDF, PNG, JPG up to 5 MB</p>
+                          <p className="text-xs text-[var(--app-ink-3)]">PDF, PNG, JPG up to 5 MB</p>
                         </div>
                         <input
                           ref={fileInputRef}
@@ -419,7 +430,7 @@ export default function NewOrderPage() {
               )}
 
               {!hasGst && (
-                <p className="pl-7 text-xs text-slate-500 italic">GST details: N/A</p>
+                <p className="pl-7 text-xs text-[var(--app-ink-3)] italic">GST details: N/A</p>
               )}
             </div>
           </CardContent>
@@ -429,7 +440,7 @@ export default function NewOrderPage() {
         <Card>
           <CardHeader>
             <CardTitle>Product description</CardTitle>
-            <p className="text-sm text-slate-500 font-normal">Describe the product for this enquiry.</p>
+            <p className="text-sm text-[var(--app-ink-3)] font-normal">Describe the product for this enquiry.</p>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
@@ -449,7 +460,7 @@ export default function NewOrderPage() {
         <Card>
           <CardHeader>
             <CardTitle>Routing, sample &amp; extra fields</CardTitle>
-            <p className="text-sm text-slate-500 font-normal">
+            <p className="text-sm text-[var(--app-ink-3)] font-normal">
               Division routing and optional sample / custom fields.
             </p>
           </CardHeader>
@@ -457,15 +468,15 @@ export default function NewOrderPage() {
             <div className="space-y-2">
               <Label>Division <span className="text-red-500">*</span></Label>
               {!divisionsLoaded ? (
-                <div className="h-10 rounded-lg border-2 border-slate-200 bg-slate-50 animate-pulse" aria-busy />
+                <div className="h-10 rounded-lg border-2 border-[var(--app-line)] bg-[var(--app-surface-sunk)] animate-pulse" aria-busy />
               ) : divisions.length === 0 ? (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
                   You are not assigned to any division. Ask an administrator before creating an enquiry.
                 </div>
               ) : divisions.length === 1 ? (
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-900">
+                <div className="rounded-xl border border-[var(--app-line)] bg-[var(--app-surface-sunk)] px-3 py-2.5 text-sm font-medium text-[var(--app-ink)]">
                   {divisions[0].name}
-                  <span className="ml-2 font-normal text-slate-500">(your division)</span>
+                  <span className="ml-2 font-normal text-[var(--app-ink-3)]">(your division)</span>
                 </div>
               ) : (
                 <Select value={divisionId?.toString() ?? ""} onValueChange={(v) => setDivisionId(Number(v))}>
@@ -483,8 +494,8 @@ export default function NewOrderPage() {
               )}
             </div>
 
-            <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
-              <p className="text-sm font-medium text-slate-800">Sample request</p>
+            <div className="space-y-3 rounded-xl border border-[var(--app-line)] bg-[var(--app-surface-sunk)] p-4">
+              <p className="text-sm font-medium text-[var(--app-ink)]">Sample request</p>
               <div className="flex items-start gap-3">
                 <input
                   id="sampleRequested"
@@ -497,7 +508,7 @@ export default function NewOrderPage() {
                   <Label htmlFor="sampleRequested" className="font-medium cursor-pointer">
                     Customer is requesting a sample
                   </Label>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-[var(--app-ink-3)]">
                     Division Head can add specifications and approve when the sample ships.
                   </p>
                 </div>
@@ -511,7 +522,7 @@ export default function NewOrderPage() {
                     onChange={(e) => setSampleRequestNotes(e.target.value)}
                     placeholder="e.g. Need 2m swatch, navy blue, deadline Friday"
                     rows={3}
-                    className="flex min-h-[72px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400/30"
+                    className="flex min-h-[72px] w-full rounded-md border border-[var(--app-line)] bg-white px-3 py-2 text-sm shadow-sm placeholder:text-[var(--app-ink-3)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400/30"
                   />
                 </div>
               )}
@@ -519,7 +530,7 @@ export default function NewOrderPage() {
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label>Custom fields <span className="text-xs font-normal text-slate-400">(optional)</span></Label>
+                <Label>Custom fields <span className="text-xs font-normal text-[var(--app-ink-3)]">(optional)</span></Label>
                 <Button type="button" variant="outline" size="sm" onClick={addCustomField}>
                   <Plus className="h-4 w-4 mr-1" /> Add field
                 </Button>

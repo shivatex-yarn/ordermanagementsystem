@@ -18,6 +18,6 @@ export default function AuditPage() {
   }, [isLoading, router, user]);
 
   return (
-    <div className="py-10 text-center text-sm text-slate-500">Redirecting to admin activity logs...</div>
+    <div className="py-10 text-center text-sm text-[var(--app-ink-3)]">Redirecting to admin activity logs...</div>
   );
 }

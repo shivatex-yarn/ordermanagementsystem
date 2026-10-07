@@ -1,5 +1,7 @@
 "use client";
 
+import { PageHeader } from "@/components/ui/panel";
+
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
@@ -99,7 +101,7 @@ export default function MultiDivisionAccessPage() {
   });
 
   if (isLoading) {
-    return <div className="text-slate-500">Loading…</div>;
+    return <div className="text-[var(--app-ink-3)]">Loading…</div>;
   }
 
   if (!user) {
@@ -113,7 +115,7 @@ export default function MultiDivisionAccessPage() {
         <CardHeader>
           <CardTitle>Multi-division access</CardTitle>
         </CardHeader>
-        <CardContent className="text-sm text-slate-600">
+        <CardContent className="text-sm text-[var(--app-ink-2)]">
           This page is not available for your role.
         </CardContent>
       </Card>
@@ -122,42 +124,40 @@ export default function MultiDivisionAccessPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Multi-division access</h1>
-        <p className="mt-1 text-slate-500">
-          Request access to raise enquiries for additional divisions. A Super Admin will review and approve or reject your request.
-        </p>
-      </div>
+      <PageHeader
+        title="Multi-division access"
+        description="Ask for permission to raise enquiries for divisions other than your own. An administrator reviews every request."
+      />
 
       <Card>
         <CardHeader>
           <CardTitle>Submit a request</CardTitle>
-          <p className="text-sm text-slate-500 font-normal">
+          <p className="text-sm text-[var(--app-ink-3)] font-normal">
             Select the division(s) you need access to and explain why.
           </p>
         </CardHeader>
         <CardContent className="space-y-5 text-sm">
           {user.division?.name ? (
-            <div className="rounded-lg border border-slate-100 bg-slate-50/60 p-3 text-slate-700">
-              <span className="text-slate-500">Your primary division:</span>{" "}
+            <div className="rounded-lg border border-[var(--app-line-soft)] bg-[var(--app-surface-sunk)]/60 p-3 text-[var(--app-ink-2)]">
+              <span className="text-[var(--app-ink-3)]">Your primary division:</span>{" "}
               <span className="font-medium">{user.division.name}</span>
             </div>
           ) : null}
 
           {divisionsLoading ? (
-            <p className="text-slate-500">Loading divisions…</p>
+            <p className="text-[var(--app-ink-3)]">Loading divisions…</p>
           ) : selectableDivisions.length === 0 ? (
-            <p className="text-slate-500">No other divisions available to request.</p>
+            <p className="text-[var(--app-ink-3)]">No other divisions available to request.</p>
           ) : (
             <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--app-ink-3)]">
                 Select additional divisions
               </p>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {selectableDivisions.map((d) => (
                   <label
                     key={d.id}
-                    className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2.5 hover:bg-slate-50"
+                    className="flex cursor-pointer items-center gap-2 rounded-xl border border-[var(--app-line)] bg-white px-3 py-2.5 hover:bg-[var(--app-surface-sunk)]"
                   >
                     <input
                       type="checkbox"
@@ -167,7 +167,7 @@ export default function MultiDivisionAccessPage() {
                       }
                       className="h-4 w-4 rounded border-slate-300"
                     />
-                    <span className="text-slate-800">{d.name}</span>
+                    <span className="text-[var(--app-ink)]">{d.name}</span>
                   </label>
                 ))}
               </div>
@@ -175,13 +175,13 @@ export default function MultiDivisionAccessPage() {
           )}
 
           <div className="space-y-2">
-            <Label>Reason <span className="text-slate-400">(min 10 characters)</span></Label>
+            <Label>Reason <span className="text-[var(--app-ink-3)]">(min 10 characters)</span></Label>
             <textarea
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="Why do you need access to raise enquiries for these divisions?"
               rows={4}
-              className="flex min-h-[96px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-xs placeholder:text-slate-400 focus-visible:border-slate-300 focus-visible:ring-slate-200/50 focus-visible:ring-[3px] outline-none"
+              className="flex min-h-[96px] w-full rounded-md border border-[var(--app-line)] bg-white px-3 py-2 text-sm shadow-xs placeholder:text-[var(--app-ink-3)] focus-visible:border-slate-300 focus-visible:ring-slate-200/50 focus-visible:ring-[3px] outline-none"
             />
           </div>
 
@@ -238,15 +238,15 @@ export default function MultiDivisionAccessPage() {
         </CardHeader>
         <CardContent>
           {requestsLoading ? (
-            <div className="py-8 text-center text-slate-500">Loading…</div>
+            <div className="py-8 text-center text-[var(--app-ink-3)]">Loading…</div>
           ) : requests.length === 0 ? (
-            <div className="py-8 text-center text-slate-500">No requests submitted yet.</div>
+            <div className="py-8 text-center text-[var(--app-ink-3)]">No requests submitted yet.</div>
           ) : (
             <ul className="space-y-4">
               {requests.map((r) => (
-                <li key={r.id} className="rounded-lg border border-slate-100 p-4 space-y-2">
+                <li key={r.id} className="rounded-lg border border-[var(--app-line-soft)] p-4 space-y-2">
                   <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <p className="text-sm font-medium text-slate-900">
+                    <p className="text-sm font-medium text-[var(--app-ink)]">
                       Submitted {new Date(r.createdAt).toLocaleString()}
                     </p>
                     <Badge
@@ -261,11 +261,11 @@ export default function MultiDivisionAccessPage() {
                       {r.status}
                     </Badge>
                   </div>
-                  <p className="text-sm text-slate-600">
+                  <p className="text-sm text-[var(--app-ink-2)]">
                     <span className="font-medium">Requested divisions:</span>{" "}
                     {r.divisions.map((d) => d.division.name).join(", ")}
                   </p>
-                  <p className="text-sm text-slate-600">
+                  <p className="text-sm text-[var(--app-ink-2)]">
                     <span className="font-medium">Reason:</span> {r.reason}
                   </p>
                   {r.status === "APPROVED" ? (

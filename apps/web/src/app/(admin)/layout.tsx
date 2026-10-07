@@ -16,23 +16,20 @@ import {
   X,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import Image from "next/image";
+import { APP_NAME, APP_VERSION, COMPANY_LOGO, COMPANY_NAME } from "@/lib/branding";
 
 const adminNav = [
   { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/admin/activity", label: "Activity Logs", icon: FileText },
+  { href: "/admin/activity", label: "Activity logs", icon: FileText },
   { href: "/admin/users", label: "Users", icon: UserPlus },
   { href: "/admin/divisions", label: "Divisions", icon: KeyRound },
   { href: "/admin/multi-division", label: "Multi-division access", icon: Users },
   { href: "/admin/settings", label: "Settings", icon: Settings },
 ];
 
-export default function AdminLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, isLoading } = useAuth();
@@ -55,29 +52,17 @@ export default function AdminLayout({
     }
   }, [mounted, isLoading, user, router]);
 
-  if (!mounted || isLoading) {
+  if (!mounted || isLoading || !user || (user.role !== "SUPER_ADMIN" && user.role !== "MANAGING_DIRECTOR")) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
-        <div className="animate-pulse text-slate-500">Loading...</div>
+      <div className="flex min-h-screen items-center justify-center bg-[var(--app-plane)]">
+        <div className="flex flex-col items-center gap-3">
+          <span className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--app-line)] border-t-[var(--app-brand)]" />
+          <p className="text-sm text-[var(--app-ink-3)]">Checking your access…</p>
+        </div>
       </div>
     );
   }
 
-  if (!user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
-        <div className="animate-pulse text-slate-500">Loading...</div>
-      </div>
-    );
-  }
-
-  if (user.role !== "SUPER_ADMIN" && user.role !== "MANAGING_DIRECTOR") {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
-        <div className="animate-pulse text-slate-500">Loading...</div>
-      </div>
-    );
-  }
   const isViewOnly = user.role === "MANAGING_DIRECTOR";
 
   async function handleLogout() {
@@ -87,135 +72,131 @@ export default function AdminLayout({
   }
 
   return (
-    <div className="flex min-h-screen flex-col overflow-x-hidden bg-slate-50 md:flex-row">
+    <div className="flex h-screen flex-col overflow-hidden bg-[var(--app-plane)] md:flex-row">
       {sidebarOpen ? (
         <button
           type="button"
           aria-label="Close navigation"
-          className="fixed inset-0 z-30 bg-slate-900/40 backdrop-blur-[1px] md:hidden"
+          className="fixed inset-0 z-30 bg-black/40 md:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       ) : null}
+
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-40 flex w-70 max-w-[85vw] flex-col border-r border-slate-200 bg-white shadow-[1px_0_0_0_rgba(15,23,42,0.06)] transition-transform duration-200 ease-out md:static md:z-auto md:max-w-none md:w-68 md:shrink-0 md:translate-x-0",
+          "fixed inset-y-0 left-0 z-40 flex w-[264px] max-w-[85vw] flex-col bg-[var(--app-nav)] transition-transform duration-200 ease-out md:static md:z-auto md:max-w-none md:translate-x-0",
           sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         )}
       >
-        <div className="flex shrink-0 items-start justify-between gap-2 border-b border-slate-100 px-4 pb-4 pt-5 md:border-b-0 md:px-5 md:pb-5 md:pt-6">
-          <div className="min-w-0 flex-1 space-y-4">
-            <Link
-              href="/admin/dashboard"
-              onClick={() => setSidebarOpen(false)}
-              className="group block rounded-xl outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-indigo-500/30"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                    Console
-                  </p>
-                  <p className="mt-1 text-base font-semibold leading-snug tracking-tight text-slate-900 group-hover:text-slate-700">
-                    Enquiry Management
-                  </p>
-                </div>
-                <span className="shrink-0 rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide text-slate-600">
-                  Admin
-                </span>
-              </div>
-            </Link>
-            {isViewOnly && (
-              <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900">
-                View only · Managing Director
-              </p>
-            )}
-            <Button
-              asChild
-              variant="ghost"
-              className="h-10 w-full justify-center gap-2 rounded-lg border border-slate-200 bg-white font-medium text-slate-700 shadow-sm hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
-            >
-              <Link href="/dashboard" onClick={() => setSidebarOpen(false)}>
-                <Home className="h-4 w-4 shrink-0 text-slate-600" />
-                Main dashboard
-              </Link>
-            </Button>
-          </div>
-          <Button
+        <div className="flex items-center justify-between gap-2 px-5 py-5">
+          <Link href="/admin/dashboard" className="flex min-w-0 items-center gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white p-1">
+              <Image
+                src={COMPANY_LOGO}
+                alt=""
+                width={32}
+                height={32}
+                className="h-full w-full object-contain"
+              />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-extrabold leading-tight tracking-tight text-white">
+                {COMPANY_NAME}
+              </span>
+              <span className="block truncate text-[10px] leading-tight text-[var(--app-nav-ink)]">
+                {APP_NAME} · Admin console
+              </span>
+            </span>
+          </Link>
+          <button
             type="button"
-            variant="ghost"
-            size="icon"
-            className="h-9 w-9 shrink-0 md:hidden"
             aria-label="Close navigation"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--app-nav-ink)] hover:bg-[var(--app-nav-2)] md:hidden"
             onClick={() => setSidebarOpen(false)}
           >
-            <X className="h-5 w-5 text-slate-600" />
-          </Button>
+            <X className="h-4 w-4" />
+          </button>
         </div>
 
-        <div className="mx-4 hidden h-px shrink-0 bg-linear-to-r from-transparent via-slate-200 to-transparent md:mx-5 md:block" />
-
-        <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-3 py-4">
-          <p className="mb-1 px-3 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-slate-400">
-            Navigation
+        {isViewOnly ? (
+          <p className="mx-3 mb-3 rounded-xl border border-[var(--app-act-line)] bg-[var(--app-act-bg)] px-3 py-2 text-xs font-semibold text-[var(--app-act-ink)]">
+            You are signed in as Managing Director — this console is read-only for you.
           </p>
-          {adminNav.map((item) => {
-            const Icon = item.icon;
-            const active = pathname === item.href;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setSidebarOpen(false)}
-                className={cn(
-                  "group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150",
-                  active
-                    ? "bg-indigo-50 text-indigo-600 shadow-[inset_3px_0_0_0_#4F46E5] ring-1 ring-indigo-200/80"
-                    : "text-slate-600 hover:bg-indigo-50 hover:text-indigo-600"
-                )}
-              >
-                <Icon
-                  className={cn(
-                    "h-4.5 w-4.5 shrink-0 transition-opacity",
-                    active ? "text-indigo-600" : "text-slate-500 group-hover:text-indigo-600"
-                  )}
-                  strokeWidth={active ? 2.25 : 2}
-                />
-                <span className="truncate">{item.label}</span>
-              </Link>
-            );
-          })}
+        ) : null}
+
+        <nav className="scroll-soft flex-1 overflow-y-auto px-3 pb-3">
+          <p className="px-3 pb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--app-nav-ink)]/70">
+            Administration
+          </p>
+          <ul className="space-y-0.5">
+            {adminNav.map((item) => {
+              const Icon = item.icon;
+              const active = pathname === item.href || pathname.startsWith(item.href + "/");
+              return (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    onClick={() => setSidebarOpen(false)}
+                    aria-current={active ? "page" : undefined}
+                    className={cn(
+                      "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors",
+                      active
+                        ? "bg-[var(--app-brand)] text-white"
+                        : "text-[var(--app-nav-ink)] hover:bg-[var(--app-nav-2)] hover:text-white"
+                    )}
+                  >
+                    <Icon className="h-4 w-4 shrink-0" aria-hidden />
+                    <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+
+          <p className="mt-5 px-3 pb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--app-nav-ink)]/70">
+            Leave the console
+          </p>
+          <Link
+            href="/dashboard"
+            onClick={() => setSidebarOpen(false)}
+            className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-[var(--app-nav-ink)] hover:bg-[var(--app-nav-2)] hover:text-white"
+          >
+            <Home className="h-4 w-4 shrink-0" aria-hidden />
+            Main dashboard
+          </Link>
         </nav>
 
-        <div className="mt-auto shrink-0 border-t border-slate-200 bg-white p-3">
+        <div className="border-t border-[var(--app-nav-line)] p-3">
           <button
             type="button"
             onClick={handleLogout}
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-red-50 hover:text-red-700"
+            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-[var(--app-nav-ink)] hover:bg-[var(--app-nav-2)] hover:text-white"
           >
-            <LogOut className="h-4.5 w-4.5 shrink-0 text-slate-500" />
+            <LogOut className="h-4 w-4 shrink-0" aria-hidden />
             Sign out
           </button>
+          <p className="px-3 pt-2 text-[10px] font-semibold tracking-wide text-[var(--app-nav-ink)]/60">
+            Version {APP_VERSION}
+          </p>
         </div>
       </aside>
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b border-slate-200 bg-white px-3 sm:px-4 md:hidden">
-          <Button
+
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center gap-3 border-b border-[var(--app-line)] bg-[var(--app-surface)] px-4 md:hidden">
+          <button
             type="button"
-            variant="outline"
-            size="icon"
-            className="h-9 w-9 shrink-0"
             aria-label="Open navigation"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--app-line)] text-[var(--app-ink-2)]"
             onClick={() => setSidebarOpen(true)}
           >
-            <Menu className="h-5 w-5" />
-          </Button>
+            <Menu className="h-4 w-4" />
+          </button>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-slate-900">Admin console</p>
-            <p className="truncate text-xs text-slate-500">Enquiry Management</p>
+            <p className="truncate text-sm font-bold text-[var(--app-ink)]">Admin console</p>
+            <p className="truncate text-xs text-[var(--app-ink-3)]">{COMPANY_NAME}</p>
           </div>
         </header>
-        <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-slate-50 p-4 sm:p-6 md:p-8">
-          {children}
-        </main>
+        <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 sm:p-6 md:p-7">{children}</main>
       </div>
     </div>
   );

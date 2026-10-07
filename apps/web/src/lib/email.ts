@@ -1,9 +1,10 @@
 import { Resend } from "resend";
 import { getNotificationShortLabel } from "@/lib/notification-labels";
 import { formatEnquiryNumberShort } from "@/lib/enquiry-display";
+import { APP_NAME, COMPANY_NAME } from "@/lib/branding";
 
 const apiKey = process.env.RESEND_API_KEY;
-const from = process.env.RESEND_FROM ?? "Enquiry Management <onboarding@resend.dev>";
+const from = process.env.RESEND_FROM ?? `${COMPANY_NAME} <onboarding@resend.dev>`;
 
 const resend = apiKey ? new Resend(apiKey) : null;
 
@@ -137,7 +138,7 @@ export async function sendEnquiryNotificationEmail(
           </td>
         </tr>`;
 
-  const html = emailShell(inner, "Enquiry Management System");
+  const html = emailShell(inner, `${COMPANY_NAME} · ${APP_NAME}`);
   const text = `${shortNum} · ${getNotificationShortLabel(eventType)}\n\n${summary}\n\nView: ${appUrl}/orders`;
   return sendEmail({ to: toEmail, subject, html, text });
 }
@@ -193,7 +194,7 @@ export async function sendNewEnquiryToDivisionHeadEmail(
           </td>
         </tr>`;
 
-  const html = emailShell(inner, "Enquiry Management System");
+  const html = emailShell(inner, `${COMPANY_NAME} · ${APP_NAME}`);
   const text = [
     `New enquiry: ${payload.companyName} (${shortNum})`,
     `Submitted by: ${payload.submittedByName} (${payload.submittedByEmail})`,
@@ -266,7 +267,7 @@ export async function sendSampleShippedEmail(
           </td>
         </tr>`;
 
-  const html = emailShell(inner, "Enquiry Management System");
+  const html = emailShell(inner, `${COMPANY_NAME} · ${APP_NAME}`);
   const shipmentText = payload.sentByCourier
     ? `Method: Courier\nCourier: ${payload.courierName ?? "—"}\nTracking: ${payload.trackingId ?? "—"}`
     : `Method: Hand delivery\nHandover: ${payload.handoverPersonName ?? "—"}\nContact: ${payload.handoverPersonPhone ?? "—"}\nType: ${payload.handoverPersonType ?? "—"}`;
@@ -316,7 +317,7 @@ export async function sendSupervisorEnquiryHandoffEmail(
             <a href="${escapeHtml(payload.orderUrl)}" style="display:inline-block;background:#0f766e;color:#ffffff !important;font-size:14px;font-weight:600;padding:12px 22px;text-decoration:none;border-radius:10px;">Open enquiry</a>
           </td>
         </tr>`;
-  const html = emailShell(inner, "Enquiry Management System");
+  const html = emailShell(inner, `${COMPANY_NAME} · ${APP_NAME}`);
   const text = `Assigned to you · ${shortNum}\n\nCompany: ${payload.companyName ?? "—"}\nDivision: ${payload.divisionName}\n\n${payload.description ?? ""}\n\n${devLabel}: ${payload.developmentBody}\n\nOpen: ${payload.orderUrl}`;
   return sendEmail({ to: toEmail, subject, html, text });
 }
@@ -436,7 +437,7 @@ export async function sendSlaBreachDetailEmail(
           </td>
         </tr>`;
 
-  const html = emailShell(inner, "Enquiry Management System · SLA monitoring", 640);
+  const html = emailShell(inner, `${COMPANY_NAME} · ${APP_NAME} · SLA monitoring`, 640);
 
   const transfersText =
     payload.transferPipeline.length === 0
@@ -474,7 +475,7 @@ export async function sendPasswordResetEmail(
   userName: string,
   resetUrl: string
 ): Promise<{ ok: boolean; error?: string }> {
-  const subject = "Reset your password — Enquiry Management";
+  const subject = `Reset your password — ${COMPANY_NAME}`;
   const safeUser = escapeHtml(userName);
   const safeUrl = resetUrl.replace(/"/g, "&quot;");
 
@@ -482,7 +483,7 @@ export async function sendPasswordResetEmail(
     `
     <tr>
       <td style="background:linear-gradient(135deg,#1e293b 0%,#334155 100%);padding:32px 40px;">
-        <p style="margin:0;font-size:13px;font-weight:600;letter-spacing:0.08em;color:#94a3b8;text-transform:uppercase;">Enquiry Management</p>
+        <p style="margin:0;font-size:13px;font-weight:600;letter-spacing:0.08em;color:#94a3b8;text-transform:uppercase;">${COMPANY_NAME}</p>
         <h1 style="margin:10px 0 0;font-size:24px;font-weight:700;color:#ffffff;line-height:1.3;">Password Reset Request</h1>
       </td>
     </tr>
@@ -513,7 +514,7 @@ export async function sendPasswordResetEmail(
         </p>
       </td>
     </tr>`,
-    "This is an automated security email from Enquiry Management. Do not reply."
+    `This is an automated security email from ${COMPANY_NAME}. Do not reply.`
   );
 
   const text = [
@@ -536,7 +537,7 @@ export async function sendPasswordChangedNotification(
   divisionName: string | null,
   changedAt: Date
 ): Promise<{ ok: boolean; error?: string }> {
-  const subject = "Your password has been changed — Enquiry Management";
+  const subject = `Your password has been changed — ${COMPANY_NAME}`;
   const safeUser = escapeHtml(userName);
   const safeDivision = escapeHtml(divisionName ?? "—");
   const dateStr = changedAt.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" });
@@ -545,7 +546,7 @@ export async function sendPasswordChangedNotification(
     `
     <tr>
       <td style="background:linear-gradient(135deg,#1e293b 0%,#334155 100%);padding:32px 40px;">
-        <p style="margin:0;font-size:13px;font-weight:600;letter-spacing:0.08em;color:#94a3b8;text-transform:uppercase;">Enquiry Management</p>
+        <p style="margin:0;font-size:13px;font-weight:600;letter-spacing:0.08em;color:#94a3b8;text-transform:uppercase;">${COMPANY_NAME}</p>
         <h1 style="margin:10px 0 0;font-size:24px;font-weight:700;color:#ffffff;line-height:1.3;">Password Changed</h1>
       </td>
     </tr>
@@ -568,7 +569,7 @@ export async function sendPasswordChangedNotification(
         </p>
       </td>
     </tr>`,
-    "Enquiry Management System — Security notification."
+    `${COMPANY_NAME} · ${APP_NAME} — Security notification.`
   );
 
   const text = [
@@ -602,7 +603,7 @@ export async function sendPasswordChangedAdminAlert(
     `
     <tr>
       <td style="background:linear-gradient(135deg,#7c3aed 0%,#a855f7 100%);padding:32px 40px;">
-        <p style="margin:0;font-size:13px;font-weight:600;letter-spacing:0.08em;color:#ddd6fe;text-transform:uppercase;">Admin Alert · Enquiry Management</p>
+        <p style="margin:0;font-size:13px;font-weight:600;letter-spacing:0.08em;color:#ddd6fe;text-transform:uppercase;">Admin Alert · ${COMPANY_NAME}</p>
         <h1 style="margin:10px 0 0;font-size:24px;font-weight:700;color:#ffffff;line-height:1.3;">User Password Changed</h1>
       </td>
     </tr>
@@ -624,7 +625,7 @@ export async function sendPasswordChangedAdminAlert(
         </p>
       </td>
     </tr>`,
-    "Enquiry Management System — Admin security audit."
+    `${COMPANY_NAME} · ${APP_NAME} — Admin security audit.`
   );
 
   const text = [

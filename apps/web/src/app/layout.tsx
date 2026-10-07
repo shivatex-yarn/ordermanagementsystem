@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { Providers } from "@/components/providers";
+import { APP_NAME, COMPANY_NAME } from "@/lib/branding";
 import "./globals.css";
 
 const plusJakarta = Plus_Jakarta_Sans({
@@ -11,8 +12,8 @@ const plusJakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Enquiry Management System",
-  description: "Enterprise enquiry management with divisions, SLA, and audit",
+  title: `${COMPANY_NAME} · ${APP_NAME}`,
+  description: `${COMPANY_NAME} — enterprise enquiry management with divisions, SLA, and audit`,
   icons: {
     icon: "/company-logo.png",
     shortcut: "/company-logo.png",
@@ -28,7 +29,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={plusJakarta.variable}>
       <body
-        className="antialiased min-h-screen overflow-x-hidden bg-white text-slate-900"
+        className="antialiased min-h-screen overflow-x-hidden bg-[var(--app-plane)] text-[var(--app-ink)]"
         suppressHydrationWarning
         data-gramm="false"
         data-gramm_editor="false"

@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 const prisma = new PrismaClient();
 
 /**
- * Demo seed for the Enquiry Management Application.
+ * Demo seed for the Shiva TexYarn Limited Enquiry Management System.
  *
  * Creates one user per role (excluding USER → multiple) and three divisions, with
  * division-head + supervisor mappings. Passwords are all `shivatex@12345`.

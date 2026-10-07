@@ -11,6 +11,15 @@ function orderNumberFromMetadata(metadata: unknown): string {
   return typeof m.orderNumber === "string" ? m.orderNumber : "";
 }
 
+/** The enquiry a notification is about, so the UI can link straight to it. */
+function orderIdFromMetadata(metadata: unknown): number | null {
+  if (!metadata || typeof metadata !== "object") return null;
+  const m = metadata as Record<string, unknown>;
+  if (typeof m.orderId === "number") return m.orderId;
+  if (typeof m.orderId === "string" && /^\d+$/.test(m.orderId)) return Number(m.orderId);
+  return null;
+}
+
 export function getNotificationActorId(type: string, metadata: unknown): number | undefined {
   if (!metadata || typeof metadata !== "object") return undefined;
   const m = metadata as Record<string, unknown>;
@@ -68,6 +77,8 @@ export type EnrichedNotification = {
   createdAt: string;
   metadata: unknown;
   enquiryNumberDisplay: string;
+  /** Null when the notification's metadata does not name an enquiry. */
+  orderId: number | null;
   label: string;
   summary: string;
   actor: { id: number; name: string; email: string } | null;
@@ -102,6 +113,7 @@ export async function enrichNotificationRecords(
       createdAt: n.createdAt.toISOString(),
       metadata: n.metadata,
       enquiryNumberDisplay: formatEnquiryNumber(rawNum || "—"),
+      orderId: orderIdFromMetadata(n.metadata),
       label: getNotificationShortLabel(n.type),
       summary: summaryFromMetadata(n.type, n.metadata),
       actor: aid != null ? userMap.get(aid) ?? null : null,

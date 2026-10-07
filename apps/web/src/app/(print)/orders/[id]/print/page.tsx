@@ -3,6 +3,7 @@
 import { use, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { formatEnquiryNumber } from "@/lib/enquiry-display";
+import { APP_NAME, COMPANY_NAME } from "@/lib/branding";
 
 type OrderDetail = {
   id: number;
@@ -376,6 +377,9 @@ export default function OrderPrintPage({ params }: { params: Promise<{ id: strin
               style={{ height: 64, width: 64, background: "#fff", borderRadius: 10, padding: 6 }}
             />
             <div>
+              <div style={{ color: "#fff", fontSize: 13, fontWeight: 700, letterSpacing: "-0.2px", marginBottom: 2 }}>
+                {COMPANY_NAME}
+              </div>
               <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 11, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 4 }}>
                 Enquiry Report
               </div>
@@ -604,7 +608,7 @@ export default function OrderPrintPage({ params }: { params: Promise<{ id: strin
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <img src="/company-logo.png" alt="" style={{ height: 22, opacity: 0.5 }} />
-            <span style={{ fontSize: 10, color: "#94a3b8" }}>Enquiry Management System</span>
+            <span style={{ fontSize: 10, color: "#94a3b8" }}>{COMPANY_NAME} · {APP_NAME}</span>
           </div>
           <span style={{ fontSize: 10, color: "#94a3b8" }}>
             {enqNum} · {new Date().toLocaleString()} · Confidential
