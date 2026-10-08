@@ -67,7 +67,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   /**
    * SLA pause logic per spec:
    * • EXISTING product → SLA timer continues from creation; do NOT clear slaDeadline.
-   * • NEW development → pause the 48h SLA by clearing slaDeadline (cron skips null deadlines)
+   * • NEW development → pause the 72h SLA by clearing slaDeadline (cron skips null deadlines)
    *   until planning is completed and the deadline is set again elsewhere in the workflow.
    */
   const isNewDev = kind === "NEW";

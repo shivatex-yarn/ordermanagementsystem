@@ -2,13 +2,14 @@ import { prisma } from "@/lib/db";
 import { publish } from "@/lib/events";
 import { registerEventHandlers } from "@/lib/event-handlers";
 import { appendTimeline } from "@/lib/timeline";
-import { advancePastNonWorkingDay } from "@/lib/sla-calendar";
-const SLA_HOURS = 48;
-const HANDOFF_SLA_HOURS = 24;              // head must assign supervisor within 24 h of acceptance
-const HEAD_SAMPLE_APPROVAL_SLA_HOURS = 24; // head must approve sample request within 24 h of handoff
-const SAMPLE_DETAILS_SLA_HOURS = 48;       // supervisor must submit sample details within 48 h
-const SAMPLE_APPROVAL_SLA_HOURS = 24;      // head must approve sample within 24 h of details
-const SHIPMENT_SLA_HOURS = 48;             // supervisor must record shipment within 48 h of approval
+// Every SLA is a strict 72-hour wall-clock window from the triggering event.
+// No business-hours, weekend, or holiday adjustment — 72 h means 72 h.
+const SLA_HOURS = 72;
+const HANDOFF_SLA_HOURS = 72;              // head must assign supervisor within 72 h of acceptance
+const HEAD_SAMPLE_APPROVAL_SLA_HOURS = 72; // head must approve sample request within 72 h of handoff
+const SAMPLE_DETAILS_SLA_HOURS = 72;       // supervisor must submit sample details within 72 h
+const SAMPLE_APPROVAL_SLA_HOURS = 72;      // head must approve sample within 72 h of details
+const SHIPMENT_SLA_HOURS = 72;             // supervisor must record shipment within 72 h of approval
 
 registerEventHandlers();
 
@@ -19,7 +20,7 @@ function addHours(date: Date, h: number): Date {
 }
 
 function computeSlaDeadline(start: Date, hours = SLA_HOURS): Date {
-  return advancePastNonWorkingDay(addHours(start, hours));
+  return addHours(start, hours);
 }
 
 const ALL_STAGE_DEADLINES_NULL = {
@@ -253,7 +254,7 @@ export async function acceptOrder(orderId: number, acceptedById: number, accepta
       acceptedById,
       slaDeadline: null,
       acceptanceReason: trimmedReason,
-      // Head now has 24 h to assign a supervisor via enquiry handoff.
+      // Head now has 72 h to assign a supervisor via enquiry handoff.
       handoffSlaDeadline: computeSlaDeadline(now, HANDOFF_SLA_HOURS),
     },
     include: {
@@ -932,7 +933,7 @@ export async function submitEnquiryHandoff(
   }
 
   // Head-sample-approval SLA:
-  //   • First submission + sample requested + not yet approved → start the 24h timer.
+  //   • First submission + sample requested + not yet approved → start the 72h timer.
   //   • Update submission → clear any stale timer (approval may have happened
   //     since the original handoff, or conditions changed).
   const headSampleApprovalDeadline: Date | null | undefined =
