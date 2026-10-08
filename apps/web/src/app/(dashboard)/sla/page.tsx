@@ -122,7 +122,7 @@ export default function SLAPage() {
     <div className="space-y-5">
       <PageHeader
         title="SLA & breaches"
-        description="Enquiries that have passed their deadline, and the explanations division heads have given."
+        description="Every stage must be completed within 72 hours of when it starts — the clock runs day and night, weekends and holidays included. Below are the enquiries that passed that 72-hour deadline, and the explanations division heads have given."
       />
 
       {error ? (

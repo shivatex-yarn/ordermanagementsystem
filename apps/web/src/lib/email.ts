@@ -391,8 +391,9 @@ export async function sendSlaBreachDetailEmail(
         <tr>
           <td style="padding:32px 28px 28px;">
             <p style="margin:0 0 8px;font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:#ea580c;">SLA breach</p>
-            <h1 style="margin:0 0 12px;font-size:24px;font-weight:700;letter-spacing:-0.03em;color:#18181b;line-height:1.2;">48-hour deadline exceeded</h1>
-            <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#52525b;">Hi ${escapeHtml(toName)}, this enquiry missed its SLA. Breach recorded for <strong style="color:#18181b;">${escapeHtml(payload.breachDivisionName)}</strong> (owning division when detected).</p>
+            <h1 style="margin:0 0 12px;font-size:24px;font-weight:700;letter-spacing:-0.03em;color:#18181b;line-height:1.2;">72-hour deadline exceeded</h1>
+            <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#52525b;">Hi ${escapeHtml(toName)}, this enquiry missed its SLA. Breach recorded for <strong style="color:#18181b;">${escapeHtml(payload.breachDivisionName)}</strong> (owning division when detected).</p>
+            <p style="margin:0 0 24px;font-size:13px;line-height:1.6;color:#71717a;">How the deadline works: each stage must be completed within <strong style="color:#3f3f46;">72 hours</strong> of the moment it starts (e.g. enquiry placed or transferred). The clock runs continuously — nights, weekends and holidays included. This alert was sent because 72 hours passed without the required action.</p>
 
             <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:separate;border-spacing:0;border:1px solid #e4e4e7;border-radius:12px;overflow:hidden;margin:0 0 8px;">
               <tr><td colspan="2" style="padding:12px 18px;background:#fff7ed;border-bottom:1px solid #ffedd5;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#9a3412;">Enquiry details</td></tr>
@@ -448,6 +449,7 @@ export async function sendSlaBreachDetailEmail(
 
   const text = [
     `SLA breach · ${shortNum}`,
+    `72-hour deadline exceeded. Each stage must be completed within 72 hours of the moment it starts; the clock runs continuously (nights, weekends and holidays included).`,
     `Breach division (at detection): ${payload.breachDivisionName}`,
     `Company: ${payload.companyName ?? "—"}`,
     `Status: ${payload.status}`,

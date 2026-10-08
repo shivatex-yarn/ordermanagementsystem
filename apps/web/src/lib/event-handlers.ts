@@ -631,7 +631,7 @@ export function eventTypeToSummary(type: string, event: OrderEvent): string {
     case "OrderCompleted":
       return `Enquiry ${event.orderNumber} has been completed.`;
     case "SLABreachDetected":
-      return `Enquiry ${event.orderNumber} has breached the 48-hour SLA.`;
+      return `Enquiry ${event.orderNumber} has breached the 72-hour SLA.`;
     case "SLABreachHeadRejectionSubmitted": {
       const e = event as Extract<OrderEvent, { type: "SLABreachHeadRejectionSubmitted" }>;
       return `Division Head submitted a delay/breach rejection for enquiry ${e.orderNumber}.`;
@@ -725,7 +725,7 @@ async function timelineHandler(event: OrderEvent): Promise<void> {
       return { type: "SAMPLE_SHIPPED" as const, title: "Sample shipped", detail };
     })(),
     SalesFeedbackRecorded: { type: "CUSTOMER_FEEDBACK", title: "Customer feedback submitted" },
-    SLABreachDetected: { type: "SLA_BREACHED", title: "SLA breach detected (48-hour rule)" },
+    SLABreachDetected: { type: "SLA_BREACHED", title: "SLA breach detected (72-hour rule)" },
     SLABreachHeadRejectionSubmitted: {
       type: "SLA_HEAD_REJECTION",
       title: "Division Head submitted SLA-breach rejection",

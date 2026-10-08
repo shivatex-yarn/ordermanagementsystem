@@ -1,7 +1,6 @@
 import { prisma } from "@/lib/db";
 import { publish } from "@/lib/events";
 import { registerEventHandlers } from "@/lib/event-handlers";
-import { advancePastNonWorkingDay, isWithinSlaBusinessHours } from "@/lib/sla-calendar";
 
 let handlersReady = false;
 function ensureHandlers() {
@@ -9,10 +8,6 @@ function ensureHandlers() {
     registerEventHandlers();
     handlersReady = true;
   }
-}
-
-function adjustDeadline(deadline: Date): Date {
-  return advancePastNonWorkingDay(deadline);
 }
 
 type OrderSnap = { id: number; orderNumber: string; currentDivisionId: number };
@@ -34,7 +29,7 @@ async function recordBreach(order: OrderSnap, breachType: string, now: Date): Pr
   });
 }
 
-/** Collect a stage as a candidate when its (holiday-adjusted) deadline has passed. */
+/** Collect a stage as a candidate when its deadline has passed (strict wall-clock). */
 function consider(
   out: Candidate[],
   order: OrderSnap,
@@ -43,7 +38,7 @@ function consider(
   now: Date
 ): void {
   if (!deadline) return;
-  if (adjustDeadline(new Date(deadline)) >= now) return;
+  if (new Date(deadline) >= now) return;
   out.push({ order, breachType });
 }
 
@@ -51,15 +46,15 @@ function consider(
  * Detects and records SLA breaches across all workflow stages.
  *
  * Stages monitored:
- *   PLACEMENT            — order not accepted within 48 h of placement/transfer
- *   HANDOFF              — head did not assign supervisor within 24 h of acceptance
- *   HEAD_SAMPLE_APPROVAL — head did not approve sample request within 24 h of handoff
- *   SAMPLE_DETAILS       — supervisor did not submit sample details within 48 h
- *   SAMPLE_APPROVAL      — head did not approve sample within 24 h of details submitted
- *   SHIPMENT             — supervisor did not record shipment within 48 h of approval
+ *   PLACEMENT            — order not accepted within 72 h of placement/transfer
+ *   HANDOFF              — head did not assign supervisor within 72 h of acceptance
+ *   HEAD_SAMPLE_APPROVAL — head did not approve sample request within 72 h of handoff
+ *   SAMPLE_DETAILS       — supervisor did not submit sample details within 72 h
+ *   SAMPLE_APPROVAL      — head did not approve sample within 72 h of details submitted
+ *   SHIPMENT             — supervisor did not record shipment within 72 h of approval
  *
- * Only runs during SLA business hours: Monday–Saturday, 10:00 AM–6:00 PM IST,
- * excluding South Indian public holidays.
+ * Deadlines are strict 72-hour wall-clock windows: the check runs around the
+ * clock with no business-hours, weekend, or holiday gating.
  *
  * Existing breaches are looked up in a single query rather than one per
  * candidate stage. On the Neon pooler (one connection per instance) the old
@@ -74,14 +69,10 @@ export async function runSlaBreachCheck(): Promise<{
   ensureHandlers();
   const now = new Date();
 
-  if (!isWithinSlaBusinessHours(now)) {
-    return { breachesCreated: 0, skipped: true, reason: "outside business hours" };
-  }
-
   const base = { id: true, orderNumber: true, currentDivisionId: true } as const;
   const candidates: Candidate[] = [];
 
-  // ── PLACEMENT: PLACED / TRANSFERRED orders past their 48h deadline ──────────
+  // ── PLACEMENT: PLACED / TRANSFERRED orders past their 72h deadline ──────────
   const placement = await prisma.order.findMany({
     where: { status: { in: ["PLACED", "TRANSFERRED"] }, slaDeadline: { not: null, lt: now } },
     select: { ...base, slaDeadline: true },

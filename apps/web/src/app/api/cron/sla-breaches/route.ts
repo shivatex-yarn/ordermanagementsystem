@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { runSlaBreachCheck } from "@/lib/sla-breach-job";
-import { isWithinSlaBusinessHours } from "@/lib/sla-calendar";
 
 /**
  * Vercel Cron invokes scheduled jobs with HTTP GET (see vercel.json crons).
@@ -21,13 +20,7 @@ function authorizeCron(req: Request): boolean {
 
 async function runSlaBreachHandler(): Promise<NextResponse> {
   try {
-    // Safety guard: skip if the cron misfired outside SLA business hours
-    // (Mon–Sat, 10:00–18:00 IST, non-holiday). The breach job performs the
-    // same check internally, but an early return here avoids a DB round-trip.
-    const now = new Date();
-    if (!isWithinSlaBusinessHours(now)) {
-      return NextResponse.json({ skipped: true, reason: "outside business hours" });
-    }
+    // Strict 72-hour SLA: the check runs around the clock — no business-hours gating.
     const result = await runSlaBreachCheck();
     return NextResponse.json(result);
   } catch (err) {
