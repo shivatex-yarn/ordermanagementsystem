@@ -2,7 +2,7 @@
  * Single source of truth for company / product naming.
  * Change the company name here and it updates everywhere in the app.
  */
-export const COMPANY_NAME = "Shiva TexYarn Limited";
+export const COMPANY_NAME = "Shiva Texyarn Limited";
 
 /** Product name shown alongside the company name. */
 export const APP_NAME = "Enquiry Management System";

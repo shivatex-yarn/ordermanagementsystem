@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
 import { signToken } from "@/lib/auth";
+import { describeDevice, logAudit } from "@/lib/activity";
 import { loginSchema } from "@/lib/validation";
 import { getRateLimitIdentifier, rateLimit } from "@/lib/rate-limit";
 import { Role } from "@prisma/client";
@@ -159,6 +160,7 @@ export async function POST(req: Request) {
       console.error("[login] bcrypt.compare failed:", compareErr);
     }
     if (!valid) {
+      await logAudit({ actor: null, fallbackName: user.name, action: "LOGIN_FAILED", category: "AUTH", detail: `Wrong password for ${user.email}`, req });
       return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
     }
 
@@ -194,6 +196,7 @@ export async function POST(req: Request) {
         sid: sessionId,
       }),
     ]);
+    await logAudit({ actor: { sub: String(user.id), role: user.role }, action: "LOGIN", category: "AUTH", detail: describeDevice(userAgent), req });
     const response = NextResponse.json(
       {
         user: {

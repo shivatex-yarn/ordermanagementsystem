@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { logAudit, notify, salesInDivision, superAdminIds } from "@/lib/activity";
 import { withAuth, withRole } from "@/lib/with-auth";
 import { divisionCreateSchema } from "@/lib/validation";
 
@@ -21,6 +22,7 @@ export async function POST(req: Request) {
   if (!parsed.success) return NextResponse.json({ error: "Enter a division name" }, { status: 400 });
   try {
     const division = await prisma.division.create({ data: { name: parsed.data.name } });
+    await logAudit({ actor: auth.payload, action: "DIVISION_CREATED", category: "DIVISION", entityType: "Division", entityId: division.id, entityLabel: division.name, req });
     return NextResponse.json(division, { status: 201 });
   } catch {
     return NextResponse.json({ error: "A division with that name already exists" }, { status: 409 });

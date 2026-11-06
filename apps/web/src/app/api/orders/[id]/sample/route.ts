@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { logAudit, notify, salesInDivision, superAdminIds } from "@/lib/activity";
 import { withAuth } from "@/lib/with-auth";
 import { getScopedOrder } from "@/lib/orders";
 import { sampleSchema } from "@/lib/validation";
@@ -36,5 +37,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     detail: [d.sampleCourierName, d.sampleTrackingId].filter(Boolean).join(" · ") || null,
     actorId: Number(auth.payload.sub),
   });
+  await logAudit({ actor: auth.payload, action: "SAMPLE_SENT", category: "ENQUIRY", entityType: "Order", entityId: id, entityLabel: order.orderNumber, detail: [d.sampleCourierName, d.sampleTrackingId].filter(Boolean).join(" · ") || null, req });
+  void notify([order.createdById], { type: "SAMPLE_SENT", title: `Sample sent for ${order.orderNumber}`, body: [d.sampleCourierName, d.sampleTrackingId].filter(Boolean).join(" · ") || "Sample is on its way.", link: `/orders/${id}` }, Number(auth.payload.sub));
   return NextResponse.json(updated);
 }

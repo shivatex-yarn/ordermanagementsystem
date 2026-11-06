@@ -5,7 +5,9 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { BarChart3, ClipboardList, Globe2, LogOut, Menu, Users, X } from "lucide-react";
+import { BarChart3, Bell, ClipboardList, Globe2, LayoutDashboard, LogOut, Menu, ScrollText, UserCircle, Users, X } from "lucide-react";
+import { NotificationBell } from "@/components/notification-bell";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { performLogout } from "@/components/logout-button";
 import { useAuth } from "@/hooks/use-auth";
 import { useIdleLogout } from "@/hooks/use-idle-logout";
@@ -19,10 +21,13 @@ type Role = "SUPER_ADMIN" | "MANAGING_DIRECTOR" | "ACCOUNTS" | "MARKETING" | "SA
 type NavItem = { href: string; label: string; icon: React.ComponentType<{ className?: string }>; roles: Role[] };
 
 const NAV: NavItem[] = [
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ["MARKETING", "SALES"] },
   { href: "/overview", label: "Overview", icon: BarChart3, roles: ["SUPER_ADMIN", "MANAGING_DIRECTOR", "ACCOUNTS"] },
   { href: "/orders", label: "Enquiries", icon: ClipboardList, roles: ["SUPER_ADMIN", "MANAGING_DIRECTOR", "ACCOUNTS", "MARKETING", "SALES"] },
   { href: "/divisions", label: "Divisions", icon: Globe2, roles: ["SUPER_ADMIN", "MARKETING", "SALES"] },
   { href: "/team", label: "Team", icon: Users, roles: ["SUPER_ADMIN"] },
+  { href: "/audit", label: "Audit log", icon: ScrollText, roles: ["SUPER_ADMIN"] },
+  { href: "/notifications", label: "Notifications", icon: Bell, roles: ["SUPER_ADMIN", "MANAGING_DIRECTOR", "ACCOUNTS", "MARKETING", "SALES"] },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -118,11 +123,31 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </aside>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <header className="flex h-14 shrink-0 items-center gap-3 border-b border-[var(--app-line)] bg-[var(--app-surface)] px-4 md:hidden">
-          <button aria-label="Open menu" className="rounded-lg border border-[var(--app-line)] p-2 text-[var(--app-ink-2)]" onClick={() => setOpen(true)}>
+        <header className="flex h-16 shrink-0 items-center gap-3 border-b border-[var(--app-line)] bg-[var(--app-surface)] px-4 sm:px-8">
+          <button aria-label="Open menu" className="rounded-lg border border-[var(--app-line)] p-2 text-[var(--app-ink-2)] md:hidden" onClick={() => setOpen(true)}>
             <Menu className="h-4 w-4" />
           </button>
-          <span className="text-sm font-bold text-[var(--app-ink)]">{COMPANY_NAME}</span>
+          <span className="truncate text-sm font-bold text-[var(--app-ink)] md:hidden">{COMPANY_NAME}</span>
+          <div className="ml-auto flex items-center gap-3">
+            <NotificationBell />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button aria-label="Account menu" className="flex items-center gap-2.5 rounded-xl p-1 pr-2 text-left transition-colors hover:bg-[var(--app-surface-sunk)]">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--app-brand)] text-xs font-bold text-white">{initials}</span>
+                  <span className="hidden leading-tight sm:block"><span className="block max-w-[11rem] truncate text-sm font-bold text-[var(--app-ink)]">{user.name}</span><span className="block text-[11px] uppercase tracking-wide text-[var(--app-ink-3)]">{roleLabel(user.role)}</span></span>
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64">
+                <DropdownMenuLabel className="font-normal">
+                  <span className="block text-sm font-bold text-[var(--app-ink)]">{user.name}</span>
+                  <span className="block truncate text-xs text-[var(--app-ink-3)]">{user.email}</span>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem className="cursor-pointer gap-2" onClick={() => router.push("/profile")}><UserCircle className="h-4 w-4" />Profile</DropdownMenuItem>
+                <DropdownMenuItem className="cursor-pointer gap-2 text-[var(--app-late-ink)] focus:text-[var(--app-late-ink)]" onClick={() => void logout()}><LogOut className="h-4 w-4" />Sign out</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </header>
         <main className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-6 sm:px-8 sm:py-8">
           <div className="mx-auto w-full max-w-6xl space-y-6">{children}</div>

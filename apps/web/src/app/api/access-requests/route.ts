@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { logAudit, notify, salesInDivision, superAdminIds } from "@/lib/activity";
 import { withAuth } from "@/lib/with-auth";
 import { accessRequestSchema } from "@/lib/validation";
 
@@ -43,5 +44,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "You already asked for this division. Wait for the admin." }, { status: 409 });
   }
   const created = await prisma.divisionAccessRequest.create({ data: { userId, divisionId, reason }, include });
+  await logAudit({ actor: auth.payload, action: "ACCESS_REQUESTED", category: "ACCESS", entityType: "Division", entityId: divisionId, entityLabel: created.division.name, detail: reason, req });
+  void notify(await superAdminIds(), { type: "ACCESS_REQUEST", title: `${created.user.name} wants ${created.division.name}`, body: reason, link: "/divisions" });
   return NextResponse.json(created, { status: 201 });
 }

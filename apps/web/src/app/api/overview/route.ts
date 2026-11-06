@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { withRole } from "@/lib/with-auth";
+import { computeAnalytics } from "@/lib/analytics";
 import { orderListSelect } from "@/lib/orders";
 
 /** Read-only roll-up for Managing director, Accounts and Super admin. */
-export async function GET() {
+export async function GET(req: Request) {
   const auth = await withRole(["MANAGING_DIRECTOR", "ACCOUNTS", "SUPER_ADMIN"]);
   if (auth.response) return auth.response;
+  const sp = new URL(req.url).searchParams;
   const [byStatus, byDivision, divisions, recent, feedback, samples] = await Promise.all([
     prisma.order.groupBy({ by: ["status"], _count: { _all: true } }),
     prisma.order.groupBy({ by: ["divisionId"], _count: { _all: true } }),
@@ -27,5 +29,6 @@ export async function GET() {
     samples,
     recent,
     feedback,
+    analytics: await computeAnalytics({}, { days: Number(sp.get("days")) || 30, divisionId: Number(sp.get("divisionId")) || undefined, from: sp.get("from") || undefined, to: sp.get("to") || undefined }),
   });
 }

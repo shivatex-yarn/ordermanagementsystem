@@ -1,48 +1,32 @@
 import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { logAudit, notify, salesInDivision, superAdminIds } from "@/lib/activity";
 import { withAuth, accessibleDivisionIds } from "@/lib/with-auth";
 import { createOrderSchema } from "@/lib/validation";
 import { canCreateEnquiry } from "@/lib/roles";
-import { createOrderRow, orderListSelect, scopeWhere } from "@/lib/orders";
+import { createOrderRow, orderListSelect } from "@/lib/orders";
+import { buildOrderWhere } from "@/lib/order-filters";
 import { appendTimeline } from "@/lib/timeline";
 
-/** List enquiries the person can see. Filters: status, divisionId, q (search), mine=1. */
+const DEFAULT_PAGE_SIZE = 10;
+
+/** List enquiries the person can see. Filters: status, divisionId, from, to (enquiry date), q (search), mine=1. Paged by 10 (or 5 with pageSize=5). */
 export async function GET(req: Request) {
   const auth = await withAuth();
   if (auth.response) return auth.response;
   const sp = new URL(req.url).searchParams;
-  const where: Prisma.OrderWhereInput = { ...(await scopeWhere(auth.payload)) };
+  const { base, where } = await buildOrderWhere(sp, auth.payload);
 
-  const status = sp.get("status");
-  if (status && ["PLACED", "PRICED", "CLOSED", "CANCELLED"].includes(status)) where.status = status as never;
-  const divisionId = Number(sp.get("divisionId"));
-  if (divisionId) where.divisionId = divisionId;
-  if (sp.get("mine") === "1") {
-    const me = Number(auth.payload.sub);
-    where.OR = [{ createdById: me }, { assignedToId: me }];
-  }
-  const q = sp.get("q")?.trim();
-  if (q) {
-    where.AND = [
-      {
-        OR: [
-          { customerName: { contains: q, mode: "insensitive" } },
-          { companyName: { contains: q, mode: "insensitive" } },
-          { orderNumber: { contains: q, mode: "insensitive" } },
-          { productDetails: { contains: q, mode: "insensitive" } },
-        ],
-      },
-    ];
-  }
-
-  const scope = await scopeWhere(auth.payload);
-  const [orders, counts] = await Promise.all([
-    prisma.order.findMany({ where, orderBy: { enquiryDate: "desc" }, take: 300, select: orderListSelect }),
-    prisma.order.groupBy({ by: ["status"], where: scope, _count: { _all: true } }),
+  const PAGE_SIZE = [5, 10].includes(Number(sp.get("pageSize"))) ? Number(sp.get("pageSize")) : DEFAULT_PAGE_SIZE;
+  const page = Math.max(1, Number(sp.get("page")) || 1);
+  const [orders, total, counts] = await Promise.all([
+    prisma.order.findMany({ where, orderBy: [{ enquiryDate: "desc" }, { id: "desc" }], skip: (page - 1) * PAGE_SIZE, take: PAGE_SIZE, select: orderListSelect }),
+    prisma.order.count({ where }),
+    prisma.order.groupBy({ by: ["status"], where: base, _count: { _all: true } }),
   ]);
   const byStatus = Object.fromEntries(counts.map((c) => [c.status, c._count._all]));
-  return NextResponse.json({ orders, counts: byStatus });
+  return NextResponse.json({ orders, total, page, pageSize: PAGE_SIZE, counts: byStatus });
 }
 
 /** Marketing logs a new enquiry. Phone is optional. */
@@ -90,5 +74,8 @@ export async function POST(req: Request) {
     detail: d.isSample ? "Client wants a sample." : null,
     actorId: Number(auth.payload.sub),
   });
+  const me = Number(auth.payload.sub);
+  await logAudit({ actor: auth.payload, action: "ENQUIRY_CREATED", category: "ENQUIRY", entityType: "Order", entityId: order.id, entityLabel: order.orderNumber, detail: `${d.companyName || d.customerName}${d.isSample ? " · sample" : ""}`, req });
+  void notify(await salesInDivision(d.divisionId), { type: "ENQUIRY_NEW", title: `New enquiry ${order.orderNumber}`, body: `${d.companyName || d.customerName} needs pricing${d.isSample ? " (sample requested)" : ""}.`, link: `/orders/${order.id}` }, me);
   return NextResponse.json(order, { status: 201 });
 }

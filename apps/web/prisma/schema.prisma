@@ -1,4 +1,4 @@
-// Shiva TexYarn Limited — Enquiry Management System
+// Shiva Texyarn Limited — Enquiry Management System
 // Roles: Super Admin (manages team), Managing Director and Accounts (read-only overview),
 // Marketing (logs enquiries), Sales (adds pricing / sample / client feedback).
 
@@ -51,6 +51,8 @@ model User {
   pricedOrders   Order[]                @relation("OrderPricedBy")
   loginSessions  UserLoginSession[]
   timelineEvents EnquiryTimelineEvent[] @relation("TimelineEventActor")
+  auditLogs      AuditLog[]
+  notifications  Notification[]
 
   /// Divisions this person may work in (assigned by Super Admin).
   divisions              UserDivision[]
@@ -210,4 +212,47 @@ model EnquiryTimelineEvent {
   @@index([orderId, createdAt(sort: Desc)])
   @@index([createdAt(sort: Desc)])
   @@map("enquiry_timeline_events")
+}
+
+/// Who did what, and when. Shown to the Super admin on the Audit log screen.
+/// userName / userRole are snapshots so history stays readable after a person is deleted.
+model AuditLog {
+  id          Int      @id @default(autoincrement())
+  userId      Int?     @map("user_id")
+  userName    String   @map("user_name")
+  userRole    String?  @map("user_role")
+  /// AUTH | ENQUIRY | TEAM | DIVISION | ACCESS
+  category    String
+  /// e.g. ENQUIRY_CREATED, PRICING_ADDED, LOGIN
+  action      String
+  entityType  String?  @map("entity_type")
+  entityId    Int?     @map("entity_id")
+  entityLabel String?  @map("entity_label")
+  detail      String?  @db.Text
+  ipAddress   String?  @map("ip_address")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([category, createdAt(sort: Desc)])
+  @@map("audit_logs")
+}
+
+/// In-app notifications shown under the bell in the header.
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  type      String
+  title     String
+  body      String   @db.Text
+  link      String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read, createdAt(sort: Desc)])
+  @@map("notifications")
 }

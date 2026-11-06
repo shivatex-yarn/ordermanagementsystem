@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { logAudit, notify, salesInDivision, superAdminIds } from "@/lib/activity";
 import { withAuth } from "@/lib/with-auth";
 import { getScopedOrder } from "@/lib/orders";
 import { feedbackSchema } from "@/lib/validation";
@@ -39,5 +40,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     detail: clientFeedback,
     actorId: Number(auth.payload.sub),
   });
+  await logAudit({ actor: auth.payload, action: close ? "ENQUIRY_CLOSED" : "CLIENT_FEEDBACK", category: "ENQUIRY", entityType: "Order", entityId: id, entityLabel: order.orderNumber, detail: `${clientResponse}: ${clientFeedback.slice(0, 160)}`, req });
+  void notify([order.createdById, order.assignedToId], { type: "CLIENT_FEEDBACK", title: close ? `${order.orderNumber} closed: client ${clientResponse === "ACCEPTED" ? "accepted" : "declined"}` : `Client feedback on ${order.orderNumber}`, body: clientFeedback.slice(0, 140), link: `/orders/${id}` }, Number(auth.payload.sub));
   return NextResponse.json(updated);
 }
