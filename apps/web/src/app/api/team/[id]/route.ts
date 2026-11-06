@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
+import { logAudit, notify, salesInDivision, superAdminIds } from "@/lib/activity";
 import { withRole } from "@/lib/with-auth";
 import { adminUpdateUserSchema } from "@/lib/validation";
 
@@ -33,6 +34,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       select: { id: true, name: true, email: true, phone: true, role: true, active: true },
     });
   });
+  const what = parsed.data.active === false ? "TEAM_MEMBER_DEACTIVATED" : parsed.data.active === true ? "TEAM_MEMBER_ACTIVATED" : "TEAM_MEMBER_EDITED";
+  await logAudit({ actor: auth.payload, action: what, category: "TEAM", entityType: "User", entityId: id, entityLabel: user.name, detail: divisionIds ? `Divisions set (${divisionIds.length})` : parsed.data.role ? `Role ${parsed.data.role}` : null, req });
   return NextResponse.json(user);
 }
 
@@ -64,5 +67,6 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
     );
   }
   await prisma.user.delete({ where: { id } });
+  await logAudit({ actor: auth.payload, action: "TEAM_MEMBER_DELETED", category: "TEAM", entityType: "User", entityId: id, entityLabel: user.name, detail: user.role, req: _req });
   return NextResponse.json({ ok: true });
 }

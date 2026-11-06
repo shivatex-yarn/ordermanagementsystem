@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
+import { logAudit, notify, salesInDivision, superAdminIds } from "@/lib/activity";
 import { withRole } from "@/lib/with-auth";
 import { adminCreateUserSchema } from "@/lib/validation";
 import { sendEmail } from "@/lib/email";
@@ -60,5 +61,6 @@ export async function POST(req: Request) {
     html: `<p>Hi ${d.name},</p><p>${COMPANY_NAME} has added you to the enquiry system as <b>${roleLabel(d.role)}</b>. Sign in with this email and the password your admin shared with you.</p>`,
     text: `Hi ${d.name}, you have been added to the ${COMPANY_NAME} enquiry system. Sign in with this email and the password your admin shared.`,
   }).catch(() => undefined);
+  await logAudit({ actor: auth.payload, action: "TEAM_MEMBER_ADDED", category: "TEAM", entityType: "User", entityId: user.id, entityLabel: user.name, detail: `${d.role}${d.divisionIds.length ? " · " + d.divisionIds.length + " divisions" : ""}`, req });
   return NextResponse.json(shape(user), { status: 201 });
 }

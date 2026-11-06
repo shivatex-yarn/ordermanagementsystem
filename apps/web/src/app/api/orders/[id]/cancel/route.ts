@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { logAudit, notify, salesInDivision, superAdminIds } from "@/lib/activity";
 import { withAuth } from "@/lib/with-auth";
 import { getScopedOrder } from "@/lib/orders";
 import { cancelOrderSchema } from "@/lib/validation";
@@ -26,5 +27,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     data: { status: "CANCELLED", cancellationReason: parsed.data.reason, closedAt: new Date() },
   });
   await appendTimeline({ orderId: id, type: "ENQUIRY_CANCELLED", title: "Enquiry cancelled", detail: parsed.data.reason, actorId: Number(auth.payload.sub) });
+  await logAudit({ actor: auth.payload, action: "ENQUIRY_CANCELLED", category: "ENQUIRY", entityType: "Order", entityId: id, entityLabel: order.orderNumber, detail: parsed.data.reason, req });
+  void notify([order.createdById, order.pricedById], { type: "ENQUIRY_CANCELLED", title: `${order.orderNumber} was cancelled`, body: parsed.data.reason, link: `/orders/${id}` }, Number(auth.payload.sub));
   return NextResponse.json(updated);
 }

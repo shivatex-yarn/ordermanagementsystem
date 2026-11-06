@@ -2,6 +2,7 @@
 
 import { use, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Check, FlaskConical } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
@@ -11,12 +12,12 @@ import { Callout, NextStep } from "@/components/ui/guidance";
 import { StatusPill } from "@/components/ui/status-pill";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Field, FormError, selectClass, textareaClass } from "@/components/ui/field";
-import { canPrice } from "@/lib/roles";
+import { Field, FormError, Segmented, selectClass, textareaClass } from "@/components/ui/field";
+import { canCreateEnquiry, canPrice } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 
 type Order = {
-  id: number; orderNumber: string; status: string; enquiryDate: string;
+  id: number; divisionId: number; orderNumber: string; status: string; enquiryDate: string;
   customerName: string; companyName: string | null; customerPhone: string | null; customerEmail: string | null;
   customerAddress: string | null; gstNumber: string | null; gstCopyUrl: string | null;
   productDetails: string | null; isSample: boolean;
@@ -25,7 +26,7 @@ type Order = {
   deliveryTime: string | null; pricingNotes: string | null; pricedAt: string | null; pricedBy: { name: string } | null;
   clientFeedback: string | null; clientResponse: string | null; clientFeedbackAt: string | null;
   cancellationReason: string | null;
-  division: { name: string }; createdBy: { name: string };
+  division: { id: number; name: string }; createdBy: { name: string };
   timelineEvents: { id: number; title: string; detail: string | null; createdAt: string; actor: { name: string } | null }[];
 };
 
@@ -129,6 +130,29 @@ function FeedbackForm({ o }: { o: Order }) {
   );
 }
 
+function DeleteBox({ o }: { o: Order }) {
+  const router = useRouter();
+  const qc = useQueryClient();
+  const [confirm, setConfirm] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function del() {
+    setError(null);
+    try {
+      await api(`/api/orders/${o.id}`, { method: "DELETE" });
+      await Promise.all([qc.invalidateQueries({ queryKey: ["orders"] }), qc.invalidateQueries({ queryKey: ["dashboard"] }), qc.invalidateQueries({ queryKey: ["overview"] })]);
+      router.push("/orders");
+    } catch (e) { setError((e as Error).message); }
+  }
+  if (!confirm) return <button onClick={() => setConfirm(true)} className="text-xs font-semibold text-[var(--app-late-ink)] underline">Delete this enquiry</button>;
+  return (
+    <div className="space-y-3 rounded-xl border border-[var(--app-late-line)] bg-[var(--app-late-bg)] p-4">
+      <p className="text-sm text-[var(--app-late-ink)]">Delete <b>{o.orderNumber}</b> and its history for good? This can&apos;t be undone.</p>
+      <FormError message={error} />
+      <div className="flex gap-2"><Button variant="destructive" size="sm" onClick={() => void del()}>Yes, delete</Button><Button variant="ghost" size="sm" onClick={() => setConfirm(false)}>Keep it</Button></div>
+    </div>
+  );
+}
+
 function CancelBox({ o }: { o: Order }) {
   const { run, error, busy } = useAction(o.id);
   const [open, setOpen] = useState(false);
@@ -146,9 +170,60 @@ function CancelBox({ o }: { o: Order }) {
   );
 }
 
+function EditForm({ o, onDone }: { o: Order; onDone: () => void }) {
+  const { user } = useAuth();
+  const { run, error, busy } = useEdit(o.id, onDone);
+  const [f, setF] = useState({
+    enquiryDate: o.enquiryDate.slice(0, 10), customerName: o.customerName, companyName: o.companyName ?? "",
+    customerPhone: o.customerPhone ?? "", customerEmail: o.customerEmail ?? "", customerAddress: o.customerAddress ?? "",
+    gstNumber: o.gstNumber ?? "", productDetails: o.productDetails ?? "",
+  });
+  const [divisionId, setDivisionId] = useState<number>(o.division.id);
+  const [isSample, setIsSample] = useState(o.isSample);
+  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setF((p) => ({ ...p, [k]: e.target.value }));
+  const divisions = user?.divisions ?? [];
+  return (
+    <form onSubmit={(e) => { e.preventDefault(); void run({ ...f, divisionId, isSample }); }} className="space-y-4 p-5">
+      <Field label="Enquiry date" htmlFor="ed"><Input id="ed" type="date" required value={f.enquiryDate} onChange={set("enquiryDate")} /></Field>
+      <Field label="Contact person" htmlFor="ec"><Input id="ec" required value={f.customerName} onChange={set("customerName")} /></Field>
+      <Field label="Company" optional htmlFor="eco"><Input id="eco" value={f.companyName} onChange={set("companyName")} /></Field>
+      <Field label="Phone" optional htmlFor="eph"><Input id="eph" inputMode="tel" value={f.customerPhone} onChange={set("customerPhone")} /></Field>
+      <Field label="Email" optional htmlFor="eem"><Input id="eem" type="email" value={f.customerEmail} onChange={set("customerEmail")} /></Field>
+      <Field label="GST number" optional htmlFor="egs"><Input id="egs" value={f.gstNumber} onChange={set("gstNumber")} /></Field>
+      <Field label="Address" optional htmlFor="ead"><textarea id="ead" className={textareaClass} style={{ minHeight: 60 }} value={f.customerAddress} onChange={set("customerAddress")} /></Field>
+      <Field label="Division" htmlFor="edv">
+        <select id="edv" className={selectClass} value={divisionId} onChange={(e) => setDivisionId(Number(e.target.value))}>
+          {!divisions.some((d) => d.id === o.division.id) ? <option value={o.division.id}>{o.division.name}</option> : null}
+          {divisions.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+        </select>
+      </Field>
+      <Field label="Product / requirement details" htmlFor="epd"><textarea id="epd" required className={textareaClass} value={f.productDetails} onChange={set("productDetails")} /></Field>
+      <Field label="Is this a sample?"><Segmented value={isSample} onChange={setIsSample} options={[{ value: true, label: "Yes, sample" }, { value: false, label: "No, full order" }]} /></Field>
+      <FormError message={error} />
+      <div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={onDone}>Cancel</Button><Button type="submit" disabled={busy}>{busy ? "Saving…" : "Save changes"}</Button></div>
+    </form>
+  );
+}
+
+function useEdit(orderId: number, onDone: () => void) {
+  const qc = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  async function run(json: unknown) {
+    setBusy(true); setError(null);
+    try {
+      await api(`/api/orders/${orderId}`, { method: "PATCH", json });
+      await Promise.all([qc.invalidateQueries({ queryKey: ["order", orderId] }), qc.invalidateQueries({ queryKey: ["orders"] }), qc.invalidateQueries({ queryKey: ["dashboard"] })]);
+      onDone();
+    } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
+  }
+  return { run, error, busy };
+}
+
 export default function EnquiryPage({ params }: { params: Promise<{ id: string }> }) {
   const id = Number(use(params).id);
   const { user } = useAuth();
+  const [editing, setEditing] = useState(false);
   const { data, isLoading, error } = useQuery({ queryKey: ["order", id], queryFn: () => api<{ order: Order }>(`/api/orders/${id}`) });
 
   if (isLoading) return <PanelSkeleton className="h-96" />;
@@ -156,6 +231,7 @@ export default function EnquiryPage({ params }: { params: Promise<{ id: string }
   const o = data.order;
   const sales = canPrice(user?.role);
   const finished = o.status === "CLOSED" || o.status === "CANCELLED";
+  const canEdit = canCreateEnquiry(user?.role) && !finished;
 
   let next: React.ReactNode = null;
   if (o.status === "CANCELLED") next = <NextStep tone="info" eyebrow="Cancelled" title="This enquiry was cancelled" description={o.cancellationReason ?? undefined} />;
@@ -208,7 +284,8 @@ export default function EnquiryPage({ params }: { params: Promise<{ id: string }
 
         <div className="space-y-6">
           <Panel>
-            <PanelHeader title="Enquiry" />
+            <PanelHeader title="Enquiry" action={canEdit && !editing ? <Button variant="outline" size="sm" onClick={() => setEditing(true)}>Edit</Button> : undefined} />
+            {editing ? <EditForm o={o} onDone={() => setEditing(false)} /> : <>
             <dl className="divide-y divide-[var(--app-line-soft)] px-5 py-2">
               <Row k="Contact" v={o.customerName} /><Row k="Company" v={o.companyName} /><Row k="Phone" v={o.customerPhone} />
               <Row k="Email" v={o.customerEmail} /><Row k="GST" v={o.gstNumber} />
@@ -219,6 +296,7 @@ export default function EnquiryPage({ params }: { params: Promise<{ id: string }
               <p className="text-xs font-bold uppercase tracking-wide text-[var(--app-ink-3)]">Requirement</p>
               <p className="mt-1.5 whitespace-pre-wrap text-sm text-[var(--app-ink)]">{o.productDetails}</p>
             </div>
+            </>}
           </Panel>
 
           <Panel>
@@ -234,6 +312,7 @@ export default function EnquiryPage({ params }: { params: Promise<{ id: string }
               ))}
             </ol>
           </Panel>
+          {user?.role === "SUPER_ADMIN" ? <DeleteBox o={o} /> : null}
           {!finished && user && user.role !== "MANAGING_DIRECTOR" && user.role !== "ACCOUNTS" ? <CancelBox o={o} /> : null}
         </div>
       </div>

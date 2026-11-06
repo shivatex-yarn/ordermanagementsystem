@@ -56,7 +56,22 @@ export const createOrderSchema = z.object({
   assignedToId: z.number().int().positive().optional(),
 });
 
-export const updateOrderSchema = createOrderSchema.partial();
+/** Edit: every field optional; empty text clears the field. */
+export const updateOrderSchema = z
+  .object({
+    enquiryDate: z.string().min(1),
+    customerName: z.string().min(1, "Customer name is required").max(500),
+    companyName: z.string().max(500),
+    customerPhone: z.string().max(30),
+    customerEmail: z.string().email("Invalid email address").max(500).or(z.literal("")),
+    customerAddress: z.string().max(2000),
+    gstNumber: z.string().max(50),
+    gstCopyUrl: z.string().max(8_000_000),
+    divisionId: z.number().int().positive(),
+    productDetails: z.string().min(1, "Describe what the client needs").max(10000),
+    isSample: z.boolean(),
+  })
+  .partial();
 
 export const pricingSchema = z.object({
   pricePerUnit: z.coerce.number().positive("Enter a price greater than 0"),

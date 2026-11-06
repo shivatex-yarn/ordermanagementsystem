@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { logAudit, notify, salesInDivision, superAdminIds } from "@/lib/activity";
 import { withRole } from "@/lib/with-auth";
 import { divisionUpdateSchema } from "@/lib/validation";
 
@@ -10,7 +11,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   const parsed = divisionUpdateSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   try {
-    return NextResponse.json(await prisma.division.update({ where: { id }, data: parsed.data }));
+    const updated = await prisma.division.update({ where: { id }, data: parsed.data });
+    await logAudit({ actor: auth.payload, action: parsed.data.active === false ? "DIVISION_DEACTIVATED" : parsed.data.active === true ? "DIVISION_ACTIVATED" : "DIVISION_RENAMED", category: "DIVISION", entityType: "Division", entityId: id, entityLabel: updated.name, req });
+    return NextResponse.json(updated);
   } catch {
     return NextResponse.json({ error: "Couldn't update that division" }, { status: 409 });
   }
@@ -33,5 +36,6 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
     );
   }
   await prisma.division.delete({ where: { id } });
+  await logAudit({ actor: auth.payload, action: "DIVISION_DELETED", category: "DIVISION", entityType: "Division", entityId: id, entityLabel: division.name, req: _req });
   return NextResponse.json({ ok: true });
 }

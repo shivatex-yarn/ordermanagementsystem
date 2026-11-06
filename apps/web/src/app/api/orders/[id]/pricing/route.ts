@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { logAudit, notify, salesInDivision, superAdminIds } from "@/lib/activity";
 import { withAuth } from "@/lib/with-auth";
 import { getScopedOrder } from "@/lib/orders";
 import { pricingSchema } from "@/lib/validation";
@@ -44,5 +45,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     detail: `${d.pricePerUnit} per ${d.priceUnit}`,
     actorId: Number(auth.payload.sub),
   });
+  await logAudit({ actor: auth.payload, action: revised ? "PRICING_REVISED" : "PRICING_ADDED", category: "ENQUIRY", entityType: "Order", entityId: id, entityLabel: order.orderNumber, detail: `${d.pricePerUnit} per ${d.priceUnit}`, req });
+  void notify([order.createdById, order.assignedToId], { type: "PRICING_ADDED", title: `Pricing ${revised ? "revised" : "added"} on ${order.orderNumber}`, body: `${d.pricePerUnit} per ${d.priceUnit}. You can quote the client now.`, link: `/orders/${id}` }, Number(auth.payload.sub));
   return NextResponse.json(updated);
 }

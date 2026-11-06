@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 import { jwtVerify } from "jose";
 
 const publicPaths = ["/login", "/forgot-password", "/reset-password", "/api/auth", "/api/health"];
-const adminPaths = ["/team"];
+const adminPaths = ["/team", "/audit"];
 
 const JWT_SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET || "default-secret-change-in-production-min-32"

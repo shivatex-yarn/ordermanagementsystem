@@ -3,8 +3,8 @@
 import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
-import { FlaskConical, Plus, Search } from "lucide-react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { ChevronLeft, ChevronRight, FlaskConical, Plus, Search, X } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { api, fmtDate, fmtMoney } from "@/lib/format";
 import { Panel, PageHeader, EmptyState, PanelSkeleton } from "@/components/ui/panel";
@@ -13,6 +13,7 @@ import { StatusPill } from "@/components/ui/status-pill";
 import { buttonVariants } from "@/components/ui/button";
 import { selectClass } from "@/components/ui/field";
 import { canCreateEnquiry } from "@/lib/roles";
+import { ExportMenu } from "@/components/export-menu";
 import { cn } from "@/lib/utils";
 
 type Row = {
@@ -30,7 +31,7 @@ type Row = {
   division: { id: number; name: string };
   createdBy: { name: string };
 };
-type Data = { orders: Row[]; counts: Record<string, number> };
+type Data = { orders: Row[]; total: number; page: number; pageSize: number; counts: Record<string, number> };
 
 const TABS = [
   { key: "", label: "All" },
@@ -46,18 +47,31 @@ function List() {
   const [status, setStatus] = useState(sp.get("status") ?? "");
   const [division, setDivision] = useState("");
   const [q, setQ] = useState(sp.get("q") ?? "");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [page, setPage] = useState(1);
+  const change = <T,>(setter: (v: T) => void) => (v: T) => { setter(v); setPage(1); };
 
   const qs = new URLSearchParams();
   if (status) qs.set("status", status);
   if (division) qs.set("divisionId", division);
   if (q.trim()) qs.set("q", q.trim());
+  if (from) qs.set("from", from);
+  if (to) qs.set("to", to);
+  const exportQuery = qs.toString();
+  qs.set("page", String(page));
   const { data, isLoading } = useQuery({
-    queryKey: ["orders", status, division, q],
+    queryKey: ["orders", status, division, q, from, to, page],
     queryFn: () => api<Data>(`/api/orders?${qs}`),
     staleTime: 15_000,
+    placeholderData: keepPreviousData,
   });
   const counts = data?.counts ?? {};
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  const filtered = !!(status || division || q.trim() || from || to);
+  const pages = Math.max(1, Math.ceil((data?.total ?? 0) / (data?.pageSize ?? 10)));
+  const firstRow = data && data.total ? (data.page - 1) * data.pageSize + 1 : 0;
+  const lastRow = data ? Math.min(data.total, data.page * data.pageSize) : 0;
   const role = user?.role;
   const divisions = user?.divisions ?? [];
 
@@ -71,9 +85,9 @@ function List() {
       );
     } else if (role === "SALES") {
       next = counts.PLACED ? (
-        <NextStep title={`${counts.PLACED} enquiries need your pricing`} description="Open one, add the price, then record the sample and client feedback as they happen." actionLabel="Show them" onAction={() => setStatus("PLACED")} />
+        <NextStep title={`${counts.PLACED} enquiries need your pricing`} description="Open one, add the price, then record the sample and client feedback as they happen." actionLabel="Show them" onAction={() => { setStatus("PLACED"); setPage(1); }} />
       ) : counts.PRICED ? (
-        <NextStep tone="wait" title={`${counts.PRICED} priced enquiries are waiting for the client`} description="Record what the client says as soon as you hear back." actionLabel="Show them" onAction={() => setStatus("PRICED")} />
+        <NextStep tone="wait" title={`${counts.PRICED} priced enquiries are waiting for the client`} description="Record what the client says as soon as you hear back." actionLabel="Show them" onAction={() => { setStatus("PRICED"); setPage(1); }} />
       ) : (
         <NextStep tone="done" eyebrow="All caught up" title="Nothing needs your pricing right now" description="New enquiries from Marketing will show up here." />
       );
@@ -83,6 +97,13 @@ function List() {
   return (
     <>
       <PageHeader title="Enquiries" description={total ? `${total} enquiries across ${role === "MARKETING" || role === "SALES" ? "your divisions" : "all divisions"}.` : "Every client enquiry, from first call to feedback."}>
+        {user ? <ExportMenu query={exportQuery} generatedBy={user.name} filters={[
+          ...(status ? [`Status: ${TABS.find((t) => t.key === status)?.label}`] : []),
+          ...(division ? [`Division: ${divisions.find((d) => String(d.id) === division)?.name ?? division}`] : []),
+          ...(from ? [`From ${from}`] : []),
+          ...(to ? [`To ${to}`] : []),
+          ...(q.trim() ? [`Search: "${q.trim()}"`] : []),
+        ]} /> : null}
         {role === "MARKETING" || role === "SUPER_ADMIN" ? (
           <Link href="/orders/new" className={buttonVariants()}><Plus className="h-4 w-4" /> New enquiry</Link>
         ) : null}
@@ -97,33 +118,42 @@ function List() {
               const n = t.key ? counts[t.key] ?? 0 : total;
               const on = status === t.key;
               return (
-                <button key={t.key} role="tab" aria-selected={on} onClick={() => setStatus(t.key)}
+                <button key={t.key} role="tab" aria-selected={on} onClick={() => { setStatus(t.key); setPage(1); }}
                   className={cn("rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors", on ? "bg-[var(--app-brand)] text-white" : "bg-[var(--app-surface-sunk)] text-[var(--app-ink-2)] hover:bg-[var(--app-line-soft)]")}>
                   {t.label} <span className={on ? "text-white/80" : "text-[var(--app-ink-3)]"}>{n}</span>
                 </button>
               );
             })}
           </div>
-          <div className="ml-auto flex w-full flex-wrap gap-2 sm:w-auto">
+          <div className="ml-auto flex w-full flex-wrap items-center gap-2 sm:w-auto">
             {divisions.length > 1 ? (
-              <select aria-label="Division" value={division} onChange={(e) => setDivision(e.target.value)} className={cn(selectClass, "w-44")}>
+              <select aria-label="Division" value={division} onChange={(e) => change(setDivision)(e.target.value)} className={cn(selectClass, "w-44")}>
                 <option value="">All divisions</option>
                 {divisions.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
             ) : null}
-            <div className="relative flex-1 sm:w-64">
+            <label className="flex items-center gap-1.5 text-xs font-semibold text-[var(--app-ink-3)]">From
+              <input type="date" value={from} max={to || undefined} onChange={(e) => change(setFrom)(e.target.value)} aria-label="From date" className="h-10 rounded-xl border border-[var(--app-line)] bg-white px-2.5 text-sm text-[var(--app-ink)]" />
+            </label>
+            <label className="flex items-center gap-1.5 text-xs font-semibold text-[var(--app-ink-3)]">To
+              <input type="date" value={to} min={from || undefined} onChange={(e) => change(setTo)(e.target.value)} aria-label="To date" className="h-10 rounded-xl border border-[var(--app-line)] bg-white px-2.5 text-sm text-[var(--app-ink)]" />
+            </label>
+            <div className="relative min-w-[12rem] flex-1 sm:w-56 sm:flex-none">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--app-ink-3)]" aria-hidden />
-              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search client or enquiry no." aria-label="Search enquiries"
+              <input value={q} onChange={(e) => change(setQ)(e.target.value)} placeholder="Search client or enquiry no." aria-label="Search enquiries"
                 className="h-10 w-full rounded-xl border border-[var(--app-line)] bg-[var(--app-surface-sunk)] pl-9 pr-3 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-[var(--app-brand)]/20" />
             </div>
+            {filtered ? (
+              <button onClick={() => { setStatus(""); setDivision(""); setQ(""); setFrom(""); setTo(""); setPage(1); }} className="inline-flex h-10 items-center gap-1 rounded-xl px-3 text-xs font-semibold text-[var(--app-ink-3)] hover:bg-[var(--app-surface-sunk)] hover:text-[var(--app-ink)]"><X className="h-3.5 w-3.5" />Clear</button>
+            ) : null}
           </div>
         </div>
 
         {isLoading ? (
           <PanelSkeleton className="m-4 h-64" />
         ) : !data?.orders.length ? (
-          <EmptyState icon={Search} title={q || status || division ? "No enquiries match" : "No enquiries yet"}
-            description={q || status || division ? "Try a different filter or clear the search." : "Enquiries logged by Marketing appear here."}
+          <EmptyState icon={Search} title={filtered ? "No enquiries match" : "No enquiries yet"}
+            description={filtered ? "Try a different filter, or clear them all." : "Enquiries logged by Marketing appear here."}
             action={!q && !status && role === "MARKETING" ? <Link href="/orders/new" className={buttonVariants({ size: "sm" })}>Log the first enquiry</Link> : undefined} />
         ) : (
           <div className="overflow-x-auto">
@@ -152,6 +182,16 @@ function List() {
             </table>
           </div>
         )}
+        {data && data.total > 0 ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--app-line-soft)] px-5 py-3 text-sm">
+            <p className="tnum text-[var(--app-ink-3)]">Showing {firstRow}–{lastRow} of {data.total}</p>
+            <div className="flex items-center gap-1">
+              <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1} aria-label="Previous page" className="rounded-lg border border-[var(--app-line)] p-2 text-[var(--app-ink-2)] hover:bg-[var(--app-surface-sunk)] disabled:opacity-40"><ChevronLeft className="h-4 w-4" /></button>
+              <span className="tnum px-3 text-xs font-semibold text-[var(--app-ink-2)]">Page {page} of {pages}</span>
+              <button onClick={() => setPage((p) => Math.min(pages, p + 1))} disabled={page >= pages} aria-label="Next page" className="rounded-lg border border-[var(--app-line)] p-2 text-[var(--app-ink-2)] hover:bg-[var(--app-surface-sunk)] disabled:opacity-40"><ChevronRight className="h-4 w-4" /></button>
+            </div>
+          </div>
+        ) : null}
       </Panel>
     </>
   );

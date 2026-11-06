@@ -62,7 +62,7 @@ export default function LoginPage() {
       queryClient.removeQueries({ queryKey: ["dashboard"] });
       queryClient.removeQueries({ queryKey: ["orders"] });
       const role = (data as { user?: { role?: string } }).user?.role;
-      router.push(role === "MANAGING_DIRECTOR" || role === "ACCOUNTS" ? "/overview" : "/orders");
+      router.push(role === "MARKETING" || role === "SALES" ? "/dashboard" : "/overview");
       router.refresh();
     } finally {
       setLoading(false);

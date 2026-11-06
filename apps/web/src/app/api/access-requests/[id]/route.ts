@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { logAudit, notify, salesInDivision, superAdminIds } from "@/lib/activity";
 import { withRole } from "@/lib/with-auth";
 import { accessDecisionSchema } from "@/lib/validation";
 
@@ -36,5 +37,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         ]
       : []),
   ]);
+  const who = await prisma.user.findUnique({ where: { id: request.userId }, select: { name: true } });
+  const div = await prisma.division.findUnique({ where: { id: request.divisionId }, select: { name: true } });
+  await logAudit({ actor: auth.payload, action: parsed.data.decision === "APPROVED" ? "ACCESS_APPROVED" : "ACCESS_DECLINED", category: "ACCESS", entityType: "Division", entityId: request.divisionId, entityLabel: div?.name, detail: `For ${who?.name ?? "user"}`, req });
+  void notify([request.userId], { type: "ACCESS_DECISION", title: `${div?.name ?? "Division"} access ${parsed.data.decision === "APPROVED" ? "approved" : "declined"}`, body: parsed.data.decision === "APPROVED" ? "You can now log and see enquiries in this division." : "The admin declined this request.", link: "/divisions" });
   return NextResponse.json({ ok: true });
 }
