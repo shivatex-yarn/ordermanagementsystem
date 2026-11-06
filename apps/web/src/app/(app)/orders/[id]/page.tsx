@@ -93,7 +93,7 @@ function SampleForm({ o }: { o: Order }) {
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) => setF((p) => ({ ...p, [k]: e.target.value }));
   return (
     <form onSubmit={(e) => { e.preventDefault(); void run("sample", f); }} className="space-y-5 p-5">
-      <div className="grid gap-5 sm:grid-cols-3">
+      <div className="grid gap-5 sm:grid-cols-2">
         <Field label="Date sent" htmlFor="sd"><Input id="sd" type="date" value={f.sampleSentAt} onChange={set("sampleSentAt")} /></Field>
         <Field label="Courier or carrier" optional htmlFor="sc"><Input id="sc" value={f.sampleCourierName} onChange={set("sampleCourierName")} placeholder="DTDC" /></Field>
         <Field label="Tracking ID" optional htmlFor="st"><Input id="st" value={f.sampleTrackingId} onChange={set("sampleTrackingId")} /></Field>

@@ -170,19 +170,24 @@ DROP INDEX "Order_priority_status_idx";
 DROP INDEX "Order_status_sla_deadline_idx";
 
 -- DropIndex
-DROP INDEX "Order_handoff_sla_deadline_idx";
+DROP INDEX IF EXISTS "Order_handoff_sla_deadline_idx";
+DROP INDEX IF EXISTS "Order_handoffSlaDeadline_idx";
 
 -- DropIndex
-DROP INDEX "Order_head_sample_approval_sla_deadline_idx";
+DROP INDEX IF EXISTS "Order_head_sample_approval_sla_deadline_idx";
+DROP INDEX IF EXISTS "Order_headSampleApprovalSlaDeadline_idx";
 
 -- DropIndex
-DROP INDEX "Order_sample_details_sla_deadline_idx";
+DROP INDEX IF EXISTS "Order_sample_details_sla_deadline_idx";
+DROP INDEX IF EXISTS "Order_sampleDetailsSlaDeadline_idx";
 
 -- DropIndex
-DROP INDEX "Order_sample_approval_sla_deadline_idx";
+DROP INDEX IF EXISTS "Order_sample_approval_sla_deadline_idx";
+DROP INDEX IF EXISTS "Order_sampleApprovalSlaDeadline_idx";
 
 -- DropIndex
-DROP INDEX "Order_shipment_sla_deadline_idx";
+DROP INDEX IF EXISTS "Order_shipment_sla_deadline_idx";
+DROP INDEX IF EXISTS "Order_shipmentSlaDeadline_idx";
 
 -- AlterTable
 ALTER TABLE "User" DROP COLUMN "division_id",
@@ -229,6 +234,7 @@ UPDATE "Order" SET
   customer_name = COALESCE(customer_name, company_name, 'Unknown');
 
 ALTER TABLE "Order"
+  DROP COLUMN "acceptance_reason",
   DROP COLUMN "accepted_by_id",
   DROP COLUMN "assigned_supervisor_id",
   DROP COLUMN "cancelled_at",
