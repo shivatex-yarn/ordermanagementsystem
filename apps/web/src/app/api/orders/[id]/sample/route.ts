@@ -1,56 +1,40 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { withAuth } from "@/lib/with-auth";
-import { runSampleAction, userMayRunSampleAction } from "@/lib/order-sample-actions";
+import { getScopedOrder } from "@/lib/orders";
+import { sampleSchema } from "@/lib/validation";
+import { appendTimeline } from "@/lib/timeline";
+import { canPrice } from "@/lib/roles";
 
-export async function POST(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const auth = await withAuth();
-    if (auth.response) return auth.response;
-    const id = Number((await params).id);
-    if (!Number.isInteger(id)) {
-      return NextResponse.json({ error: "Invalid order id" }, { status: 400 });
-    }
-    const order = await prisma.order.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        currentDivisionId: true,
-        createdById: true,
-        assignedSupervisorId: true,
-        headSampleRequestApprovedAt: true,
-        sampleRequested: true,
-        sampleApprovedAt: true,
-        status: true,
-      },
-    });
-    if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
-
-    if (auth.payload.role === "USER" && order.createdById !== Number(auth.payload.sub)) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
-    const body = await req.json().catch(() => ({}));
-    const action = typeof body?.action === "string" ? body.action : undefined;
-
-    const userId = Number(auth.payload.sub);
-
-    if (!action) {
-      return NextResponse.json({ error: "Missing action" }, { status: 400 });
-    }
-
-    const ok = await userMayRunSampleAction(userId, auth.payload.role, order, action);
-    if (!ok) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-
-    return await runSampleAction(id, userId, body);
-  } catch (err) {
-    console.error("[api/orders/:id/sample] 500", err);
-    return NextResponse.json(
-      { error: "Internal server error", detail: err instanceof Error ? err.message : String(err) },
-      { status: 500 }
-    );
+/** Sales records the sample that was sent (courier, tracking, date). */
+export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const auth = await withAuth();
+  if (auth.response) return auth.response;
+  if (!canPrice(auth.payload.role)) return NextResponse.json({ error: "Only Sales can update the sample" }, { status: 403 });
+  const id = Number((await ctx.params).id);
+  const order = await getScopedOrder(id, auth.payload);
+  if (!order) return NextResponse.json({ error: "Enquiry not found" }, { status: 404 });
+  if (!order.isSample) return NextResponse.json({ error: "This enquiry isn't marked as a sample" }, { status: 400 });
+  const parsed = sampleSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
   }
+  const d = parsed.data;
+  const updated = await prisma.order.update({
+    where: { id },
+    data: {
+      sampleSentAt: d.sampleSentAt ? new Date(d.sampleSentAt) : new Date(),
+      sampleCourierName: d.sampleCourierName ?? null,
+      sampleTrackingId: d.sampleTrackingId ?? null,
+      sampleRemarks: d.sampleRemarks ?? null,
+    },
+  });
+  await appendTimeline({
+    orderId: id,
+    type: "SAMPLE_UPDATED",
+    title: "Sample sent",
+    detail: [d.sampleCourierName, d.sampleTrackingId].filter(Boolean).join(" · ") || null,
+    actorId: Number(auth.payload.sub),
+  });
+  return NextResponse.json(updated);
 }

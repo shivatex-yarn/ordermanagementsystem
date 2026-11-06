@@ -12,7 +12,6 @@ export interface JWTPayload {
   sub: string;
   email: string;
   role: Role;
-  divisionId?: number;
   /** Login session id (UUID) for login history / logout tracking */
   sid?: string;
   iat?: number;

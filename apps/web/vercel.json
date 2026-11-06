@@ -1,9 +1,3 @@
 {
-  "buildCommand": "prisma generate && next build",
-  "crons": [
-    {
-      "path": "/api/cron/sla-breaches",
-      "schedule": "*/5 * * * *"
-    }
-  ]
+  "buildCommand": "prisma generate && next build"
 }

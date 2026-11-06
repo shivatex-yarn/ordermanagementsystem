@@ -61,7 +61,7 @@ export default function LoginPage() {
       queryClient.removeQueries({ queryKey: ["auth", "me"] });
       queryClient.removeQueries({ queryKey: ["dashboard"] });
       queryClient.removeQueries({ queryKey: ["orders"] });
-      router.push("/dashboard");
+      router.push("/orders");
       router.refresh();
     } finally {
       setLoading(false);
@@ -102,13 +102,13 @@ export default function LoginPage() {
               <span className="text-[#a5b4fc]">Enquiry.</span>
             </h1>
             <p className="mt-5 max-w-sm text-base leading-relaxed text-[var(--app-nav-ink)]">
-              Track, transfer, and manage all enquiries across divisions — from initial contact to final closure.
+              From the first client call to pricing, samples and feedback — every division&apos;s enquiries in one place.
             </p>
           </div>
 
           {/* Feature pills */}
           <div className="flex flex-wrap gap-2">
-            {["SLA Tracking", "Division Transfers", "Audit Logs", "Role Access", "Notifications"].map((f) => (
+            {["Log enquiries", "Add pricing", "Track samples", "Client feedback"].map((f) => (
               <span
                 key={f}
                 className="rounded-full border border-white/15 bg-white/10 px-3.5 py-1.5 text-xs font-semibold text-[var(--app-nav-ink)]"

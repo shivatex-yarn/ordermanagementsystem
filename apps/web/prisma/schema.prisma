@@ -1,92 +1,61 @@
-// Enterprise Order Management System - Prisma Schema
-// Supports 500-2000+ concurrent users, audit trail, SLA, multi-division workflow
+// Shiva TexYarn Limited — Enquiry Management System
+// Roles: Super Admin (manages team), Managing Director and Accounts (read-only overview),
+// Marketing (logs enquiries), Sales (adds pricing / sample / client feedback).
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
   directUrl = env("DIRECT_DATABASE_URL")
 }
 
 enum Role {
   SUPER_ADMIN
   MANAGING_DIRECTOR
-  MANAGER
-  DIVISION_HEAD
-  SUPERVISOR
-  ASM
   ACCOUNTS
-  USER
+  MARKETING
+  SALES
 }
 
+/// PLACED  → logged by Marketing, waiting for Sales pricing
+/// PRICED  → Sales has added pricing, waiting for client feedback
+/// CLOSED  → client feedback recorded, enquiry finished
+/// CANCELLED → dropped
 enum OrderStatus {
   PLACED
-  IN_PROGRESS
-  TRANSFERRED
-  REJECTED
-  COMPLETED
+  PRICED
+  CLOSED
   CANCELLED
 }
 
-/// Distinguishes existing vs new product development on an enquiry.
-enum ProductKind {
-  EXISTING
-  NEW
-}
-
-/// Salesperson-set / Division Head adjustable priority for enquiry triage.
-enum EnquiryPriority {
-  LOW
-  NORMAL
-  HIGH
-  CRITICAL
-}
-
 model User {
-  id           Int       @id @default(autoincrement())
+  id           Int      @id @default(autoincrement())
   name         String
-  email        String    @unique
-  passwordHash String    @map("password_hash")
-  role         Role      @default(USER)
-  active       Boolean   @default(true)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  email        String   @unique
+  /// Optional contact number.
+  phone        String?
+  passwordHash String   @map("password_hash")
+  role         Role     @default(MARKETING)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  // Password reset (token is a 64-hex random string, expires after 1 hour)
   passwordResetToken     String?   @unique @map("password_reset_token")
   passwordResetExpiresAt DateTime? @map("password_reset_expires_at")
 
-  // Division assignment for Managers/Supervisors
-  divisionId Int? @map("division_id")
-  division   Division? @relation("UserDivision", fields: [divisionId], references: [id])
+  createdOrders  Order[]                @relation("OrderCreatedBy")
+  assignedOrders Order[]                @relation("OrderAssignedTo")
+  pricedOrders   Order[]                @relation("OrderPricedBy")
+  loginSessions  UserLoginSession[]
+  timelineEvents EnquiryTimelineEvent[] @relation("TimelineEventActor")
 
-  // Relations
-  createdOrders     Order[]         @relation("OrderCreatedBy")
-  acceptedOrders    Order[]         @relation("OrderAcceptedBy")
-  rejectedOrders    Order[]         @relation("OrderRejectedBy")
-  completedOrders   Order[]         @relation("OrderCompletedBy")
-  receivedOrders    Order[]         @relation("OrderReceivedBy")
-  transfers         OrderTransfer[] @relation("TransferredBy")
-  rejections        OrderRejection[] @relation("RejectedBy")
-  auditLogs         AuditLog[]
-  notifications     Notification[]
-  managedDivisions  DivisionManager[] @relation("ManagerUser")
-  orderComments     OrderComment[]
-  orderEditHistory  OrderEditHistory[]
-  multiDivisionRequestsCreated MultiDivisionAccessRequest[] @relation("MultiDivisionRequestUser")
-  multiDivisionRequestsApproved MultiDivisionAccessRequest[] @relation("MultiDivisionRequestApprover")
-  sampleApprovals Order[] @relation("SampleApprovedBy")
-  headSampleRequestApprovals Order[] @relation("OrderHeadSampleRequestApprovedBy")
-  sampleSpecsAcknowledgments Order[] @relation("OrderSampleSpecsAcknowledgedBy")
-  assignedSupervisedOrders Order[] @relation("OrderAssignedSupervisor")
-  cancelledOrders Order[] @relation("OrderCancelledBy")
-  loginSessions   UserLoginSession[]
-  slaBreachesHeadRejected SLABreach[] @relation("SLABreachHeadRejectedBy")
-  timelineEvents          EnquiryTimelineEvent[] @relation("TimelineEventActor")
-  delayReasonsSubmitted   SLADelayReason[]       @relation("SLADelayReasonAuthor")
+  /// Divisions this person may work in (assigned by Super Admin).
+  divisions              UserDivision[]
+  divisionAccessRequests DivisionAccessRequest[] @relation("AccessRequestUser")
+  divisionAccessDecided  DivisionAccessRequest[] @relation("AccessRequestDecidedBy")
 }
 
 model UserLoginSession {
@@ -105,6 +74,7 @@ model UserLoginSession {
   @@map("user_login_sessions")
 }
 
+/// Business divisions (Lamination, Coating, Garments, Processing, ...). Managed by Super Admin.
 model Division {
   id        Int      @id @default(autoincrement())
   name      String   @unique
@@ -112,268 +82,122 @@ model Division {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users        User[]           @relation("UserDivision")
-  orders       Order[]         @relation("CurrentDivision")
-  ordersFrom   Order[]         @relation("PreviousDivision")
-  managers     DivisionManager[]
-  transfersIn  OrderTransfer[]  @relation("ToDivision")
-  transfersOut OrderTransfer[]  @relation("FromDivision")
-  rejections   OrderRejection[]
-  slaBreaches  SLABreach[]
-  multiDivisionRequests MultiDivisionAccessRequestDivision[]
+  orders         Order[]
+  users          UserDivision[]
+  accessRequests DivisionAccessRequest[]
 }
 
-model DivisionManager {
-  id         Int      @id @default(autoincrement())
-  divisionId Int      @map("division_id")
+/// Which divisions a Marketing / Sales person can see and work in.
+model UserDivision {
   userId     Int      @map("user_id")
+  divisionId Int      @map("division_id")
   createdAt  DateTime @default(now())
 
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   division Division @relation(fields: [divisionId], references: [id], onDelete: Cascade)
-  user     User     @relation("ManagerUser", fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([divisionId, userId])
-  @@map("division_managers")
+  @@id([userId, divisionId])
+  @@map("user_divisions")
+}
+
+enum AccessRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// A Marketing / Sales person asks for access to another division; only Super Admin decides.
+model DivisionAccessRequest {
+  id          Int                 @id @default(autoincrement())
+  userId      Int                 @map("user_id")
+  divisionId  Int                 @map("division_id")
+  reason      String              @db.Text
+  status      AccessRequestStatus @default(PENDING)
+  decidedById Int?                @map("decided_by_id")
+  decidedAt   DateTime?           @map("decided_at")
+  decisionNote String?            @map("decision_note") @db.Text
+  createdAt   DateTime            @default(now()) @map("created_at")
+
+  user      User     @relation("AccessRequestUser", fields: [userId], references: [id], onDelete: Cascade)
+  decidedBy User?    @relation("AccessRequestDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+  division  Division @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@map("division_access_requests")
 }
 
 model Order {
-  id                 Int         @id @default(autoincrement())
-  orderNumber        String      @unique @map("order_number")
-  status             OrderStatus @default(PLACED)
-  companyName        String?     @map("company_name")
-  description        String?     @db.Text
-  customFields       Json?       @map("custom_fields")
+  id          Int         @id @default(autoincrement())
+  orderNumber String      @unique @map("order_number")
+  status      OrderStatus @default(PLACED)
 
-  // Customer identity fields (captured at enquiry creation)
-  customerId         String?     @map("customer_id")
-  customerName       String?     @map("customer_name")
-  customerPhone      String?     @map("customer_phone")
-  gstNumber          String?     @map("gst_number")
-  gstCopyUrl         String?     @map("gst_copy_url")
-  customerOrderDate  DateTime?   @map("customer_order_date")
-  customerEmail      String?     @map("customer_email")
-  customerAddress    String?     @map("customer_address") @db.Text
-  transferCount      Int         @default(0) @map("transfer_count")
-  rejectionCount     Int         @default(0) @map("rejection_count")
-  slaDeadline        DateTime?   @map("sla_deadline")
-  completedAt        DateTime?   @map("completed_at")
-  createdAt          DateTime    @default(now())
-  updatedAt          DateTime    @updatedAt
+  /// Date the client enquired (editable, defaults to today).
+  enquiryDate DateTime @default(now()) @map("enquiry_date")
 
-  createdById        Int         @map("created_by_id")
-  currentDivisionId  Int         @map("current_division_id")
-  previousDivisionId Int?       @map("previous_division_id")
-  acceptedById       Int?        @map("accepted_by_id")
-  rejectedById       Int?        @map("rejected_by_id")
-  receivedById       Int?        @map("received_by_id")
-  completedById      Int?        @map("completed_by_id")
-  cancelledAt        DateTime?   @map("cancelled_at")
-  cancellationReason String?     @map("cancellation_reason") @db.Text
-  cancelledById      Int?        @map("cancelled_by_id")
+  // Customer
+  customerName    String  @map("customer_name")
+  companyName     String? @map("company_name")
+  customerPhone   String? @map("customer_phone")
+  customerEmail   String? @map("customer_email")
+  customerAddress String? @map("customer_address") @db.Text
+  gstNumber       String? @map("gst_number")
+  gstCopyUrl      String? @map("gst_copy_url") @db.Text
 
-  sampleRequested     Boolean   @default(false) @map("sample_requested")
-  sampleRequestNotes  String?   @map("sample_request_notes") @db.Text
-  sampleDetails       String?   @map("sample_details") @db.Text
-  sampleQuantity      String?   @map("sample_quantity")
-  sampleWeight        String?   @map("sample_weight")
-  sampleApprovedAt    DateTime? @map("sample_approved_at")
-  sampleApprovedById  Int?      @map("sample_approved_by_id")
-  sampleShippedAt     DateTime? @map("sample_shipped_at")
-  sampleShippedByCourier Boolean @default(true) @map("sample_shipped_by_courier")
-  courierName         String?   @map("courier_name")
-  trackingId          String?   @map("tracking_id")
-  sampleProofUrl      String?   @map("sample_proof_url")
-  /// When sample is delivered by hand (not courier): the person who carries it.
-  handoverPersonName  String?   @map("handover_person_name")
-  handoverPersonPhone String?   @map("handover_person_phone")
-  /// "inhouse" = our company staff, "thirdparty" = external delivery agent
-  handoverPersonType  String?   @map("handover_person_type")
-  salesFeedback       String?   @map("sales_feedback") @db.Text
-  salesFeedbackAt     DateTime? @map("sales_feedback_at")
-  sampleDeliveryDate  DateTime? @map("sample_delivery_date")
-  sampleRemarks       String?   @map("sample_remarks") @db.Text
+  // What the client wants (any division — no product-type assumptions)
+  divisionId     Int     @map("division_id")
+  productDetails String? @map("product_details") @db.Text
 
-  createdBy       User      @relation("OrderCreatedBy", fields: [createdById], references: [id])
-  currentDivision Division  @relation("CurrentDivision", fields: [currentDivisionId], references: [id])
-  previousDivision Division? @relation("PreviousDivision", fields: [previousDivisionId], references: [id])
-  acceptedBy      User?     @relation("OrderAcceptedBy", fields: [acceptedById], references: [id])
-  rejectedBy      User?     @relation("OrderRejectedBy", fields: [rejectedById], references: [id])
-  receivedBy      User?     @relation("OrderReceivedBy", fields: [receivedById], references: [id])
-  completedBy     User?     @relation("OrderCompletedBy", fields: [completedById], references: [id])
-  cancelledBy     User?     @relation("OrderCancelledBy", fields: [cancelledById], references: [id])
-  sampleApprovedBy  User?     @relation("SampleApprovedBy", fields: [sampleApprovedById], references: [id])
-  assignedSupervisorId Int?  @map("assigned_supervisor_id")
-  assignedSupervisor   User?  @relation("OrderAssignedSupervisor", fields: [assignedSupervisorId], references: [id])
-  headSampleRequestApprovedBy   User?     @relation("OrderHeadSampleRequestApprovedBy", fields: [headSampleRequestApprovedById], references: [id])
-  headSampleRequestApprovedById Int?      @map("head_sample_request_approved_by_id")
+  // Sample
+  isSample           Boolean   @default(false) @map("is_sample")
+  sampleSentAt       DateTime? @map("sample_sent_at")
+  sampleCourierName  String?   @map("sample_courier_name")
+  sampleTrackingId   String?   @map("sample_tracking_id")
+  sampleRemarks      String?   @map("sample_remarks") @db.Text
 
-  acceptanceReason              String?   @map("acceptance_reason") @db.Text
-  receiveReason                   String?   @map("receive_reason") @db.Text
-  enquiryHandoff                  Json?     @map("enquiry_handoff")
-  /// New development planning payload — filled by Division Head before handoff when developmentKind="new".
-  newDevPlan                      Json?     @map("new_dev_plan")
-  headSampleRequestApprovedAt     DateTime? @map("head_sample_request_approved_at")
-  /// Enquiry submitter confirms they have reviewed head-approved sample specifications; gates division "Complete" when a sample was requested.
-  sampleSpecsAcknowledgedAt       DateTime? @map("sample_specs_acknowledged_at")
-  sampleSpecsAcknowledgedById     Int?      @map("sample_specs_acknowledged_by_id")
-  sampleSpecsAcknowledgedBy       User?     @relation("OrderSampleSpecsAcknowledgedBy", fields: [sampleSpecsAcknowledgedById], references: [id])
+  // Pricing (added by Sales)
+  pricePerUnit  Decimal?  @map("price_per_unit") @db.Decimal(14, 2)
+  priceUnit     String?   @map("price_unit")
+  quantity      String?
+  paymentTerms  String?   @map("payment_terms")
+  deliveryTime  String?   @map("delivery_time")
+  pricingNotes  String?   @map("pricing_notes") @db.Text
+  pricedAt      DateTime? @map("priced_at")
+  pricedById    Int?      @map("priced_by_id")
 
-  // Enquiry workflow extensions (Enquiry Management Application spec)
-  /// Existing vs new product development. Set by Division Head during classification.
-  productKind          ProductKind?     @map("product_kind")
-  /// When existing product: reference / SKU / prior enquiry id of the previously developed product.
-  existingProductRef   String?          @map("existing_product_ref") @db.Text
-  /// When new product: requirements, specs, target weight/gsm/color, expected outcome.
-  newProductSpecs      String?          @map("new_product_specs") @db.Text
-  /// Date the salesperson received the physical sample from the lab/factory.
-  sampleReceivedAt     DateTime?        @map("sample_received_at")
-  /// Customer feedback collected by salesperson after sample handover. Visible only to Division Head / MD / Admin / Accounts.
-  customerFeedback        String?   @map("customer_feedback") @db.Text
-  customerFeedbackAt      DateTime? @map("customer_feedback_at")
-  customerResponseStatus  String?   @map("customer_response_status")
-  customerFeedbackRemarks String?   @map("customer_feedback_remarks") @db.Text
-  /// MD- and Division-Head-adjustable priority. Drives MD dashboard sort & visual highlight.
-  priority             EnquiryPriority  @default(NORMAL)
+  // Client feedback (recorded by Sales)
+  clientFeedback         String?   @map("client_feedback") @db.Text
+  clientResponse         String?   @map("client_response") // ACCEPTED | NEGOTIATING | DECLINED
+  clientFeedbackAt       DateTime? @map("client_feedback_at")
 
-  transfers      OrderTransfer[]
-  rejections     OrderRejection[]
-  auditLogs      AuditLog[]
-  slaBreaches    SLABreach[]
-  comments       OrderComment[]
-  editHistory    OrderEditHistory[]
+  cancellationReason String?   @map("cancellation_reason") @db.Text
+  closedAt           DateTime? @map("closed_at")
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  createdById  Int  @map("created_by_id")
+  assignedToId Int? @map("assigned_to_id")
+
+  division   Division @relation(fields: [divisionId], references: [id])
+  createdBy  User     @relation("OrderCreatedBy", fields: [createdById], references: [id])
+  assignedTo User?    @relation("OrderAssignedTo", fields: [assignedToId], references: [id])
+  pricedBy   User?    @relation("OrderPricedBy", fields: [pricedById], references: [id])
+
   timelineEvents EnquiryTimelineEvent[]
 
   @@index([status])
-  @@index([currentDivisionId])
+  @@index([divisionId])
   @@index([createdById])
-  @@index([slaDeadline])
-  @@index([createdAt(sort: Desc)])
-  @@index([createdById, createdAt(sort: Desc)])
-  @@index([currentDivisionId, createdAt(sort: Desc)])
-  @@index([priority, status])
-  // Stage-specific SLA deadlines — set when each stage begins, cleared when it completes.
-  // Breach job monitors all of these in addition to the placement/transfer slaDeadline.
-  handoffSlaDeadline            DateTime? @map("handoff_sla_deadline")
-  headSampleApprovalSlaDeadline DateTime? @map("head_sample_approval_sla_deadline")
-  sampleDetailsSlaDeadline      DateTime? @map("sample_details_sla_deadline")
-  sampleApprovalSlaDeadline     DateTime? @map("sample_approval_sla_deadline")
-  shipmentSlaDeadline           DateTime? @map("shipment_sla_deadline")
-
-  @@index([status, slaDeadline])
-  @@index([handoffSlaDeadline])
-  @@index([headSampleApprovalSlaDeadline])
-  @@index([sampleDetailsSlaDeadline])
-  @@index([sampleApprovalSlaDeadline])
-  @@index([shipmentSlaDeadline])
+  @@index([assignedToId])
+  @@index([enquiryDate(sort: Desc)])
+  @@index([status, enquiryDate(sort: Desc)])
 }
 
-model OrderTransfer {
-  id             Int      @id @default(autoincrement())
-  orderId        Int      @map("order_id")
-  fromDivisionId Int      @map("from_division_id")
-  toDivisionId   Int      @map("to_division_id")
-  reason         String   @db.Text
-  transferDetails String? @map("transfer_details") @db.Text
-  transferredById Int     @map("transferred_by_id")
-  createdAt      DateTime @default(now())
-
-  order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  fromDivision Division @relation("FromDivision", fields: [fromDivisionId], references: [id])
-  toDivision   Division  @relation("ToDivision", fields: [toDivisionId], references: [id])
-  transferredBy User     @relation("TransferredBy", fields: [transferredById], references: [id])
-
-  @@index([orderId])
-  @@map("order_transfers")
-}
-
-model OrderRejection {
-  id          Int      @id @default(autoincrement())
-  orderId     Int      @map("order_id")
-  divisionId  Int      @map("division_id")
-  reason      String   @db.Text
-  rejectedById Int     @map("rejected_by_id")
-  createdAt   DateTime @default(now())
-
-  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  division   Division @relation(fields: [divisionId], references: [id])
-  rejectedBy User     @relation("RejectedBy", fields: [rejectedById], references: [id])
-
-  @@index([orderId])
-  @@map("order_rejections")
-}
-
-model AuditLog {
-  id        Int      @id @default(autoincrement())
-  orderId   Int      @map("order_id")
-  action    String
-  payload   Json?
-  userId    Int?     @map("user_id")
-  createdAt DateTime @default(now())
-
-  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  user  User? @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  @@index([orderId])
-  @@index([createdAt])
-  @@map("audit_logs")
-}
-
-model SLABreach {
-  id         Int       @id @default(autoincrement())
-  orderId    Int       @map("order_id")
-  divisionId Int       @map("division_id")
-  breachedAt DateTime @default(now()) @map("breached_at")
-  resolvedAt DateTime? @map("resolved_at")
-
-  /** Division head must submit this before work can proceed. */
-  headRejectionMessage String?   @map("head_rejection_message") @db.Text
-  headRejectedAt       DateTime? @map("head_rejected_at")
-  headRejectedById     Int?      @map("head_rejected_by_id")
-
-  /** Which workflow stage this breach belongs to. */
-  breachType           String    @default("PLACEMENT") @map("breach_type")
-
-  /** Login-time delay reason: gates Division Head's access to other modules. Free-form delay rationale. */
-  delayReasonText      String?   @map("delay_reason_text") @db.Text
-  delayReasonAt        DateTime? @map("delay_reason_at")
-
-  order    Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  division Division @relation(fields: [divisionId], references: [id])
-  headRejectedBy User? @relation("SLABreachHeadRejectedBy", fields: [headRejectedById], references: [id], onDelete: SetNull)
-  delayReasons   SLADelayReason[]
-
-  @@index([orderId])
-  @@index([breachedAt])
-  @@index([headRejectedAt])
-  @@index([divisionId, resolvedAt])
-  @@map("sla_breaches")
-}
-
-/// Audit row for each delay-reason submission. A division head logging in after a breach must submit one of these
-/// before the application unlocks other screens. We keep one row per submission for forensic accuracy even though
-/// the latest summary is also denormalised onto SLABreach.
-model SLADelayReason {
-  id         Int       @id @default(autoincrement())
-  breachId   Int       @map("breach_id")
-  userId     Int       @map("user_id")
-  reasonText String    @map("reason_text") @db.Text
-  createdAt  DateTime  @default(now()) @map("created_at")
-
-  breach SLABreach @relation(fields: [breachId], references: [id], onDelete: Cascade)
-  user   User      @relation("SLADelayReasonAuthor", fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([breachId])
-  @@index([userId])
-  @@map("sla_delay_reasons")
-}
-
-/// Unified workflow timeline for every enquiry. Rendered as the Timeline tab on the enquiry detail page and as
-/// the recent activity stream on the MD dashboard. We keep AuditLog for security/forensic logging and use this
-/// for human-readable workflow rendering.
+/// Human-readable history shown on each enquiry.
 model EnquiryTimelineEvent {
   id        Int      @id @default(autoincrement())
   orderId   Int      @map("order_id")
-  type      String   // ENQUIRY_CREATED / APPROVED / REJECTED / TRANSFERRED / SAMPLE_REQUESTED / SAMPLE_APPROVED ...
+  type      String
   title     String
   detail    String?  @db.Text
   actorId   Int?     @map("actor_id")
@@ -386,88 +210,4 @@ model EnquiryTimelineEvent {
   @@index([orderId, createdAt(sort: Desc)])
   @@index([createdAt(sort: Desc)])
   @@map("enquiry_timeline_events")
-}
-
-model Notification {
-  id        Int      @id @default(autoincrement())
-  userId    Int      @map("user_id")
-  type      String
-  title     String
-  body      String   @db.Text
-  read      Boolean  @default(false)
-  metadata  Json?
-  createdAt DateTime @default(now()) @map("created_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([read])
-  @@map("notifications")
-}
-
-model OrderComment {
-  id        Int      @id @default(autoincrement())
-  orderId   Int      @map("order_id")
-  userId    Int      @map("user_id")
-  body      String   @db.Text
-  createdAt DateTime @default(now()) @map("created_at")
-
-  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([orderId])
-  @@map("order_comments")
-}
-
-model OrderEditHistory {
-  id        Int      @id @default(autoincrement())
-  orderId   Int      @map("order_id")
-  fieldName String   @map("field_name")
-  oldValue  String?  @map("old_value") @db.Text
-  newValue  String?  @map("new_value") @db.Text
-  userId    Int      @map("user_id")
-  createdAt DateTime @default(now()) @map("created_at")
-
-  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([orderId])
-  @@index([createdAt])
-  @@map("order_edit_history")
-}
-
-enum MultiDivisionRequestStatus {
-  PENDING
-  APPROVED
-  REJECTED
-}
-
-model MultiDivisionAccessRequest {
-  id           Int                         @id @default(autoincrement())
-  userId       Int                         @map("user_id")
-  reason       String                      @db.Text
-  status       MultiDivisionRequestStatus  @default(PENDING)
-  approvedById Int?                        @map("approved_by_id")
-  approvedAt   DateTime?                   @map("approved_at")
-  createdAt    DateTime                    @default(now()) @map("created_at")
-
-  user        User    @relation("MultiDivisionRequestUser", fields: [userId], references: [id], onDelete: Cascade)
-  approvedBy  User?   @relation("MultiDivisionRequestApprover", fields: [approvedById], references: [id], onDelete: SetNull)
-  divisions   MultiDivisionAccessRequestDivision[]
-
-  @@index([userId])
-  @@index([status])
-  @@map("multi_division_access_requests")
-}
-
-model MultiDivisionAccessRequestDivision {
-  id         Int   @id @default(autoincrement())
-  requestId  Int   @map("request_id")
-  divisionId Int   @map("division_id")
-
-  request  MultiDivisionAccessRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  division Division                  @relation(fields: [divisionId], references: [id], onDelete: Cascade)
-
-  @@unique([requestId, divisionId])
-  @@map("multi_division_access_request_divisions")
 }
