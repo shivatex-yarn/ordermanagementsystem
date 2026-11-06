@@ -78,10 +78,10 @@ export default function OverviewPage() {
             <tbody>
               {data.recent.map((o) => (
                 <tr key={o.id} className="border-t border-[var(--app-line-soft)] first:border-0">
-                  <td className="px-5 py-3.5"><Link href={`/orders/${o.id}`} className="font-bold text-[var(--app-brand)] hover:underline">{o.orderNumber}</Link></td>
+                  <td className="px-5 py-3.5"><Link href={`/orders/${o.id}`} className="whitespace-nowrap font-bold text-[var(--app-brand)] hover:underline">{o.orderNumber}</Link></td>
                   <td className="px-3 py-3.5 font-semibold text-[var(--app-ink)]">{o.companyName || o.customerName}</td>
                   <td className="px-3 py-3.5 text-[var(--app-ink-2)]">{o.division.name}</td>
-                  <td className="tnum px-3 py-3.5 text-[var(--app-ink-2)]">{fmtDate(o.enquiryDate)}</td>
+                  <td className="tnum whitespace-nowrap px-3 py-3.5 text-[var(--app-ink-2)]">{fmtDate(o.enquiryDate)}</td>
                   <td className="tnum px-3 py-3.5 text-[var(--app-ink-2)]">{o.pricePerUnit ? `${fmtMoney(o.pricePerUnit)} / ${o.priceUnit}` : "—"}</td>
                   <td className="px-5 py-3.5"><StatusPill status={o.status} size="sm" /></td>
                 </tr>
