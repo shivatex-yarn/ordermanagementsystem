@@ -15,17 +15,17 @@ export type ExportRow = {
 };
 export type ExportMeta = { generatedBy: string; filters: string[]; byDivision?: boolean };
 
-const STATUS: Record<string, string> = { PLACED: "Needs pricing", PRICED: "Waiting for client", CLOSED: "Closed", CANCELLED: "Cancelled" };
-const RESP: Record<string, string> = { ACCEPTED: "Accepted", NEGOTIATING: "Negotiating", DECLINED: "Declined" };
+export const STATUS: Record<string, string> = { PLACED: "Needs pricing", PRICED: "Waiting for client", CLOSED: "Closed", CANCELLED: "Cancelled" };
+export const RESP: Record<string, string> = { ACCEPTED: "Accepted", NEGOTIATING: "Negotiating", DECLINED: "Declined" };
 const INDIGO = "4F46E5";
 const HEAD_FILL = "FF312E81"; // deep indigo for table headers
 
 const d = (v: string | null) => (v ? new Date(v) : null);
-const fmtD = (v: string | null) => (v ? new Date(v).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "");
-const stamp = () => new Date().toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
-const fileStamp = () => new Date().toLocaleDateString("en-CA"); // local date, YYYY-MM-DD
+export const fmtD = (v: string | null) => (v ? new Date(v).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "");
+export const stamp = () => new Date().toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+export const fileStamp = () => new Date().toLocaleDateString("en-CA"); // local date, YYYY-MM-DD
 
-async function loadLogo(): Promise<{ buffer: ArrayBuffer; dataUrl: string } | null> {
+export async function loadLogo(): Promise<{ buffer: ArrayBuffer; dataUrl: string } | null> {
   try {
     const res = await fetch("/company-logo.png");
     if (!res.ok) return null;
@@ -43,7 +43,7 @@ async function loadLogo(): Promise<{ buffer: ArrayBuffer; dataUrl: string } | nu
   }
 }
 
-function download(blob: Blob, name: string) {
+export function download(blob: Blob, name: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
