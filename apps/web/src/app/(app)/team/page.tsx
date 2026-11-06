@@ -95,6 +95,19 @@ export default function TeamPage() {
   const active = users.filter((u) => u.active);
   const unmapped = active.filter((u) => (u.role === "MARKETING" || u.role === "SALES") && u.divisions.length === 0);
 
+  const [confirmId, setConfirmId] = useState<number | null>(null);
+  const [rowError, setRowError] = useState<string | null>(null);
+  async function remove(p: Person) {
+    setRowError(null);
+    try {
+      await api(`/api/team/${p.id}`, { method: "DELETE" });
+      setConfirmId(null);
+      await qc.invalidateQueries({ queryKey: ["team"] });
+      await qc.invalidateQueries({ queryKey: ["divisions"] });
+    } catch (err) {
+      setRowError((err as Error).message);
+    }
+  }
   async function toggle(p: Person) {
     await api(`/api/team/${p.id}`, { method: "PATCH", json: { active: !p.active } });
     await qc.invalidateQueries({ queryKey: ["team"] });
@@ -113,6 +126,7 @@ export default function TeamPage() {
       <Panel>
         <PanelHeader title={`${active.length} active`} caption="Marketing logs enquiries. Sales adds pricing and feedback." />
         {adding ? <PersonForm divisions={divisions} onDone={() => setAdding(false)} /> : null}
+        {rowError ? <p className="border-b border-[var(--app-line-soft)] px-5 py-3 text-sm text-[var(--app-late-ink)]">{rowError}</p> : null}
         {isLoading ? <PanelSkeleton className="m-4 h-48" /> : users.length === 0 ? (
           <EmptyState icon={UserPlus} title="Add your first team member" description="Start with a Marketing person, then a Sales person." />
         ) : (
@@ -130,10 +144,19 @@ export default function TeamPage() {
                       {(p.role === "MARKETING" || p.role === "SALES") ? (p.divisions.length ? p.divisions.map((d) => <span key={d.id} className="rounded-full bg-[var(--app-brand-tint)] px-2.5 py-1 text-[11px] font-semibold text-[var(--app-brand)]">{d.name}</span>) : <span className="text-xs font-semibold text-[var(--app-act-ink)]">No division yet</span>) : p.role === "SUPER_ADMIN" ? null : <span className="text-xs text-[var(--app-ink-3)]">All divisions, read-only</span>}
                     </div>
                     {p.role !== "SUPER_ADMIN" ? (
-                      <div className="flex gap-1">
-                        <Button variant="ghost" size="sm" onClick={() => { setEditing(p.id); setAdding(false); }}>Edit</Button>
-                        <Button variant="ghost" size="sm" onClick={() => void toggle(p)}>{p.active ? <><X className="h-3.5 w-3.5" />Deactivate</> : "Activate"}</Button>
-                      </div>
+                      confirmId === p.id ? (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-xs text-[var(--app-late-ink)]">Delete {p.name.split(" ")[0]} for good?</span>
+                          <Button variant="destructive" size="sm" onClick={() => void remove(p)}>Yes, delete</Button>
+                          <Button variant="ghost" size="sm" onClick={() => { setConfirmId(null); setRowError(null); }}>Keep</Button>
+                        </div>
+                      ) : (
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="sm" onClick={() => { setEditing(p.id); setAdding(false); }}>Edit</Button>
+                          <Button variant="ghost" size="sm" onClick={() => void toggle(p)}>{p.active ? <><X className="h-3.5 w-3.5" />Deactivate</> : "Activate"}</Button>
+                          <Button variant="ghost" size="sm" className="text-[var(--app-late-ink)] hover:text-[var(--app-late-ink)]" onClick={() => { setConfirmId(p.id); setRowError(null); }}>Delete</Button>
+                        </div>
+                      )
                     ) : null}
                   </div>
                 )}

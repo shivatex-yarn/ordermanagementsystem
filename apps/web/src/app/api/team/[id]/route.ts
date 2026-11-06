@@ -35,3 +35,34 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   });
   return NextResponse.json(user);
 }
+
+/** Delete a person. Blocked for Super admins, yourself, and anyone who already worked on enquiries (deactivate instead). */
+export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const auth = await withRole(["SUPER_ADMIN"]);
+  if (auth.response) return auth.response;
+  const id = Number((await ctx.params).id);
+  if (id === Number(auth.payload.sub)) {
+    return NextResponse.json({ error: "You can't delete your own account" }, { status: 400 });
+  }
+  const user = await prisma.user.findUnique({
+    where: { id },
+    select: {
+      name: true,
+      role: true,
+      _count: { select: { createdOrders: true, assignedOrders: true, pricedOrders: true } },
+    },
+  });
+  if (!user) return NextResponse.json({ error: "Person not found" }, { status: 404 });
+  if (user.role === "SUPER_ADMIN") {
+    return NextResponse.json({ error: "Super admin accounts can't be deleted here" }, { status: 403 });
+  }
+  const used = user._count.createdOrders + user._count.assignedOrders + user._count.pricedOrders;
+  if (used > 0) {
+    return NextResponse.json(
+      { error: `${user.name} has worked on ${used} enquiries. Deactivate them instead of deleting.` },
+      { status: 409 }
+    );
+  }
+  await prisma.user.delete({ where: { id } });
+  return NextResponse.json({ ok: true });
+}

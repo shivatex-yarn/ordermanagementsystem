@@ -72,6 +72,18 @@ export default function DivisionsPage() {
     await api(`/api/access-requests/${id}`, { method: "PATCH", json: { decision } });
     await Promise.all([qc.invalidateQueries({ queryKey: ["access-requests"] }), qc.invalidateQueries({ queryKey: ["team"] })]);
   }
+  const [confirmId, setConfirmId] = useState<number | null>(null);
+  const [rowError, setRowError] = useState<string | null>(null);
+  async function remove(d: Division) {
+    setRowError(null);
+    try {
+      await api(`/api/divisions/${d.id}`, { method: "DELETE" });
+      setConfirmId(null);
+      await Promise.all([qc.invalidateQueries({ queryKey: ["divisions"] }), qc.invalidateQueries({ queryKey: ["team"] })]);
+    } catch (err) {
+      setRowError((err as Error).message);
+    }
+  }
   async function toggle(d: Division) {
     await api(`/api/divisions/${d.id}`, { method: "PATCH", json: { active: !d.active } });
     await qc.invalidateQueries({ queryKey: ["divisions"] });
@@ -138,12 +150,26 @@ export default function DivisionsPage() {
             <Button type="submit"><Plus className="h-4 w-4" />Add division</Button>
             {error ? <span className="self-center text-sm text-[var(--app-late-ink)]">{error}</span> : null}
           </form>
+          {rowError ? <p className="border-b border-[var(--app-line-soft)] px-5 py-3 text-sm text-[var(--app-late-ink)]">{rowError}</p> : null}
           {isLoading ? <PanelSkeleton className="m-4 h-32" /> : (
             <ul>{divisions.map((d) => (
               <li key={d.id} className="flex flex-wrap items-center gap-4 border-t border-[var(--app-line-soft)] px-5 py-3.5 first:border-0">
                 <span className={`min-w-[8rem] flex-1 text-sm font-bold ${d.active ? "text-[var(--app-ink)]" : "text-[var(--app-ink-3)] line-through"}`}>{d.name}</span>
                 <span className="text-xs text-[var(--app-ink-3)]">{d._count.users} people · {d._count.orders} enquiries</span>
-                <Button variant="ghost" size="sm" onClick={() => void toggle(d)}>{d.active ? "Deactivate" : "Activate"}</Button>
+                {confirmId === d.id ? (
+                  <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
+                    <span className="text-xs text-[var(--app-late-ink)]">
+                      {d._count.orders > 0 ? "Has enquiries. Deactivate instead." : d._count.users > 0 ? `Removes access for ${d._count.users} people. Delete?` : "Delete this division?"}
+                    </span>
+                    {d._count.orders === 0 ? <Button variant="destructive" size="sm" onClick={() => void remove(d)}>Yes, delete</Button> : null}
+                    <Button variant="ghost" size="sm" onClick={() => { setConfirmId(null); setRowError(null); }}>Keep</Button>
+                  </div>
+                ) : (
+                  <div className="flex gap-1">
+                    <Button variant="ghost" size="sm" onClick={() => void toggle(d)}>{d.active ? "Deactivate" : "Activate"}</Button>
+                    <Button variant="ghost" size="sm" className="text-[var(--app-late-ink)] hover:text-[var(--app-late-ink)]" onClick={() => { setConfirmId(d.id); setRowError(null); }}>Delete</Button>
+                  </div>
+                )}
               </li>))}
             </ul>
           )}
