@@ -29,7 +29,7 @@ export function TrendChart({ data }: { data: Analytics["trend"] }) {
   );
 }
 
-function Donut({ data, colors, centre }: { data: { key: string; label: string; value: number }[]; colors: Record<string, string>; centre: string }) {
+export function Donut({ data, colors, centre }: { data: { key: string; label: string; value: number }[]; colors: Record<string, string>; centre: string }) {
   const total = data.reduce((a, b) => a + b.value, 0);
   if (!total) return <p className="p-6 text-sm text-[var(--app-ink-3)]">No data yet.</p>;
   return (

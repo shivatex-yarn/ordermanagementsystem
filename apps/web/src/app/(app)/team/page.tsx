@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, UserPlus, X } from "lucide-react";
+import { Plus, Search, UserPlus, X } from "lucide-react";
 import { api } from "@/lib/format";
 import { ASSIGNABLE_ROLES, roleLabel } from "@/lib/roles";
 import { PageHeader, Panel, PanelHeader, PanelSkeleton, EmptyState } from "@/components/ui/panel";
@@ -91,8 +91,20 @@ export default function TeamPage() {
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<number | null>(null);
   const divisions = dv?.divisions ?? [];
-  const users = data?.users ?? [];
-  const active = users.filter((u) => u.active);
+  const allUsers = data?.users ?? [];
+  const [q, setQ] = useState("");
+  const [roleFilter, setRoleFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"" | "active" | "inactive">("");
+  const term = q.trim().toLowerCase();
+  const users = allUsers.filter((u) => {
+    if (roleFilter && u.role !== roleFilter) return false;
+    if (statusFilter === "active" && !u.active) return false;
+    if (statusFilter === "inactive" && u.active) return false;
+    if (!term) return true;
+    return [u.name, u.email, u.phone ?? "", roleLabel(u.role as never), ...u.divisions.map((d) => d.name)].some((v) => v.toLowerCase().includes(term));
+  });
+  const filtering = !!(term || roleFilter || statusFilter);
+  const active = allUsers.filter((u) => u.active);
   const unmapped = active.filter((u) => (u.role === "MARKETING" || u.role === "SALES") && u.divisions.length === 0);
 
   const [confirmId, setConfirmId] = useState<number | null>(null);
@@ -124,11 +136,31 @@ export default function TeamPage() {
       ) : null}
 
       <Panel>
-        <PanelHeader title={`${active.length} active`} caption="Marketing logs enquiries. Sales adds pricing and feedback." />
+        <PanelHeader title={`${active.length} active`} caption={`${allUsers.length} people in total. Marketing logs enquiries. Sales adds pricing and feedback.`} />
+        <div className="flex flex-wrap items-center gap-2 border-b border-[var(--app-line-soft)] p-4">
+          <div className="relative min-w-[14rem] flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--app-ink-3)]" aria-hidden />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by name, email, phone, role or division" aria-label="Search team"
+              className="h-10 w-full rounded-xl border border-[var(--app-line)] bg-[var(--app-surface-sunk)] pl-9 pr-3 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-[var(--app-brand)]/20" />
+          </div>
+          <select aria-label="Role" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} className={cn(selectClass, "w-44")}>
+            <option value="">All roles</option>
+            <option value="SUPER_ADMIN">Super admin</option>
+            {ASSIGNABLE_ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+          </select>
+          <select aria-label="Status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as "" | "active" | "inactive")} className={cn(selectClass, "w-36")}>
+            <option value="">All statuses</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
+          {filtering ? <button onClick={() => { setQ(""); setRoleFilter(""); setStatusFilter(""); }} className="inline-flex h-10 items-center gap-1 rounded-xl px-3 text-xs font-semibold text-[var(--app-ink-3)] hover:bg-[var(--app-surface-sunk)]"><X className="h-3.5 w-3.5" />Clear</button> : null}
+        </div>
         {adding ? <PersonForm divisions={divisions} onDone={() => setAdding(false)} /> : null}
         {rowError ? <p className="border-b border-[var(--app-line-soft)] px-5 py-3 text-sm text-[var(--app-late-ink)]">{rowError}</p> : null}
         {isLoading ? <PanelSkeleton className="m-4 h-48" /> : users.length === 0 ? (
-          <EmptyState icon={UserPlus} title="Add your first team member" description="Start with a Marketing person, then a Sales person." />
+          filtering
+            ? <EmptyState icon={Search} title="No one matches" description="Try a different name, role or status, or clear the filters." />
+            : <EmptyState icon={UserPlus} title="Add your first team member" description="Start with a Marketing person, then a Sales person." />
         ) : (
           <ul>
             {users.map((p) => (

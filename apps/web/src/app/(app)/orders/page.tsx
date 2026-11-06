@@ -14,6 +14,8 @@ import { buttonVariants } from "@/components/ui/button";
 import { selectClass } from "@/components/ui/field";
 import { canCreateEnquiry } from "@/lib/roles";
 import { ExportMenu } from "@/components/export-menu";
+import { EnquiryStepper } from "@/components/enquiry-stepper";
+import { Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Row = {
@@ -74,6 +76,7 @@ function List() {
   const lastRow = data ? Math.min(data.total, data.page * data.pageSize) : 0;
   const role = user?.role;
   const divisions = user?.divisions ?? [];
+  const viewer = role === "ACCOUNTS" || role === "MANAGING_DIRECTOR";
 
   let next: React.ReactNode = null;
   if (user && data) {
@@ -155,13 +158,29 @@ function List() {
           <EmptyState icon={Search} title={filtered ? "No enquiries match" : "No enquiries yet"}
             description={filtered ? "Try a different filter, or clear them all." : "Enquiries logged by Marketing appear here."}
             action={!q && !status && role === "MARKETING" ? <Link href="/orders/new" className={buttonVariants({ size: "sm" })}>Log the first enquiry</Link> : undefined} />
+        ) : role === "MANAGING_DIRECTOR" ? (
+          <div className="grid gap-4 p-4 sm:grid-cols-2 xl:grid-cols-3">
+            {data.orders.map((o) => (
+              <article key={o.id} className="group flex flex-col rounded-2xl border border-[var(--app-line)] bg-[var(--app-surface)] p-5 transition-all hover:-translate-y-0.5 hover:border-[var(--app-brand-line)]">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0"><p className="text-xs font-bold tracking-wide text-[var(--app-brand)]">{o.orderNumber}{o.isSample ? <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-[var(--app-brand-tint)] px-2 py-0.5 text-[10px]"><FlaskConical className="h-3 w-3" aria-hidden />Sample</span> : null}</p><h3 className="mt-1 truncate text-base font-extrabold text-[var(--app-ink)]">{o.companyName || o.customerName}</h3><p className="text-xs text-[var(--app-ink-3)]">{o.division.name} · {fmtDate(o.enquiryDate)}</p></div>
+                  <StatusPill status={o.status} size="sm" />
+                </div>
+                <div className="my-5"><EnquiryStepper size="sm" isSample={o.isSample} priced={!!o.pricePerUnit} sampleSent={!!o.sampleSentAt} replied={!!o.clientResponse} closed={o.status === "CLOSED"} cancelled={o.status === "CANCELLED"} /></div>
+                <div className="mt-auto flex items-end justify-between gap-3 border-t border-[var(--app-line-soft)] pt-4">
+                  <div><p className="text-[10px] font-bold uppercase tracking-wider text-[var(--app-ink-3)]">Quoted rate</p><p className="tnum text-lg font-extrabold text-[var(--app-ink)]">{o.pricePerUnit ? <>{fmtMoney(o.pricePerUnit)}<span className="ml-1 text-xs font-semibold text-[var(--app-ink-3)]">/ {o.priceUnit}</span></> : <span className="text-sm font-semibold text-[var(--app-ink-3)]">Not priced</span>}</p></div>
+                  <Link href={`/orders/${o.id}`} className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--app-ink)] px-3.5 py-2 text-xs font-semibold text-white hover:bg-black"><Eye className="h-3.5 w-3.5" />View details</Link>
+                </div>
+              </article>
+            ))}
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[760px] text-sm">
               <thead>
                 <tr className="bg-[var(--app-surface-sunk)] text-left text-[11px] font-bold uppercase tracking-wide text-[var(--app-ink-3)]">
                   <th className="px-5 py-3">Enquiry</th><th className="px-3 py-3">Client</th><th className="px-3 py-3">Division</th>
-                  <th className="px-3 py-3">Date</th><th className="px-3 py-3">Price</th><th className="px-5 py-3">Status</th>
+                  <th className="px-3 py-3">Date</th><th className="px-3 py-3">Price</th><th className="px-3 py-3">Status</th>{viewer ? <th className="px-5 py-3 text-right">Details</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -175,7 +194,8 @@ function List() {
                     <td className="px-3 py-3.5 text-[var(--app-ink-2)]">{o.division.name}</td>
                     <td className="tnum px-3 py-3.5 text-[var(--app-ink-2)]">{fmtDate(o.enquiryDate)}</td>
                     <td className="tnum px-3 py-3.5 text-[var(--app-ink-2)]">{o.pricePerUnit ? `${fmtMoney(o.pricePerUnit)} / ${o.priceUnit}` : <span className="text-[var(--app-ink-3)]">Not priced</span>}</td>
-                    <td className="px-5 py-3.5"><StatusPill status={o.status} size="sm" /></td>
+                    <td className="px-3 py-3.5"><StatusPill status={o.status} size="sm" /></td>
+                    {viewer ? <td className="px-5 py-3.5 text-right"><Link href={`/orders/${o.id}`} className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--app-line)] px-3 py-1.5 text-xs font-semibold text-[var(--app-brand)] hover:bg-[var(--app-brand-tint)]"><Eye className="h-3.5 w-3.5" />View details</Link></td> : null}
                   </tr>
                 ))}
               </tbody>

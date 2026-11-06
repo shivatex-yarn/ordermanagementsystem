@@ -14,6 +14,9 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Field, FormError, Segmented, selectClass, textareaClass } from "@/components/ui/field";
 import { canCreateEnquiry, canPrice } from "@/lib/roles";
+import { EnquiryStepper } from "@/components/enquiry-stepper";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Download, FileSpreadsheet, FileText, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Order = {
@@ -127,6 +130,33 @@ function FeedbackForm({ o }: { o: Order }) {
       <FormError message={error ?? (!resp ? null : null)} />
       <div className="flex justify-end"><Button type="submit" disabled={busy || !resp}>{busy ? "Saving…" : "Save feedback"}</Button></div>
     </form>
+  );
+}
+
+function DownloadMenu({ o, name }: { o: Order; name: string }) {
+  const [busy, setBusy] = useState<"pdf" | "excel" | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  async function go(kind: "pdf" | "excel") {
+    setBusy(kind); setErr(null);
+    try {
+      const m = await import("@/lib/export-enquiry-detail");
+      const detail = o as unknown as import("@/lib/export-enquiry-detail").EnquiryDetail;
+      if (kind === "pdf") await m.exportEnquiryPdf(detail, name); else await m.exportEnquiryExcel(detail, name);
+    } catch (e) { setErr((e as Error).message || "Couldn't prepare the download"); } finally { setBusy(null); }
+  }
+  return (
+    <div className="relative">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" disabled={!!busy}>{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}{busy ? "Preparing…" : "Download"}</Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-52">
+          <DropdownMenuItem className="cursor-pointer gap-2" onClick={() => void go("pdf")}><FileText className="h-4 w-4 text-[var(--app-late-ink)]" />PDF</DropdownMenuItem>
+          <DropdownMenuItem className="cursor-pointer gap-2" onClick={() => void go("excel")}><FileSpreadsheet className="h-4 w-4 text-[var(--app-done-ink)]" />Excel (.xlsx)</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {err ? <p role="alert" className="absolute right-0 top-11 z-10 w-60 rounded-xl border border-[var(--app-late-line)] bg-[var(--app-late-bg)] px-3 py-2 text-xs text-[var(--app-late-ink)]">{err}</p> : null}
+    </div>
   );
 }
 
@@ -246,8 +276,14 @@ export default function EnquiryPage({ params }: { params: Promise<{ id: string }
   return (
     <>
       <Link href="/orders" className="inline-flex items-center gap-1.5 text-sm font-semibold text-[var(--app-ink-3)] hover:text-[var(--app-ink)]"><ArrowLeft className="h-4 w-4" /> Enquiries</Link>
-      <PageHeader title={<span className="flex flex-wrap items-center gap-3">{o.orderNumber}<StatusPill status={o.status} /></span>} description={`${o.companyName || o.customerName} · ${o.division.name} · Enquiry date ${fmtDate(o.enquiryDate)}`} />
+      <PageHeader title={<span className="flex flex-wrap items-center gap-3">{o.orderNumber}<StatusPill status={o.status} /></span>} description={`${o.companyName || o.customerName} · ${o.division.name} · Enquiry date ${fmtDate(o.enquiryDate)}${user && !canPrice(user.role) && !canCreateEnquiry(user.role) ? " · View only" : ""}`}>
+        {user ? <DownloadMenu o={o} name={user.name} /> : null}
+      </PageHeader>
       {next}
+
+      <Panel className="px-4 py-5 sm:px-8">
+        <EnquiryStepper isSample={o.isSample} priced={!!o.pricedAt} sampleSent={!!o.sampleSentAt} replied={!!o.clientResponse} closed={o.status === "CLOSED"} cancelled={o.status === "CANCELLED"} />
+      </Panel>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="space-y-6">
