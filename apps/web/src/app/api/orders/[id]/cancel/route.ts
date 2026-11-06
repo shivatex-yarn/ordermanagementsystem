@@ -1,41 +1,30 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { withAuth } from "@/lib/with-auth";
+import { getScopedOrder } from "@/lib/orders";
 import { cancelOrderSchema } from "@/lib/validation";
-import { cancelOrderByCreator } from "@/lib/order-engine";
+import { appendTimeline } from "@/lib/timeline";
 
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const auth = await withAuth();
   if (auth.response) return auth.response;
-  const id = Number((await params).id);
-  if (!Number.isInteger(id)) {
-    return NextResponse.json({ error: "Invalid enquiry id" }, { status: 400 });
+  if (auth.payload.role !== "MARKETING" && auth.payload.role !== "SALES" && auth.payload.role !== "SUPER_ADMIN") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
-  const body = await req.json().catch(() => ({}));
-  const parsed = cancelOrderSchema.safeParse(body);
+  const id = Number((await ctx.params).id);
+  const order = await getScopedOrder(id, auth.payload);
+  if (!order) return NextResponse.json({ error: "Enquiry not found" }, { status: 404 });
+  if (order.status === "CLOSED" || order.status === "CANCELLED") {
+    return NextResponse.json({ error: "This enquiry is already finished" }, { status: 409 });
+  }
+  const parsed = cancelOrderSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Invalid input", details: parsed.error.flatten() },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
   }
-  const userId = Number(auth.payload.sub);
-
-  const existing = await prisma.order.findUnique({ where: { id }, select: { id: true, createdById: true } });
-  if (!existing) return NextResponse.json({ error: "Enquiry not found" }, { status: 404 });
-  if (existing.createdById !== userId) {
-    return NextResponse.json({ error: "Only the person who raised this enquiry can cancel it." }, { status: 403 });
-  }
-
-  const updated = await cancelOrderByCreator(id, userId, parsed.data.reason);
-  if (!updated) {
-    return NextResponse.json(
-      {
-        error:
-          "This enquiry cannot be cancelled. You can only withdraw while it is still Placed and before the division has taken action.",
-      },
-      { status: 400 }
-    );
-  }
+  const updated = await prisma.order.update({
+    where: { id },
+    data: { status: "CANCELLED", cancellationReason: parsed.data.reason, closedAt: new Date() },
+  });
+  await appendTimeline({ orderId: id, type: "ENQUIRY_CANCELLED", title: "Enquiry cancelled", detail: parsed.data.reason, actorId: Number(auth.payload.sub) });
   return NextResponse.json(updated);
 }

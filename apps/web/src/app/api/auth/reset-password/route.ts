@@ -77,8 +77,7 @@ export async function POST(req: Request) {
         id: true,
         name: true,
         email: true,
-        divisionId: true,
-        division: { select: { name: true } },
+        divisions: { select: { division: { select: { name: true } } } },
       },
     });
 
@@ -100,7 +99,7 @@ export async function POST(req: Request) {
     });
 
     const changedAt = new Date();
-    const divisionName = user.division?.name ?? null;
+    const divisionName = user.divisions.map((d) => d.division.name).join(", ") || null;
 
     // Fire emails in background — don't let email failures block the response.
     Promise.all([

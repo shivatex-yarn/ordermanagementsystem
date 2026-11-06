@@ -4,73 +4,38 @@ import bcrypt from "bcryptjs";
 const prisma = new PrismaClient();
 
 /**
- * Demo seed for the Shiva TexYarn Limited Enquiry Management System.
- *
- * Creates one user per role (excluding USER → multiple) and three divisions, with
- * division-head + supervisor mappings. Passwords are all `shivatex@12345`.
+ * Demo seed: one Super Admin, a Marketing person and a Sales person, mapped to divisions.
+ * Add the remaining divisions and people from the app (Team and Divisions screens).
+ * All passwords: shivatex@12345
  */
 async function main() {
-  const password = "shivatex@12345";
-  const hash = await bcrypt.hash(password, 10);
+  const hash = await bcrypt.hash("shivatex@12345", 10);
 
-  // Divisions
-  const divisions = await Promise.all([
-    prisma.division.upsert({ where: { name: "Operations" }, update: {}, create: { name: "Operations" } }),
-    prisma.division.upsert({ where: { name: "Sales" }, update: {}, create: { name: "Sales" } }),
-    prisma.division.upsert({ where: { name: "Support" }, update: {}, create: { name: "Support" } }),
-  ]);
-  console.log("Divisions:", divisions.map((d) => d.name).join(", "));
-  const [opsDiv, salesDiv, supportDiv] = divisions;
+  const names = ["Lamination", "Coating", "Garments", "Processing"];
+  const divisions = await Promise.all(
+    names.map((name) => prisma.division.upsert({ where: { name }, update: {}, create: { name } }))
+  );
 
-  // Users — one per role
-  type SeedUser = {
-    email: string;
-    name: string;
-    role:
-      | "SUPER_ADMIN"
-      | "MANAGING_DIRECTOR"
-      | "ACCOUNTS"
-      | "DIVISION_HEAD"
-      | "MANAGER"
-      | "SUPERVISOR"
-      | "ASM"
-      | "USER";
-    divisionId?: number;
-  };
-  const seedUsers: SeedUser[] = [
-    { email: "superadmin@shivatex.in", name: "Super Admin", role: "SUPER_ADMIN" },
-    { email: "md@shivatex.in", name: "Anita Rao (MD)", role: "MANAGING_DIRECTOR" },
-    { email: "accounts@shivatex.in", name: "Accounts Team", role: "ACCOUNTS" },
-    { email: "head.ops@shivatex.in", name: "Ravi Kumar (Ops Head)", role: "DIVISION_HEAD", divisionId: opsDiv.id },
-    { email: "head.sales@shivatex.in", name: "Priya Menon (Sales Head)", role: "DIVISION_HEAD", divisionId: salesDiv.id },
-    { email: "supervisor.ops@shivatex.in", name: "Mahesh Iyer (Supervisor)", role: "SUPERVISOR", divisionId: opsDiv.id },
-    { email: "asm.sales@shivatex.in", name: "Karthik Patel (ASM)", role: "ASM", divisionId: salesDiv.id },
-    { email: "sales1@shivatex.in", name: "Neha Singh (Sales)", role: "USER", divisionId: salesDiv.id },
-    { email: "sales2@shivatex.in", name: "Vikram Shah (Sales)", role: "USER", divisionId: supportDiv.id },
+  const people = [
+    { email: "superadmin@shivatex.in", name: "Super Admin", role: "SUPER_ADMIN" as const, divs: [] as number[] },
+    { email: "marketing@shivatex.in", name: "Anita Rao", role: "MARKETING" as const, divs: [divisions[0].id, divisions[1].id] },
+    { email: "sales@shivatex.in", name: "Ravi Kumar", role: "SALES" as const, divs: [divisions[0].id, divisions[1].id, divisions[2].id] },
   ];
-  for (const u of seedUsers) {
+  for (const p of people) {
     const user = await prisma.user.upsert({
-      where: { email: u.email },
-      update: { passwordHash: hash, role: u.role, name: u.name, divisionId: u.divisionId ?? null },
-      create: {
-        name: u.name,
-        email: u.email,
-        passwordHash: hash,
-        role: u.role,
-        divisionId: u.divisionId ?? null,
-      },
+      where: { email: p.email },
+      update: { passwordHash: hash, role: p.role, name: p.name },
+      create: { email: p.email, name: p.name, role: p.role, passwordHash: hash },
     });
-    if (u.divisionId && (u.role === "DIVISION_HEAD" || u.role === "MANAGER")) {
-      await prisma.divisionManager.upsert({
-        where: { divisionId_userId: { divisionId: u.divisionId, userId: user.id } },
+    for (const divisionId of p.divs) {
+      await prisma.userDivision.upsert({
+        where: { userId_divisionId: { userId: user.id, divisionId } },
         update: {},
-        create: { divisionId: u.divisionId, userId: user.id },
+        create: { userId: user.id, divisionId },
       });
     }
-    console.log("Seeded user:", u.email, "→", u.role);
+    console.log("Seeded", p.role, p.email);
   }
-
-  console.log("Done. All passwords:", password);
 }
 
 main()

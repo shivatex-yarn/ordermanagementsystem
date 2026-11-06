@@ -43,7 +43,6 @@ async function respondOfflineMockLogin(remaining: number) {
         name: "Super Admin (offline)",
         email: MOCK_EMAIL,
         role: "SUPER_ADMIN" as Role,
-        divisionId: null,
         offline: true,
       },
     },
@@ -87,7 +86,6 @@ export async function POST(req: Request) {
       name: string;
       email: string;
       role: Role;
-      divisionId: number | null;
       passwordHash: string;
       active: boolean;
     } | null = null;
@@ -109,7 +107,6 @@ export async function POST(req: Request) {
               name: true,
               email: true,
               role: true,
-              divisionId: true,
               passwordHash: true,
               active: true,
             },
@@ -194,7 +191,6 @@ export async function POST(req: Request) {
         sub: String(user.id),
         email: user.email,
         role: user.role,
-        divisionId: user.divisionId ?? undefined,
         sid: sessionId,
       }),
     ]);
@@ -205,7 +201,6 @@ export async function POST(req: Request) {
           name: user.name,
           email: user.email,
           role: user.role,
-          divisionId: user.divisionId,
         },
       },
       { headers: { "X-RateLimit-Remaining": String(remaining) } }

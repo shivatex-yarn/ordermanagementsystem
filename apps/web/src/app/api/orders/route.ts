@@ -1,313 +1,94 @@
-import { NextResponse, after } from "next/server";
+import { NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { withAuth } from "@/lib/with-auth";
-import { Prisma, type OrderStatus } from "@prisma/client";
+import { withAuth, accessibleDivisionIds } from "@/lib/with-auth";
 import { createOrderSchema } from "@/lib/validation";
-import { userMayCreateEnquiry } from "@/lib/enquiry-access";
-import { createOrder } from "@/lib/order-engine";
-import { publish } from "@/lib/events";
-import { getRateLimitIdentifierForUser, rateLimit } from "@/lib/rate-limit";
-import { getCreatedAtRange, normalizePeriodParam, parseCreatedAtRangeFromParams } from "@/lib/date-period";
-import { userMayRouteEnquiryToDivision } from "@/lib/division-access";
-import { timingHeaderValue, withTiming } from "@/lib/server-timing";
+import { canCreateEnquiry } from "@/lib/roles";
+import { createOrderRow, orderListSelect, scopeWhere } from "@/lib/orders";
+import { appendTimeline } from "@/lib/timeline";
 
-/**
- * Keep list payload small: the Orders page only needs id, number, status, createdAt,
- * division name, and (optionally) submitter name/email.
- * Heavy relations belong in /api/orders/:id only.
- */
-const orderListSelect = {
-  id: true,
-  orderNumber: true,
-  status: true,
-  priority: true,
-  companyName: true,
-  customerName: true,
-  slaDeadline: true,
-  assignedSupervisorId: true,
-  createdAt: true,
-  currentDivision: { select: { name: true } },
-  createdBy: { select: { name: true, email: true } },
-} as const;
-
-/** Full-detail select used only when export=1 is requested. */
-const orderExportSelect = {
-  id: true,
-  orderNumber: true,
-  status: true,
-  priority: true,
-  companyName: true,
-  customerName: true,
-  customerPhone: true,
-  customerEmail: true,
-  customerAddress: true,
-  gstNumber: true,
-  description: true,
-  customFields: true,
-  customerOrderDate: true,
-  sampleRequested: true,
-  sampleRequestNotes: true,
-  sampleDetails: true,
-  sampleQuantity: true,
-  sampleWeight: true,
-  sampleShippedByCourier: true,
-  courierName: true,
-  trackingId: true,
-  sampleApprovedAt: true,
-  sampleShippedAt: true,
-  sampleReceivedAt: true,
-  sampleDeliveryDate: true,
-  sampleRemarks: true,
-  salesFeedback: true,
-  salesFeedbackAt: true,
-  customerFeedback: true,
-  customerFeedbackAt: true,
-  customerResponseStatus: true,
-  customerFeedbackRemarks: true,
-  acceptanceReason: true,
-  cancellationReason: true,
-  transferCount: true,
-  rejectionCount: true,
-  createdAt: true,
-  updatedAt: true,
-  completedAt: true,
-  cancelledAt: true,
-  currentDivision: { select: { name: true } },
-  createdBy: { select: { name: true, email: true } },
-  completedBy: { select: { name: true } },
-  cancelledBy: { select: { name: true } },
-  assignedSupervisor: { select: { name: true } },
-} as const;
-
+/** List enquiries the person can see. Filters: status, divisionId, q (search), mine=1. */
 export async function GET(req: Request) {
-  const marks: { name: string; durMs: number; desc?: string }[] = [];
   const auth = await withAuth();
   if (auth.response) return auth.response;
-  const isAccountsViewer = auth.payload.role === "ACCOUNTS";
-  const rl = await withTiming("ratelimit", () =>
-    rateLimit(getRateLimitIdentifierForUser(req, Number(auth.payload.sub)))
-  );
-  marks.push(rl.mark);
-  const { ok, remaining } = rl.value;
-  if (!ok) {
-    return NextResponse.json(
-      { error: "Too many requests" },
-      { status: 429, headers: { "X-RateLimit-Remaining": String(remaining) } }
-    );
+  const sp = new URL(req.url).searchParams;
+  const where: Prisma.OrderWhereInput = { ...(await scopeWhere(auth.payload)) };
+
+  const status = sp.get("status");
+  if (status && ["PLACED", "PRICED", "CLOSED", "CANCELLED"].includes(status)) where.status = status as never;
+  const divisionId = Number(sp.get("divisionId"));
+  if (divisionId) where.divisionId = divisionId;
+  if (sp.get("mine") === "1") {
+    const me = Number(auth.payload.sub);
+    where.OR = [{ createdById: me }, { assignedToId: me }];
   }
-
-  const { searchParams } = new URL(req.url);
-  const page = Number(searchParams.get("page")) || 1;
-  const limit = Number(searchParams.get("limit")) || 20;
-  const status = searchParams.get("status") || undefined;
-  const divisionId = searchParams.get("divisionId") || undefined;
-  const period = normalizePeriodParam(searchParams.get("period"));
-  const dateFrom = searchParams.get("from")?.trim() || null;
-  const dateTo = searchParams.get("to")?.trim() || null;
-  const customCreatedRange = parseCreatedAtRangeFromParams(dateFrom, dateTo);
-  const wantStats = searchParams.get("stats") === "1";
-  const wantExport = searchParams.get("export") === "1";
-  /** Free-text search from the header search box. */
-  const search = searchParams.get("q")?.trim() || "";
-
-  const where: Prisma.OrderWhereInput = {};
-  if (search) {
-    // Matches how people actually look an enquiry up: by its number, the
-    // company, or the person who placed it.
-    const bare = search.replace(/^enq-/i, "");
-    where.OR = [
-      { orderNumber: { contains: bare, mode: "insensitive" } },
-      { companyName: { contains: search, mode: "insensitive" } },
-      { customerName: { contains: search, mode: "insensitive" } },
-      { customerPhone: { contains: search, mode: "insensitive" } },
-      { customerEmail: { contains: search, mode: "insensitive" } },
+  const q = sp.get("q")?.trim();
+  if (q) {
+    where.AND = [
+      {
+        OR: [
+          { customerName: { contains: q, mode: "insensitive" } },
+          { companyName: { contains: q, mode: "insensitive" } },
+          { orderNumber: { contains: q, mode: "insensitive" } },
+          { productDetails: { contains: q, mode: "insensitive" } },
+        ],
+      },
     ];
   }
-  if (status) where.status = status as OrderStatus;
-  if (divisionId) where.currentDivisionId = Number(divisionId);
-  if (customCreatedRange) {
-    where.createdAt = { gte: customCreatedRange.gte, lte: customCreatedRange.lte };
-  } else {
-    const createdRange = getCreatedAtRange(period);
-    if (createdRange) {
-      where.createdAt = { gte: createdRange.gte, lte: createdRange.lte };
-    }
-  }
-  if (!isAccountsViewer) {
-    if (auth.payload.role === "USER") where.createdById = Number(auth.payload.sub);
-    if (
-      auth.payload.role === "MANAGER" ||
-      auth.payload.role === "SUPERVISOR" ||
-      auth.payload.role === "DIVISION_HEAD" ||
-      auth.payload.role === "ASM"
-    ) {
-      const userId = Number(auth.payload.sub);
-      const managed = await prisma.divisionManager.findMany({
-        where: { userId },
-        select: { divisionId: true },
-      });
-      const accessibleDivisionIds = Array.from(
-        new Set(
-          [auth.payload.divisionId ?? null, ...managed.map((m) => m.divisionId)].filter(
-            (v): v is number => typeof v === "number"
-          )
-        )
-      );
-      if (accessibleDivisionIds.length > 0) {
-        where.currentDivisionId = { in: accessibleDivisionIds };
-      } else {
-        where.currentDivisionId = -1;
-      }
-    }
-  }
-  // SUPER_ADMIN and MANAGING_DIRECTOR see all (no extra filter)
 
-  let orders: unknown[] = [];
-  let total = 0;
-  let statusCounts: Record<string, number> | undefined;
-  try {
-    const p1 = withTiming("db_findMany", () =>
-      prisma.order.findMany({
-        where,
-        select: wantExport ? orderExportSelect : orderListSelect,
-        orderBy: { createdAt: "desc" },
-        skip: (page - 1) * limit,
-        take: limit,
-      })
-    );
-    const p2 = withTiming("db_count", () => prisma.order.count({ where }));
-    const results = await Promise.all([p1, p2]);
-    marks.push(results[0].mark, results[1].mark);
-    orders = results[0].value;
-    total = results[1].value;
-    if (wantStats) {
-      const grp = await withTiming("db_groupBy", () =>
-        prisma.order.groupBy({
-          by: ["status"],
-          where,
-          _count: { _all: true },
-        })
-      );
-      marks.push(grp.mark);
-      const grouped = grp.value;
-      statusCounts = Object.fromEntries(grouped.map((g) => [g.status, g._count._all])) as Record<string, number>;
-    }
-  } catch (err) {
-    console.error("[GET /api/orders]", err);
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2022") {
-      return NextResponse.json(
-        {
-          error:
-            "Database is missing required columns (sample workflow / schema update). From apps/web run: npx prisma migrate deploy",
-          code: "SCHEMA_DRIFT",
-        },
-        { status: 503 }
-      );
-    }
-    const msg = err instanceof Error ? err.message : String(err);
-    if (/column/i.test(msg) && /does not exist/i.test(msg)) {
-      return NextResponse.json(
-        {
-          error:
-            "Database schema is out of date. Run migrations: cd apps/web && npx prisma migrate deploy",
-          code: "SCHEMA_DRIFT",
-        },
-        { status: 503 }
-      );
-    }
-    return NextResponse.json({ error: "Failed to load enquiries" }, { status: 500 });
-  }
-
-  const result = { orders, total, page, limit, ...(statusCounts != null ? { statusCounts } : {}) };
-  const res = NextResponse.json(result);
-  res.headers.set("Server-Timing", timingHeaderValue(marks));
-  return res;
+  const scope = await scopeWhere(auth.payload);
+  const [orders, counts] = await Promise.all([
+    prisma.order.findMany({ where, orderBy: { enquiryDate: "desc" }, take: 300, select: orderListSelect }),
+    prisma.order.groupBy({ by: ["status"], where: scope, _count: { _all: true } }),
+  ]);
+  const byStatus = Object.fromEntries(counts.map((c) => [c.status, c._count._all]));
+  return NextResponse.json({ orders, counts: byStatus });
 }
 
+/** Marketing logs a new enquiry. Phone is optional. */
 export async function POST(req: Request) {
   const auth = await withAuth();
   if (auth.response) return auth.response;
-  const { ok, remaining } = await rateLimit(
-    getRateLimitIdentifierForUser(req, Number(auth.payload.sub))
-  );
-  if (!ok) {
-    return NextResponse.json(
-      { error: "Too many requests" },
-      { status: 429, headers: { "X-RateLimit-Remaining": String(remaining) } }
-    );
+  if (!canCreateEnquiry(auth.payload.role)) {
+    return NextResponse.json({ error: "Only Marketing can log enquiries" }, { status: 403 });
   }
-
-  const body = await req.json();
-  const parsed = createOrderSchema.safeParse(body);
+  const parsed = createOrderSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Invalid input", details: parsed.error.flatten() },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
   }
-  if (!userMayCreateEnquiry(auth.payload.role)) {
+  const d = parsed.data;
+  const allowed = await accessibleDivisionIds(auth.payload);
+  if (allowed !== null && !allowed.includes(d.divisionId)) {
     return NextResponse.json(
-      {
-        error:
-          "Only sales users (User or Supervisor role) can create new enquiries. Division managers process enquiries from the list.",
-      },
+      { error: "You don't have access to that division. Request access from the admin." },
       { status: 403 }
     );
   }
-  const userId = Number(auth.payload.sub);
-  if (!Number.isInteger(userId) || userId < 1) {
-    return NextResponse.json({ error: "Invalid session" }, { status: 401 });
+  const enquiryDate = new Date(d.enquiryDate);
+  if (Number.isNaN(enquiryDate.getTime())) {
+    return NextResponse.json({ error: "Enquiry date is not valid" }, { status: 400 });
   }
-  const mayUseDivision = await userMayRouteEnquiryToDivision(userId, auth.payload.role, parsed.data.divisionId);
-  if (!mayUseDivision) {
-    return NextResponse.json(
-      { error: "You can only raise enquiries for division(s) you are assigned to." },
-      { status: 403 }
-    );
-  }
-  let order;
-  try {
-    order = await createOrder(userId, parsed.data.divisionId, {
-      companyName: parsed.data.companyName,
-      description: parsed.data.description,
-      customFields: parsed.data.customFields,
-      sampleRequested: parsed.data.sampleRequested,
-      sampleRequestNotes: parsed.data.sampleRequestNotes,
-      customerName: parsed.data.customerName,
-      customerPhone: parsed.data.customerPhone,
-      customerEmail: parsed.data.customerEmail,
-      customerAddress: parsed.data.customerAddress,
-      gstNumber: parsed.data.gstNumber,
-      gstCopyUrl: parsed.data.gstCopyUrl,
-      customerOrderDate: parsed.data.customerOrderDate,
-    });
-  } catch (err) {
-    console.error("[POST /api/orders]", err);
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2022") {
-      return NextResponse.json(
-        { error: "Database is missing required columns. Run: cd apps/web && npx prisma migrate deploy", code: "SCHEMA_DRIFT" },
-        { status: 503 }
-      );
-    }
-    const msg = err instanceof Error ? err.message : String(err);
-    if (/column/i.test(msg) && /does not exist/i.test(msg)) {
-      return NextResponse.json(
-        { error: "Database schema is out of date. Run: cd apps/web && npx prisma migrate deploy", code: "SCHEMA_DRIFT" },
-        { status: 503 }
-      );
-    }
-    return NextResponse.json({ error: "Failed to create enquiry" }, { status: 500 });
-  }
-  after(() =>
-    publish({
-      type: "OrderCreated",
-      orderId: order.id,
-      orderNumber: order.orderNumber,
-      createdById: order.createdById,
-      divisionId: order.currentDivisionId,
-      timestamp: order.createdAt.toISOString(),
-      userId: userId,
-    }).catch((err) => console.error("[POST /api/orders] post-response event failed:", err))
-  );
+  const order = await createOrderRow({
+    enquiryDate,
+    customerName: d.customerName,
+    companyName: d.companyName ?? null,
+    customerPhone: d.customerPhone ?? null,
+    customerEmail: d.customerEmail || null,
+    customerAddress: d.customerAddress ?? null,
+    gstNumber: d.gstNumber ?? null,
+    gstCopyUrl: d.gstCopyUrl ?? null,
+    divisionId: d.divisionId,
+    productDetails: d.productDetails,
+    isSample: d.isSample,
+    assignedToId: d.assignedToId ?? null,
+    createdById: Number(auth.payload.sub),
+  });
+  await appendTimeline({
+    orderId: order.id,
+    type: "ENQUIRY_CREATED",
+    title: "Enquiry logged",
+    detail: d.isSample ? "Client wants a sample." : null,
+    actorId: Number(auth.payload.sub),
+  });
   return NextResponse.json(order, { status: 201 });
 }

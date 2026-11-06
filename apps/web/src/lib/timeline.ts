@@ -13,27 +13,12 @@ import { prisma } from "@/lib/db";
 
 export type TimelineEventType =
   | "ENQUIRY_CREATED"
-  | "ENQUIRY_APPROVED"
-  | "ENQUIRY_REJECTED"
-  | "ENQUIRY_TRANSFERRED"
-  | "ENQUIRY_RECEIVED"
-  | "ENQUIRY_COMPLETED"
-  | "ENQUIRY_CANCELLED"
-  | "PRODUCT_CLASSIFIED"
-  | "SAMPLE_REQUESTED"
-  | "SAMPLE_DETAILS_SUBMITTED"
-  | "SAMPLE_APPROVED_BY_HEAD"
-  | "SAMPLE_APPROVED"
-  | "SAMPLE_SPECS_ACKNOWLEDGED_BY_SALES"
-  | "SAMPLE_SHIPPED"
-  | "SAMPLE_RECEIVED"
-  | "CUSTOMER_FEEDBACK"
-  | "PRIORITY_CHANGED"
-  | "DELAY_REASON_SUBMITTED"
-  | "SLA_BREACHED"
-  | "SLA_HEAD_REJECTION"
-  | "HANDOFF_SUBMITTED"
-  | "COMMENT";
+  | "ENQUIRY_EDITED"
+  | "PRICING_ADDED"
+  | "SAMPLE_UPDATED"
+  | "CLIENT_FEEDBACK"
+  | "ENQUIRY_CLOSED"
+  | "ENQUIRY_CANCELLED";
 
 export interface AppendTimelineInput {
   orderId: number;
@@ -71,22 +56,3 @@ export async function getEnquiryTimeline(orderId: number, limit = 200) {
   });
 }
 
-/** Recent activity across all enquiries — used on MD dashboard. */
-export async function getRecentTimeline(limit = 50) {
-  return prisma.enquiryTimelineEvent.findMany({
-    orderBy: { createdAt: "desc" },
-    take: limit,
-    include: {
-      actor: { select: { id: true, name: true, email: true, role: true } },
-      order: {
-        select: {
-          id: true,
-          orderNumber: true,
-          companyName: true,
-          currentDivisionId: true,
-          currentDivision: { select: { id: true, name: true } },
-        },
-      },
-    },
-  });
-}
