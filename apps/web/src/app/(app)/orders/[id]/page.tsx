@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Field, FormError, Segmented, selectClass, textareaClass } from "@/components/ui/field";
 import { canCreateEnquiry, canPrice } from "@/lib/roles";
+import { EnquiryStepper } from "@/components/enquiry-stepper";
 import { cn } from "@/lib/utils";
 
 type Order = {
@@ -246,8 +247,12 @@ export default function EnquiryPage({ params }: { params: Promise<{ id: string }
   return (
     <>
       <Link href="/orders" className="inline-flex items-center gap-1.5 text-sm font-semibold text-[var(--app-ink-3)] hover:text-[var(--app-ink)]"><ArrowLeft className="h-4 w-4" /> Enquiries</Link>
-      <PageHeader title={<span className="flex flex-wrap items-center gap-3">{o.orderNumber}<StatusPill status={o.status} /></span>} description={`${o.companyName || o.customerName} · ${o.division.name} · Enquiry date ${fmtDate(o.enquiryDate)}`} />
+      <PageHeader title={<span className="flex flex-wrap items-center gap-3">{o.orderNumber}<StatusPill status={o.status} /></span>} description={`${o.companyName || o.customerName} · ${o.division.name} · Enquiry date ${fmtDate(o.enquiryDate)}${user && !canPrice(user.role) && !canCreateEnquiry(user.role) ? " · View only" : ""}`} />
       {next}
+
+      <Panel className="px-4 py-5 sm:px-8">
+        <EnquiryStepper isSample={o.isSample} priced={!!o.pricedAt} sampleSent={!!o.sampleSentAt} replied={!!o.clientResponse} closed={o.status === "CLOSED"} cancelled={o.status === "CANCELLED"} />
+      </Panel>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="space-y-6">

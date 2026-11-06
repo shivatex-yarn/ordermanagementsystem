@@ -21,7 +21,9 @@ export const canCreateEnquiry = (r?: Role | null) => r === "MARKETING" || r === 
 export const canPrice = (r?: Role | null) => r === "SALES" || r === "SUPER_ADMIN";
 
 export function defaultLandingPath(role?: Role | null): string {
-  return isViewer(role) || role === "SUPER_ADMIN" ? "/overview" : "/dashboard";
+  if (role === "ACCOUNTS") return "/accounts";
+  if (role === "MANAGING_DIRECTOR") return "/md";
+  return role === "SUPER_ADMIN" ? "/overview" : "/dashboard";
 }
 
 export function roleLabel(role?: Role | null): string {
