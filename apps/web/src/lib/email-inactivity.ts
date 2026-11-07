@@ -15,13 +15,6 @@ export type InactivityMail = {
 
 const initials = (n: string) => n.split(" ").map((x) => x[0]).join("").slice(0, 2).toUpperCase();
 
-function row(label: string, value: string): string {
-  return `<tr>
-    <td style="padding:11px 0;border-bottom:1px solid #eef0f4;font-size:13px;color:#667085;width:36%;vertical-align:top;">${esc(label)}</td>
-    <td style="padding:11px 0;border-bottom:1px solid #eef0f4;font-size:14px;font-weight:600;color:#101828;vertical-align:top;">${value}</td>
-  </tr>`;
-}
-
 /** Modern, table-based (email-client safe) alert for "no enquiries entered in N days". */
 export function renderInactivityEmail(m: InactivityMail): { subject: string; html: string; text: string } {
   const base = appUrl();
@@ -34,14 +27,8 @@ export function renderInactivityEmail(m: InactivityMail): { subject: string; htm
   const since = never ? m.person.joinedAt : m.last!.loggedAt;
 
   const last = never
-    ? `<div style="font-size:14px;line-height:1.6;color:#344054;">No enquiry has ever been entered by ${esc(m.person.name)}. Their account was created on <b>${esc(fmt(m.person.joinedAt))}</b>.</div>`
-    : `<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${[
-        row("Enquiry", `<span style="color:#4338ca;">${esc(m.last!.orderNumber)}</span>`),
-        row("Client", esc(m.last!.client)),
-        row("Division", esc(m.last!.division)),
-        row("Enquiry date", esc(fmt(m.last!.enquiryDate))),
-        row("Entered on", esc(fmt(m.last!.loggedAt))),
-      ].join("")}</table>`;
+    ? `<div style="font-size:14px;line-height:1.65;color:#344054;">No enquiry has ever been entered by ${esc(m.person.name)}. Their account was created on <b>${esc(fmt(m.person.joinedAt))}</b>.</div>`
+    : `<div style="font-size:14px;line-height:1.75;color:#344054;"><b style="color:#4338ca;">${esc(m.last!.orderNumber)}</b> &middot; ${esc(m.last!.client)} &middot; ${esc(m.last!.division)}<br>Enquiry dated <b>${esc(fmt(m.last!.enquiryDate))}</b>, entered on <b>${esc(fmt(m.last!.loggedAt))}</b>.</div>`;
 
   const html = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>${esc(subject)}</title></head>
@@ -94,8 +81,8 @@ export function renderInactivityEmail(m: InactivityMail): { subject: string; htm
     </td></tr>
 
     <tr><td style="padding:22px 28px 4px;">
-      <div style="font-size:11px;font-weight:800;letter-spacing:0.12em;text-transform:uppercase;color:#98a2b3;margin-bottom:10px;">${never ? "Entries" : "Last entry details"}</div>
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;border:1px solid #e8e8f6;border-radius:14px;"><tr><td style="padding:6px 20px 10px;">${last}</td></tr></table>
+      <div style="font-size:11px;font-weight:800;letter-spacing:0.12em;text-transform:uppercase;color:#98a2b3;margin-bottom:10px;">${never ? "Entries" : "Last entry"}</div>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;border:1px solid #e8e8f6;border-radius:14px;"><tr><td style="padding:16px 20px;">${last}</td></tr></table>
     </td></tr>
 
     <tr><td align="center" style="padding:30px 28px 34px;">
