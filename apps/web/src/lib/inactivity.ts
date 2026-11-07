@@ -1,0 +1,65 @@
+import { prisma } from "@/lib/db";
+import { sendEmail, sendEmailsThrottled } from "@/lib/email";
+import { notify } from "@/lib/activity";
+import { renderInactivityEmail, type InactivityMail } from "@/lib/email-inactivity";
+
+/** A Marketing person with no new enquiry for this many days triggers an alert. */
+export const INACTIVITY_DAYS = 15;
+/** While they stay inactive, remind again after this many days. */
+export const REMINDER_EVERY_DAYS = 7;
+const DAY = 864e5;
+
+export type InactivityResult = { checked: number; inactive: number; alerted: number; skippedRecent: number; recipients: number; emailed: number; failed: number };
+
+/** Finds inactive Marketing people and emails the Super admin(s) and MD(s). Safe to run daily. */
+export async function runInactivityAlerts(now = new Date()): Promise<InactivityResult> {
+  const people = await prisma.user.findMany({
+    where: { role: "MARKETING", active: true, divisions: { some: {} } },
+    select: { id: true, name: true, email: true, createdAt: true, divisions: { select: { division: { select: { name: true } } } } },
+  });
+  const leaders = await prisma.user.findMany({ where: { role: { in: ["SUPER_ADMIN", "MANAGING_DIRECTOR"] }, active: true }, select: { id: true, email: true } });
+  const result: InactivityResult = { checked: people.length, inactive: 0, alerted: 0, skippedRecent: 0, recipients: leaders.length, emailed: 0, failed: 0 };
+  if (!people.length || !leaders.length) return result;
+
+  const sends: Array<() => Promise<{ ok: boolean; error?: string }>> = [];
+  for (const p of people) {
+    const last = await prisma.order.findFirst({
+      where: { createdById: p.id },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, orderNumber: true, companyName: true, customerName: true, enquiryDate: true, createdAt: true, division: { select: { name: true } } },
+    });
+    const since = last?.createdAt ?? p.createdAt;
+    const days = Math.floor((now.getTime() - since.getTime()) / DAY);
+    if (days < INACTIVITY_DAYS) continue;
+    result.inactive++;
+
+    // Already alerted for this stretch of inactivity? Only remind weekly.
+    const prev = await prisma.auditLog.findFirst({
+      where: { action: "INACTIVITY_ALERT_SENT", entityType: "User", entityId: p.id },
+      orderBy: { createdAt: "desc" },
+      select: { createdAt: true },
+    });
+    if (prev && prev.createdAt > since && now.getTime() - prev.createdAt.getTime() < REMINDER_EVERY_DAYS * DAY) {
+      result.skippedRecent++;
+      continue;
+    }
+
+    const data: InactivityMail = {
+      person: { name: p.name, email: p.email, divisions: p.divisions.map((d) => d.division.name), joinedAt: p.createdAt },
+      days, thresholdDays: INACTIVITY_DAYS,
+      last: last ? { orderNumber: last.orderNumber, orderId: last.id, client: last.companyName || last.customerName, division: last.division.name, enquiryDate: last.enquiryDate, loggedAt: last.createdAt } : null,
+    };
+    const mail = renderInactivityEmail(data);
+    const to = leaders.map((l) => l.email);
+    sends.push(async () => {
+      const r = await sendEmail({ to, subject: mail.subject, html: mail.html, text: mail.text });
+      if (r.ok) result.emailed++; else result.failed++;
+      return r;
+    });
+    await notify(leaders.map((l) => l.id), { type: "INACTIVITY", title: `Nil enquiries: ${p.name}`, body: last ? `No enquiry for ${days} days. Last entry ${last.orderNumber} on ${last.createdAt.toLocaleDateString("en-IN", { day: "2-digit", month: "short", timeZone: "Asia/Kolkata" })}.` : `No enquiry entered since joining (${days} days).`, link: "/team" });
+    await prisma.auditLog.create({ data: { userName: "System", category: "TEAM", action: "INACTIVITY_ALERT_SENT", entityType: "User", entityId: p.id, entityLabel: p.name, detail: `${days} days without an enquiry` } });
+    result.alerted++;
+  }
+  await sendEmailsThrottled(sends);
+  return result;
+}
