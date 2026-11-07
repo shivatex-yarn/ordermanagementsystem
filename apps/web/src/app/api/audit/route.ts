@@ -41,11 +41,15 @@ export async function GET(req: Request) {
   const [logs, total, people] = await Promise.all([
     prisma.auditLog.findMany({ where, orderBy: { createdAt: "desc" }, skip: (page - 1) * PAGE_SIZE, take: PAGE_SIZE }),
     prisma.auditLog.count({ where }),
-    // Filter dropdown: everyone who has ever acted (snapshot names survive deleted accounts)
-    prisma.auditLog.groupBy({ by: ["userId", "userName"], _count: { _all: true }, orderBy: { userName: "asc" } }),
+    // Filter dropdown: one entry per person (grouped by account, not by the name recorded at the time)
+    prisma.auditLog.groupBy({ by: ["userId"], where: { userId: { not: null } }, _count: { _all: true } }),
   ]);
+  const names = await prisma.user.findMany({ where: { id: { in: people.map((p) => p.userId as number) } }, select: { id: true, name: true } });
+  const nameOf = new Map(names.map((u) => [u.id, u.name]));
   return NextResponse.json({
     logs, total, page, pageSize: PAGE_SIZE,
-    people: people.filter((p) => p.userId).map((p) => ({ id: p.userId, name: p.userName, count: p._count._all })),
+    people: people
+      .map((p) => ({ id: p.userId as number, name: nameOf.get(p.userId as number) ?? "Former team member", count: p._count._all }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
   });
 }
