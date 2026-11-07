@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { logAudit, notify, salesInDivision, superAdminIds } from "@/lib/activity";
+import { sendEnquiryCreatedEmails } from "@/lib/email-enquiry";
 import { withAuth, accessibleDivisionIds } from "@/lib/with-auth";
 import { createOrderSchema } from "@/lib/validation";
 import { canCreateEnquiry } from "@/lib/roles";
@@ -77,5 +78,8 @@ export async function POST(req: Request) {
   const me = Number(auth.payload.sub);
   await logAudit({ actor: auth.payload, action: "ENQUIRY_CREATED", category: "ENQUIRY", entityType: "Order", entityId: order.id, entityLabel: order.orderNumber, detail: `${d.companyName || d.customerName}${d.isSample ? " · sample" : ""}`, req });
   void notify(await salesInDivision(d.divisionId), { type: "ENQUIRY_NEW", title: `New enquiry ${order.orderNumber}`, body: `${d.companyName || d.customerName} needs pricing${d.isSample ? " (sample requested)" : ""}.`, link: `/orders/${order.id}` }, me);
+  void notify(await superAdminIds(), { type: "ENQUIRY_NEW", title: `New enquiry ${order.orderNumber}`, body: `${d.companyName || d.customerName} logged by ${auth.payload.email}.`, link: `/orders/${order.id}` }, me);
+  // Email the Super admin(s) and the person who logged it, after the response has gone out.
+  after(() => sendEnquiryCreatedEmails(order.id));
   return NextResponse.json(order, { status: 201 });
 }
