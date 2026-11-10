@@ -136,7 +136,7 @@ export default function TeamPage() {
       ) : null}
 
       <Panel>
-        <PanelHeader title={`${active.length} active`} caption={`${allUsers.length} people in total. Marketing logs enquiries. Sales adds pricing and feedback.`} />
+        <PanelHeader title={`${active.length} active`} caption={`${allUsers.length} people in total. Marketing logs enquiries and adds pricing and feedback.`} />
         <div className="flex flex-wrap items-center gap-2 border-b border-[var(--app-line-soft)] p-4">
           <div className="relative min-w-[14rem] flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--app-ink-3)]" aria-hidden />
@@ -160,7 +160,7 @@ export default function TeamPage() {
         {isLoading ? <PanelSkeleton className="m-4 h-48" /> : users.length === 0 ? (
           filtering
             ? <EmptyState icon={Search} title="No one matches" description="Try a different name, role or status, or clear the filters." />
-            : <EmptyState icon={UserPlus} title="Add your first team member" description="Start with a Marketing person, then a Sales person." />
+            : <EmptyState icon={UserPlus} title="Add your first team member" description="Start with a Marketing person." />
         ) : (
           <ul>
             {users.map((p) => (

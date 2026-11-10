@@ -37,8 +37,8 @@ export function renderEnquiryCreatedEmail(e: EnquiryMail, audience: Audience): {
   const subject = isAdmin ? `New enquiry ${e.orderNumber} · ${e.client}` : `Your enquiry ${e.orderNumber} has been logged`;
   const headline = isAdmin ? `${esc(e.loggedBy)} logged a new enquiry` : "Your enquiry is logged";
   const lead = isAdmin
-    ? `A new enquiry for <b style="color:#101828;">${esc(e.client)}</b> is in the system. Sales in the ${esc(e.division)} division has been notified to add pricing.`
-    : `Thanks, we have it. <b style="color:#101828;">${esc(e.client)}</b> is now in the system and Sales in the ${esc(e.division)} division has been notified to add pricing.`;
+    ? `A new enquiry for <b style="color:#101828;">${esc(e.client)}</b> is in the system. Pricing can now be added.`
+    : `Thanks, we have it. <b style="color:#101828;">${esc(e.client)}</b> is now in the system. Next, add the pricing on the enquiry.`;
   const pill = (txt: string, bg: string, fg: string) => `<span style="display:inline-block;padding:3px 11px;border-radius:999px;background:${bg};color:${fg};font-size:12px;font-weight:700;">${txt}</span>`;
 
   const details = [
@@ -55,7 +55,7 @@ export function renderEnquiryCreatedEmail(e: EnquiryMail, audience: Audience): {
   const html = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>${esc(subject)}</title></head>
 <body style="margin:0;padding:0;background:#f3f4fb;">
-<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">${esc(e.orderNumber)} · ${esc(e.client)} · ${esc(e.division)}. ${isAdmin ? "Waiting for Sales to add pricing." : "We will let you know when pricing is added."}</div>
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">${esc(e.orderNumber)} · ${esc(e.client)} · ${esc(e.division)}. ${isAdmin ? "Pricing is yet to be added." : "Next, add the pricing on the enquiry."}</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4fb;padding:32px 12px;font-family:${FONT};-webkit-font-smoothing:antialiased;">
 <tr><td align="center">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:20px;overflow:hidden;border:1px solid #e6e8f2;">
@@ -90,7 +90,7 @@ export function renderEnquiryCreatedEmail(e: EnquiryMail, audience: Audience): {
     <tr><td style="padding:26px 28px 4px;">
       <div style="font-size:11px;font-weight:800;letter-spacing:0.12em;text-transform:uppercase;color:#98a2b3;margin-bottom:14px;">What happens next</div>
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
-        ${step("1", "Sales adds pricing", true)}${step("2", e.isSample ? "Sample goes out" : "Client is quoted", false)}${step("3", "Client feedback, then closed", false)}
+        ${step("1", "Marketing adds pricing", true)}${step("2", e.isSample ? "Sample goes out" : "Client is quoted", false)}${step("3", "Client feedback, then closed", false)}
       </tr></table>
     </td></tr>
 

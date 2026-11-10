@@ -7,11 +7,11 @@ import { pricingSchema } from "@/lib/validation";
 import { appendTimeline } from "@/lib/timeline";
 import { canPrice } from "@/lib/roles";
 
-/** Sales adds (or revises) pricing. Moves a new enquiry to PRICED. */
+/** Marketing adds (or revises) pricing. Moves a new enquiry to PRICED. */
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const auth = await withAuth();
   if (auth.response) return auth.response;
-  if (!canPrice(auth.payload.role)) return NextResponse.json({ error: "Only Sales can add pricing" }, { status: 403 });
+  if (!canPrice(auth.payload.role)) return NextResponse.json({ error: "Only Marketing can add pricing" }, { status: 403 });
   const id = Number((await ctx.params).id);
   const order = await getScopedOrder(id, auth.payload);
   if (!order) return NextResponse.json({ error: "Enquiry not found" }, { status: 404 });

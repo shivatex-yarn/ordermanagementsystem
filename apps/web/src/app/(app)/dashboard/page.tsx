@@ -53,13 +53,15 @@ export default function DashboardPage() {
   if (marketing && user.divisions.length === 0) {
     next = <NextStep tone="wait" title="You aren't mapped to a division yet" description="Ask the admin to map you, or request access, then you can log enquiries." actionLabel="Request division access" actionHref="/divisions" />;
   } else if (marketing) {
-    next = <NextStep title={s.PLACED ? `${s.PLACED} enquiries are waiting for Sales to add pricing` : "Log the next client enquiry"} description="Enter the client, pick the division and say whether it's a sample." actionLabel="New enquiry" actionHref="/orders/new" />;
+    next = s.PLACED && data.needsPricing[0]
+      ? <NextStep title={`${s.PLACED} enquiries need your pricing`} description="Open the oldest first, add the price, then record the sample and client feedback." actionLabel="Open oldest" actionHref={`/orders/${data.needsPricing[0].id}`} />
+      : <NextStep title="Log the next client enquiry" description="Enter the client, pick the division and say whether it's a sample." actionLabel="New enquiry" actionHref="/orders/new" />;
   } else if (s.PLACED) {
     next = <NextStep title={`${s.PLACED} enquiries need your pricing`} description="Open the oldest first, add the price, then record the sample and client feedback." actionLabel="Open oldest" actionHref={`/orders/${data.needsPricing[0]?.id}`} />;
   } else if (s.PRICED) {
     next = <NextStep tone="wait" title={`${s.PRICED} priced enquiries are waiting for the client`} description="Record what the client says as soon as you hear back." actionLabel="Show them" actionHref="/orders?status=PRICED" />;
   } else {
-    next = <NextStep tone="done" eyebrow="All caught up" title="Nothing needs your pricing right now" description="New enquiries from Marketing will show up here." />;
+    next = <NextStep tone="done" eyebrow="All caught up" title="Nothing needs your pricing right now" description="New enquiries will show up here." />;
   }
 
   return (

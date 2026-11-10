@@ -136,7 +136,7 @@ export default function MdDashboard() {
         <Kpi label="Enquiries" value={String(c.logged)} cur={c.logged} prev={p.logged} spark={sp("logged")} color={P.indigo} />
         <Kpi label="Quotes priced" value={String(c.priced)} cur={c.priced} prev={p.priced} spark={sp("priced")} color={P.sky} />
         <Kpi label="Deals won" value={String(c.accepted)} cur={c.accepted} prev={p.accepted} spark={sp("accepted")} color={P.green} />
-        <Kpi label="Time to price" value={c.hoursToPrice === null ? "—" : c.hoursToPrice >= 48 ? String(Math.round(c.hoursToPrice / 24)) : String(c.hoursToPrice)} unit={c.hoursToPrice === null ? undefined : c.hoursToPrice >= 48 ? "days" : "hrs"} cur={c.hoursToPrice} prev={p.hoursToPrice} lowerIsBetter color={P.amber} hint="Average time from Marketing logging an enquiry to Sales adding the price. Lower is better." />
+        <Kpi label="Time to price" value={c.hoursToPrice === null ? "—" : c.hoursToPrice >= 48 ? String(Math.round(c.hoursToPrice / 24)) : String(c.hoursToPrice)} unit={c.hoursToPrice === null ? undefined : c.hoursToPrice >= 48 ? "days" : "hrs"} cur={c.hoursToPrice} prev={p.hoursToPrice} lowerIsBetter color={P.amber} hint="Average time from Marketing logging an enquiry to the price being added. Lower is better." />
       </div>
 
       {/* Trend + win rate + funnel */}
@@ -239,7 +239,7 @@ export default function MdDashboard() {
           </div>
         </section>
         <section className={cn(card, "p-5")}>
-          <H title="Team performance" sub="Enquiries logged by Marketing, quotes priced by Sales" />
+          <H title="Team performance" sub="Enquiries logged and quotes priced, per person" />
           {data.team.length === 0 ? <p className="py-8 text-center text-sm text-[var(--app-ink-3)]">No activity in this period.</p> : (
             <ul className="space-y-3.5">
               {data.team.map((t) => (

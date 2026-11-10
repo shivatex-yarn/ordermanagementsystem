@@ -97,7 +97,7 @@ export default function DivisionsPage() {
 
       {admin ? (
         <Panel>
-          <PanelHeader title={`Access requests${pending.length ? ` (${pending.length})` : ""}`} caption="Marketing and Sales ask here for more divisions. Only you can approve." />
+          <PanelHeader title={`Access requests${pending.length ? ` (${pending.length})` : ""}`} caption="Marketing asks here for more divisions. Only you can approve." />
           {requests.length === 0 ? <p className="p-5 text-sm text-[var(--app-ink-3)]">No requests yet.</p> : (
             <ul>
               {requests.map((r) => (
