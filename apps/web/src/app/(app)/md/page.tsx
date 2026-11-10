@@ -40,11 +40,12 @@ function Delta({ cur, prev, lowerIsBetter }: { cur: number | null; prev: number 
   return <span className={cn("inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[11px] font-bold", good ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600")}><Icon className="h-3 w-3" aria-hidden />{Math.abs(pct)}%</span>;
 }
 
-function Kpi({ label, value, unit, cur, prev, lowerIsBetter, spark, color }: { label: string; value: string; unit?: string; cur: number | null; prev: number | null; lowerIsBetter?: boolean; spark?: { v: number }[]; color: string }) {
+function Kpi({ label, value, unit, cur, prev, lowerIsBetter, spark, color, hint }: { hint?: string; label: string; value: string; unit?: string; cur: number | null; prev: number | null; lowerIsBetter?: boolean; spark?: { v: number }[]; color: string }) {
   return (
     <div className={cn(card, "relative overflow-hidden p-5")}>
       <div className="flex items-start justify-between gap-2"><p className="text-xs font-semibold uppercase tracking-wider text-[var(--app-ink-3)]">{label}</p><Delta cur={cur} prev={prev} lowerIsBetter={lowerIsBetter} /></div>
       <p className="tnum mt-3 text-4xl font-extrabold tracking-tight">{value}{unit ? <span className="ml-1 text-base font-semibold text-[var(--app-ink-3)]">{unit}</span> : null}</p>
+      {hint ? <p className="mt-2 text-xs leading-snug text-[var(--app-ink-3)]">{hint}</p> : null}
       {spark ? (
         <div className="-mx-5 -mb-5 mt-3 h-14" aria-hidden>
           <ResponsiveContainer width="100%" height="100%">
@@ -135,7 +136,7 @@ export default function MdDashboard() {
         <Kpi label="Enquiries" value={String(c.logged)} cur={c.logged} prev={p.logged} spark={sp("logged")} color={P.indigo} />
         <Kpi label="Quotes priced" value={String(c.priced)} cur={c.priced} prev={p.priced} spark={sp("priced")} color={P.sky} />
         <Kpi label="Deals won" value={String(c.accepted)} cur={c.accepted} prev={p.accepted} spark={sp("accepted")} color={P.green} />
-        <Kpi label="Time to price" value={c.hoursToPrice === null ? "—" : c.hoursToPrice >= 48 ? String(Math.round(c.hoursToPrice / 24)) : String(c.hoursToPrice)} unit={c.hoursToPrice === null ? undefined : c.hoursToPrice >= 48 ? "days" : "hrs"} cur={c.hoursToPrice} prev={p.hoursToPrice} lowerIsBetter color={P.amber} />
+        <Kpi label="Time to price" value={c.hoursToPrice === null ? "—" : c.hoursToPrice >= 48 ? String(Math.round(c.hoursToPrice / 24)) : String(c.hoursToPrice)} unit={c.hoursToPrice === null ? undefined : c.hoursToPrice >= 48 ? "days" : "hrs"} cur={c.hoursToPrice} prev={p.hoursToPrice} lowerIsBetter color={P.amber} hint="Average time from Marketing logging an enquiry to Sales adding the price. Lower is better." />
       </div>
 
       {/* Trend + win rate + funnel */}
