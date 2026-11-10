@@ -104,7 +104,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 )}
               >
                 <Icon className="h-4 w-4" aria-hidden />
-                {item.label}
+                {(item.href === "/md" && user?.role === "MANAGING_DIRECTOR") || (item.href === "/accounts" && user?.role === "ACCOUNTS") ? "Dashboard" : item.label}
               </Link>
             );
           })}
