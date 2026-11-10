@@ -63,3 +63,31 @@ export async function runInactivityAlerts(now = new Date()): Promise<InactivityR
   await sendEmailsThrottled(sends);
   return result;
 }
+
+/** Daily send time: 10:30 AM IST = 05:00 UTC (India has no daylight saving). */
+const DUE_UTC_HOUR = 5;
+let lastDayHandled = "";
+
+/**
+ * Backend fallback that needs no external scheduler: any signed-in request after 10:30 IST triggers today's check,
+ * once. A claim row in the audit log makes sure only one request (and one server instance) runs it.
+ * Never throws.
+ */
+export async function runInactivityCheckIfDue(now = new Date()): Promise<void> {
+  try {
+    const dayKey = now.toISOString().slice(0, 10);
+    if (lastDayHandled === dayKey) return;
+    const due = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), DUE_UTC_HOUR, 0, 0));
+    if (now < due) return;
+
+    const where = { action: "INACTIVITY_CHECK_RUN", createdAt: { gte: due } };
+    if (await prisma.auditLog.findFirst({ where, select: { id: true } })) { lastDayHandled = dayKey; return; }
+    const claim = await prisma.auditLog.create({ data: { userName: "System", category: "TEAM", action: "INACTIVITY_CHECK_RUN", detail: "Daily 10:30 IST inactivity check" }, select: { id: true } });
+    lastDayHandled = dayKey;
+    const first = await prisma.auditLog.findFirst({ where, orderBy: { id: "asc" }, select: { id: true } });
+    if (first && first.id !== claim.id) return; // another request claimed it first
+    await runInactivityAlerts(now);
+  } catch (err) {
+    console.error("[inactivity] daily check failed:", err);
+  }
+}
