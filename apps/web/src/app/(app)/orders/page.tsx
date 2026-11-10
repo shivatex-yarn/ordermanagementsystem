@@ -84,7 +84,13 @@ function List() {
       next = divisions.length === 0 ? (
         <NextStep tone="wait" title="You aren't mapped to a division yet" description="Ask the admin to map you to a division, or request access, then you can log enquiries." actionLabel="Request division access" actionHref="/divisions" />
       ) : (
-        <NextStep title={counts.PLACED ? `${counts.PLACED} enquiries are waiting for Sales to add pricing` : "Log the next client enquiry"} description="Enter the client, pick the division and say whether it's a sample. Sales picks it up from there." actionLabel="New enquiry" actionHref="/orders/new" />
+        counts.PLACED ? (
+          <NextStep title={`${counts.PLACED} enquiries need your pricing`} description="Open one, add the price, then record the sample and client feedback as they happen." actionLabel="Show them" onAction={() => { setStatus("PLACED"); setPage(1); }} />
+        ) : counts.PRICED ? (
+          <NextStep tone="wait" title={`${counts.PRICED} priced enquiries are waiting for the client`} description="Record what the client says as soon as you hear back." actionLabel="Show them" onAction={() => { setStatus("PRICED"); setPage(1); }} />
+        ) : (
+          <NextStep title="Log the next client enquiry" description="Enter the client, pick the division and say whether it's a sample." actionLabel="New enquiry" actionHref="/orders/new" />
+        )
       );
     } else if (role === "SALES") {
       next = counts.PLACED ? (

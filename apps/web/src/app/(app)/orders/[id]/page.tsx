@@ -267,11 +267,11 @@ export default function EnquiryPage({ params }: { params: Promise<{ id: string }
   if (o.status === "CANCELLED") next = <NextStep tone="info" eyebrow="Cancelled" title="This enquiry was cancelled" description={o.cancellationReason ?? undefined} />;
   else if (o.status === "CLOSED") next = <NextStep tone="done" eyebrow="Closed" title={`Client ${o.clientResponse === "ACCEPTED" ? "accepted" : "declined"}`} description="Nothing more to do on this enquiry." />;
   else if (o.status === "PLACED") next = sales
-    ? <NextStep title="Add your pricing" description="Fill in the price below so Marketing can quote the client." actionLabel="Go to pricing" onAction={() => document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" })} />
-    : <NextStep tone="wait" eyebrow="Waiting" title="Sales will add pricing" description="You'll see the price here as soon as it's added." />;
+    ? <NextStep title="Add your pricing" description="Fill in the price below, then quote the client." actionLabel="Go to pricing" onAction={() => document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" })} />
+    : <NextStep tone="wait" eyebrow="Waiting" title="Pricing is yet to be added" description="You'll see the price here as soon as it's added." />;
   else next = sales
     ? <NextStep tone="wait" eyebrow="Waiting for the client" title={o.isSample && !o.sampleSentAt ? "Send the sample, then record the client's feedback" : "Record the client's feedback when you hear back"} description="Accepting or declining closes the enquiry. Negotiating keeps it open." />
-    : <NextStep tone="wait" eyebrow="Waiting" title="Sales is waiting on the client" description="Feedback will appear here." />;
+    : <NextStep tone="wait" eyebrow="Waiting" title="Waiting on the client" description="Feedback will appear here." />;
 
   return (
     <>
@@ -288,7 +288,7 @@ export default function EnquiryPage({ params }: { params: Promise<{ id: string }
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="space-y-6">
           {sales && !finished ? (
-            <Panel><PanelHeader title="Pricing" caption={o.pricedAt ? `Added by ${o.pricedBy?.name ?? "Sales"} on ${fmtDate(o.pricedAt)}` : "Your price for this enquiry."} /><PricingForm o={o} /></Panel>
+            <Panel><PanelHeader title="Pricing" caption={o.pricedAt ? `Added by ${o.pricedBy?.name ?? "Marketing"} on ${fmtDate(o.pricedAt)}` : "Your price for this enquiry."} /><PricingForm o={o} /></Panel>
           ) : (
             <Panel>
               <PanelHeader title="Pricing" />

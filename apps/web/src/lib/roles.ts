@@ -2,8 +2,8 @@
  * Role helpers. Three roles only:
  *   SUPER_ADMIN — adds team members, maps them to divisions, approves division access
  *   MANAGING_DIRECTOR / ACCOUNTS — read-only overview of every enquiry
- *   MARKETING   — logs enquiries
- *   SALES       — adds pricing, sample details and client feedback
+ *   MARKETING   — logs enquiries, then adds pricing, sample details and client feedback
+ *   SALES       — legacy role (same pricing rights); no longer used day to day
  */
 import type { Role } from "@prisma/client";
 
@@ -18,7 +18,7 @@ export const isSales = (r?: Role | null) => r === "SALES";
 /** Who may log a new enquiry. */
 export const canCreateEnquiry = (r?: Role | null) => r === "MARKETING" || r === "SUPER_ADMIN";
 /** Who may add pricing, sample details and client feedback. */
-export const canPrice = (r?: Role | null) => r === "SALES" || r === "SUPER_ADMIN";
+export const canPrice = (r?: Role | null) => r === "MARKETING" || r === "SALES" || r === "SUPER_ADMIN";
 
 export function defaultLandingPath(role?: Role | null): string {
   if (role === "ACCOUNTS") return "/accounts";

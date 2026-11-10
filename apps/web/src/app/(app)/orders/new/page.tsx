@@ -68,7 +68,7 @@ export default function NewEnquiryPage() {
   return (
     <>
       <Link href="/orders" className="inline-flex items-center gap-1.5 text-sm font-semibold text-[var(--app-ink-3)] hover:text-[var(--app-ink)]"><ArrowLeft className="h-4 w-4" /> Enquiries</Link>
-      <PageHeader title="New enquiry" description="Fill in what you know. Sales adds the pricing next." />
+      <PageHeader title="New enquiry" description="Fill in what you know. You can add pricing on the enquiry afterwards." />
 
       {user && user.role === "MARKETING" && divisions.length === 0 ? (
         <Callout tone="wait" title="You aren't mapped to a division">
@@ -123,7 +123,7 @@ export default function NewEnquiryPage() {
         <FormError message={error} />
         <div className="flex flex-wrap justify-end gap-3">
           <Button type="button" variant="outline" onClick={() => router.push("/orders")}>Cancel</Button>
-          <Button type="submit" disabled={busy}>{busy ? "Saving…" : "Create enquiry and send to Sales"}</Button>
+          <Button type="submit" disabled={busy}>{busy ? "Saving…" : "Create enquiry"}</Button>
         </div>
       </form>
     </>
