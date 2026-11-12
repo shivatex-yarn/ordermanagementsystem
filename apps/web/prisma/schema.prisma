@@ -35,6 +35,8 @@ model User {
   id           Int      @id @default(autoincrement())
   name         String
   email        String   @unique
+  /// Company employee code (e.g. ST-014). Optional, unique when set.
+  employeeCode String?  @unique @map("employee_code")
   /// Optional contact number.
   phone        String?
   passwordHash String   @map("password_hash")

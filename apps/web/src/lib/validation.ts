@@ -14,8 +14,12 @@ export const loginSchema = z.object({
 
 const teamRole = z.enum(["MARKETING", "SALES", "MANAGING_DIRECTOR", "ACCOUNTS"]);
 
+const employeeCode = z.string().trim().max(40);
+
 export const adminCreateUserSchema = z.object({
   name: z.string().min(1).max(255),
+  /** Company employee code, e.g. ST-014. Optional but unique. */
+  employeeCode: employeeCode.optional().transform((v) => (v ? v : undefined)),
   email: z.string().email(),
   /** Optional — phone is never required. */
   phone: optionalText(30),
@@ -26,6 +30,7 @@ export const adminCreateUserSchema = z.object({
 
 export const adminUpdateUserSchema = z.object({
   name: z.string().min(1).max(255).optional(),
+  employeeCode: employeeCode.nullable().optional().transform((v) => (v === undefined ? undefined : v || null)),
   email: z.string().email().optional(),
   phone: z.string().max(30).nullable().optional(),
   password: z.string().min(8).optional(),

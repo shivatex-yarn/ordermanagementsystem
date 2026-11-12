@@ -12,6 +12,7 @@ const select = {
   id: true,
   name: true,
   email: true,
+  employeeCode: true,
   phone: true,
   role: true,
   active: true,
@@ -44,9 +45,13 @@ export async function POST(req: Request) {
   if (await prisma.user.findUnique({ where: { email } })) {
     return NextResponse.json({ error: "That email is already registered" }, { status: 409 });
   }
+  if (d.employeeCode && (await prisma.user.findUnique({ where: { employeeCode: d.employeeCode } }))) {
+    return NextResponse.json({ error: `Employee code ${d.employeeCode} is already used by someone else` }, { status: 409 });
+  }
   const user = await prisma.user.create({
     data: {
       name: d.name.trim(),
+      employeeCode: d.employeeCode ?? null,
       email,
       phone: d.phone ?? null,
       role: d.role,

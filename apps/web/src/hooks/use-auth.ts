@@ -6,6 +6,7 @@ export interface User {
   id: number;
   name: string;
   email: string;
+  employeeCode: string | null;
   phone: string | null;
   role: "SUPER_ADMIN" | "MANAGING_DIRECTOR" | "ACCOUNTS" | "MARKETING" | "SALES";
   divisions: { id: number; name: string }[];
