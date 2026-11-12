@@ -16,21 +16,22 @@ export default function ProfilePage() {
   const qc = useQueryClient();
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
-    if (user) { setName(user.name); setPhone(user.phone ?? ""); }
+    if (user) { setName(user.name); setPhone(user.phone ?? ""); setCode(user.employeeCode ?? ""); }
   }, [user]);
 
   if (!user) return <PanelSkeleton className="h-72" />;
-  const dirty = name.trim() !== user.name || phone.trim() !== (user.phone ?? "");
+  const dirty = name.trim() !== user.name || phone.trim() !== (user.phone ?? "") || code.trim() !== (user.employeeCode ?? "");
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true); setError(null); setSaved(false);
     try {
-      await api("/api/profile", { method: "PATCH", json: { name, phone } });
+      await api("/api/profile", { method: "PATCH", json: { name, phone, employeeCode: code } });
       await qc.invalidateQueries({ queryKey: ["auth", "me"] });
       setSaved(true);
     } catch (err) {
@@ -48,6 +49,9 @@ export default function ProfilePage() {
         <form onSubmit={save} className="space-y-5 p-5">
           <Field label="Full name" htmlFor="pn"><Input id="pn" required value={name} onChange={(e) => { setName(e.target.value); setSaved(false); }} /></Field>
           <Field label="Phone" optional htmlFor="pp" hint="Only your admin and teammates working with you can see this."><Input id="pp" inputMode="tel" value={phone} onChange={(e) => { setPhone(e.target.value); setSaved(false); }} placeholder="98450 11223" /></Field>
+          <Field label="Employee code" optional htmlFor="pc" hint="Your company ID, e.g. ST-014. Clear the box and save to remove it.">
+            <Input id="pc" value={code} maxLength={40} onChange={(e) => { setCode(e.target.value); setSaved(false); }} placeholder="ST-014" />
+          </Field>
           <Field label="Email" htmlFor="pe" hint="Your email is your login. It can't be changed here. Ask the admin if it's wrong.">
             <div className="relative">
               <Input id="pe" value={user.email} readOnly disabled className="pr-10" />
