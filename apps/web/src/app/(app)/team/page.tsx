@@ -237,6 +237,11 @@ export default function TeamPage() {
     return [u.name, u.employeeCode ?? "", u.email, u.phone ?? "", roleLabel(u.role as never), u.organization?.name ?? "", ...u.divisions.map((d) => d.name)].some((v) => v.toLowerCase().includes(term));
   });
   const filtering = !!(term || roleFilter || statusFilter);
+  const PAGE_SIZE = 10;
+  const [page, setPage] = useState(1);
+  const pageCount = Math.max(1, Math.ceil(users.length / PAGE_SIZE));
+  const curPage = Math.min(page, pageCount);
+  const pagedUsers = users.slice((curPage - 1) * PAGE_SIZE, curPage * PAGE_SIZE);
   const active = allUsers.filter((u) => u.active);
   const unmapped = active.filter((u) => (u.role === "MARKETING" || u.role === "SALES") && u.divisions.length === 0);
 
@@ -274,20 +279,20 @@ export default function TeamPage() {
         <div className="flex flex-wrap items-center gap-2 border-b border-[var(--app-line-soft)] p-4">
           <div className="relative min-w-[14rem] flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--app-ink-3)]" aria-hidden />
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by name, code, email, phone, role, organization or division" aria-label="Search team"
+            <input value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} placeholder="Search by name, code, email, phone, role, organization or division" aria-label="Search team"
               className="h-10 w-full rounded-xl border border-[var(--app-line)] bg-[var(--app-surface-sunk)] pl-9 pr-3 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-[var(--app-brand)]/20" />
           </div>
-          <select aria-label="Role" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} className={cn(selectClass, "w-44")}>
+          <select aria-label="Role" value={roleFilter} onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }} className={cn(selectClass, "w-44")}>
             <option value="">All roles</option>
             <option value="SUPER_ADMIN">Super admin</option>
             {ASSIGNABLE_ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
           </select>
-          <select aria-label="Status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as "" | "active" | "inactive")} className={cn(selectClass, "w-36")}>
+          <select aria-label="Status" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value as "" | "active" | "inactive"); setPage(1); }} className={cn(selectClass, "w-36")}>
             <option value="">All statuses</option>
             <option value="active">Active</option>
             <option value="inactive">Inactive</option>
           </select>
-          {filtering ? <button onClick={() => { setQ(""); setRoleFilter(""); setStatusFilter(""); }} className="inline-flex h-10 items-center gap-1 rounded-xl px-3 text-xs font-semibold text-[var(--app-ink-3)] hover:bg-[var(--app-surface-sunk)]"><X className="h-3.5 w-3.5" />Clear</button> : null}
+          {filtering ? <button onClick={() => { setQ(""); setRoleFilter(""); setStatusFilter(""); setPage(1); }} className="inline-flex h-10 items-center gap-1 rounded-xl px-3 text-xs font-semibold text-[var(--app-ink-3)] hover:bg-[var(--app-surface-sunk)]"><X className="h-3.5 w-3.5" />Clear</button> : null}
         </div>
         {bulk ? <BulkUpload divisions={divisions} onDone={() => setBulk(false)} /> : null}
         {adding ? <PersonForm divisions={divisions} organizations={organizations} onDone={() => setAdding(false)} /> : null}
@@ -298,7 +303,7 @@ export default function TeamPage() {
             : <EmptyState icon={UserPlus} title="Add your first team member" description="Start with a Marketing person." />
         ) : (
           <ul>
-            {users.map((p) => (
+            {pagedUsers.map((p) => (
               <li key={p.id} className="border-t border-[var(--app-line-soft)] first:border-0">
                 {editing === p.id ? <PersonForm person={p} divisions={divisions} organizations={organizations} onDone={() => setEditing(null)} /> : (
                   <div className={cn("flex flex-wrap items-center gap-x-6 gap-y-2 px-5 py-4", !p.active && "opacity-55")}>
@@ -331,6 +336,16 @@ export default function TeamPage() {
             ))}
           </ul>
         )}
+        {!isLoading && users.length > PAGE_SIZE ? (
+          <div className="flex items-center justify-between border-t border-[var(--app-line-soft)] px-5 py-3">
+            <p className="text-xs text-[var(--app-ink-3)]">Showing {(curPage - 1) * PAGE_SIZE + 1}–{Math.min(curPage * PAGE_SIZE, users.length)} of {users.length}</p>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="sm" disabled={curPage <= 1} onClick={() => setPage(curPage - 1)}>Previous</Button>
+              <span className="text-xs font-semibold text-[var(--app-ink-2)]">Page {curPage} of {pageCount}</span>
+              <Button variant="ghost" size="sm" disabled={curPage >= pageCount} onClick={() => setPage(curPage + 1)}>Next</Button>
+            </div>
+          </div>
+        ) : null}
       </Panel>
     </>
   );
