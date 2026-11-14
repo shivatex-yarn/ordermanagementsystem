@@ -74,6 +74,9 @@ export async function runInactivityAlerts(now = new Date()): Promise<InactivityR
 /** Daily send time: 10:30 AM IST = 05:00 UTC (India has no daylight saving). */
 const DUE_UTC_HOUR = 5;
 let lastDayHandled = "";
+/** After a failed send, wait this long before trying again so a broken email setup is not hammered on every request. */
+const RETRY_BACKOFF_MS = 30 * 60_000;
+let retryNotBefore = 0;
 
 /**
  * Backend fallback that needs no external scheduler: any signed-in request after 10:30 IST triggers today's check,
@@ -83,7 +86,7 @@ let lastDayHandled = "";
 export async function runInactivityCheckIfDue(now = new Date()): Promise<void> {
   try {
     const dayKey = now.toISOString().slice(0, 10);
-    if (lastDayHandled === dayKey) return;
+    if (lastDayHandled === dayKey || Date.now() < retryNotBefore) return;
     const due = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), DUE_UTC_HOUR, 0, 0));
     if (now < due) return;
 
@@ -93,7 +96,13 @@ export async function runInactivityCheckIfDue(now = new Date()): Promise<void> {
     lastDayHandled = dayKey;
     const first = await prisma.auditLog.findFirst({ where, orderBy: { id: "asc" }, select: { id: true } });
     if (first && first.id !== claim.id) return; // another request claimed it first
-    await runInactivityAlerts(now);
+    const result = await runInactivityAlerts(now);
+    if (result.failed > 0) {
+      // Some emails did not go out: release today's claim so the next scheduler tick or request retries only the failed ones.
+      await prisma.auditLog.delete({ where: { id: claim.id } }).catch(() => {});
+      lastDayHandled = "";
+      retryNotBefore = Date.now() + RETRY_BACKOFF_MS;
+    }
   } catch (err) {
     console.error("[inactivity] daily check failed:", err);
   }

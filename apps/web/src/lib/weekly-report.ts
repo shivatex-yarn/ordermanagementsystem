@@ -8,8 +8,10 @@ const extraRecipients = () => (process.env.WEEKLY_REPORT_EXTRA_EMAILS ?? DEFAULT
 
 const DAY = 864e5;
 const IST_OFFSET = 330 * 60_000; // India has no daylight saving
-/** Monday 10:00 AM IST = 04:30 UTC. */
-const DUE_UTC_MINUTES = 4 * 60 + 30;
+/** Monday 10:00 AM IST, as minutes after Monday 00:00 IST. */
+const DUE_UTC_MINUTES = 10 * 60;
+/** If the Monday run was missed (server asleep, email provider down), keep retrying for this many days. */
+const CATCH_UP_DAYS = 2.5;
 
 /** Previous Monday 00:00 IST up to (not including) this Monday 00:00 IST, for a given moment. */
 export function weekWindow(now: Date) {
@@ -144,6 +146,9 @@ export async function sendWeeklyReport(now = new Date()): Promise<WeeklyResult> 
 }
 
 let lastWeekHandled = "";
+let retryNotBefore = 0;
+/** After a failed send, wait before retrying so a broken email setup is not hammered on every request. */
+const RETRY_BACKOFF_MS = 30 * 60_000;
 
 /**
  * Runs the weekly report once, on Monday from 10:00 AM IST. Called by Vercel Cron and, as a backup, by the first
@@ -152,12 +157,13 @@ let lastWeekHandled = "";
  */
 export async function runWeeklyReportIfDue(now = new Date()): Promise<WeeklyResult> {
   try {
-    const shifted = new Date(now.getTime() + IST_OFFSET);
-    if (shifted.getUTCDay() !== 1) return { status: "skipped", reason: "not Monday" };
-    const due = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, DUE_UTC_MINUTES));
-    if (now < due) return { status: "skipped", reason: "before 10:00 IST" };
+    // This week's due moment: Monday 10:00 IST. A missed run is caught up until Wednesday, never sent twice for the same Monday.
+    const due = new Date(weekWindow(now).end.getTime() + DUE_UTC_MINUTES * 60_000);
+    if (now < due) return { status: "skipped", reason: "before Monday 10:00 IST" };
+    if (now.getTime() - due.getTime() > CATCH_UP_DAYS * DAY) return { status: "skipped", reason: "past the catch-up window" };
     const dayKey = due.toISOString().slice(0, 10);
     if (lastWeekHandled === dayKey) return { status: "skipped", reason: "already handled" };
+    if (Date.now() < retryNotBefore) return { status: "skipped", reason: "waiting to retry after a failed send" };
 
     const done = await prisma.auditLog.findFirst({ where: { action: { in: ["WEEKLY_REPORT_SENT", "WEEKLY_REPORT_CLAIM"] }, createdAt: { gte: due } }, select: { id: true, action: true } });
     if (done?.action === "WEEKLY_REPORT_SENT") { lastWeekHandled = dayKey; return { status: "skipped", reason: "already sent" }; }
@@ -171,6 +177,7 @@ export async function runWeeklyReportIfDue(now = new Date()): Promise<WeeklyResu
     if (result.status === "sent") lastWeekHandled = dayKey;
     else {
       console.error("[weekly-report] not sent, will retry:", result.reason);
+      retryNotBefore = Date.now() + RETRY_BACKOFF_MS;
       await prisma.auditLog.delete({ where: { id: claim.id } }).catch(() => {});
     }
     return result;

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { runInactivityAlerts } from "@/lib/inactivity";
+import { runInactivityCheckIfDue } from "@/lib/inactivity";
 
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
@@ -14,7 +14,9 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   try {
-    return NextResponse.json({ ok: true, ...(await runInactivityAlerts()) });
+    // Goes through the same once-a-day claim as the in-app scheduler, so cron and scheduler never both send.
+    await runInactivityCheckIfDue();
+    return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("[cron] marketing-inactivity failed:", err);
     return NextResponse.json({ error: "Check failed" }, { status: 500 });
