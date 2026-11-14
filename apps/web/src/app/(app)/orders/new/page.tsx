@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
@@ -14,6 +14,8 @@ import { Button } from "@/components/ui/button";
 import { Field, FormError, Segmented, textareaClass } from "@/components/ui/field";
 import { canCreateEnquiry } from "@/lib/roles";
 import { cn } from "@/lib/utils";
+
+type Customer = { companyName: string | null; customerName: string; customerPhone: string | null; customerEmail: string | null; customerAddress: string | null; gstNumber: string | null };
 
 export default function NewEnquiryPage() {
   const router = useRouter();
@@ -30,6 +32,39 @@ export default function NewEnquiryPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setF((p) => ({ ...p, [k]: e.target.value }));
+
+  // Auto-fill from earlier enquiries: typing a known company name (or a full GST number) fills the blank contact fields.
+  const [known, setKnown] = useState<Customer[]>([]);
+  const [filledFrom, setFilledFrom] = useState<string | null>(null);
+  const q = f.companyName.trim();
+  const gstTyped = f.gstNumber.trim().toUpperCase();
+  useEffect(() => {
+    const byGst = gstTyped.length >= 15;
+    if (!byGst && q.length < 2) { setKnown([]); return; }
+    const t = setTimeout(() => {
+      api<{ customers: Customer[] }>(`/api/orders/customers?${byGst ? `gst=${encodeURIComponent(gstTyped)}` : `q=${encodeURIComponent(q)}`}`)
+        .then((r) => {
+          setKnown(r.customers);
+          const hit = byGst ? r.customers[0] : r.customers.find((c) => (c.companyName ?? "").toLowerCase() === q.toLowerCase());
+          if (hit) fill(hit);
+        })
+        .catch(() => undefined);
+    }, 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, gstTyped]);
+  function fill(c: Customer) {
+    setF((p) => ({
+      ...p,
+      companyName: p.companyName.trim() ? p.companyName : c.companyName ?? "",
+      customerName: p.customerName.trim() ? p.customerName : c.customerName ?? "",
+      customerPhone: p.customerPhone.trim() ? p.customerPhone : c.customerPhone ?? "",
+      customerEmail: p.customerEmail.trim() ? p.customerEmail : c.customerEmail ?? "",
+      customerAddress: p.customerAddress.trim() ? p.customerAddress : c.customerAddress ?? "",
+      gstNumber: p.gstNumber.trim() ? p.gstNumber : c.gstNumber ?? "",
+    }));
+    setFilledFrom(c.companyName);
+  }
 
   if (user && !canCreateEnquiry(user.role)) {
     return <Callout tone="info" title="Only Marketing logs enquiries">Open an enquiry from the list to add pricing or feedback.</Callout>;
@@ -84,7 +119,10 @@ export default function NewEnquiryPage() {
           <div className="grid gap-5 p-5 sm:grid-cols-2">
             <Field label="Enquiry date" required htmlFor="d" hint="The day the client asked. Can be an earlier date. The date you enter it is saved automatically."><Input id="d" type="date" required value={f.enquiryDate} onChange={set("enquiryDate")} /></Field>
             <Field label="Contact person" required htmlFor="cn"><Input id="cn" required value={f.customerName} onChange={set("customerName")} placeholder="Lakshmi Narayan" /></Field>
-            <Field label="Company" optional htmlFor="co"><Input id="co" value={f.companyName} onChange={set("companyName")} placeholder="Lakshmi Textiles" /></Field>
+            <Field label="Company" required htmlFor="co" hint={filledFrom ? `Contact details filled from your earlier enquiry for ${filledFrom}. Edit anything that changed.` : "Type a client you have logged before and their details fill in automatically."}>
+              <Input id="co" required list="known-companies" autoComplete="off" value={f.companyName} onChange={set("companyName")} placeholder="Lakshmi Textiles" />
+              <datalist id="known-companies">{known.map((c) => <option key={c.companyName} value={c.companyName ?? ""} />)}</datalist>
+            </Field>
             <Field label="Phone" optional htmlFor="ph"><Input id="ph" inputMode="tel" value={f.customerPhone} onChange={set("customerPhone")} placeholder="98450 11223" /></Field>
             <Field label="Email" optional htmlFor="em"><Input id="em" type="email" value={f.customerEmail} onChange={set("customerEmail")} placeholder="buyer@company.in" /></Field>
             <Field label="GST number" optional htmlFor="gs"><Input id="gs" value={f.gstNumber} onChange={set("gstNumber")} placeholder="29ABCDE1234F1Z5" /></Field>

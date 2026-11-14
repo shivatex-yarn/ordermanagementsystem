@@ -56,7 +56,7 @@ export const divisionUpdateSchema = z.object({
 export const createOrderSchema = z.object({
   enquiryDate: z.string().min(1, "Enquiry date is required"),
   customerName: z.string().min(1, "Customer name is required").max(500),
-  companyName: optionalText(500),
+  companyName: z.string().trim().min(1, "Company name is required").max(500),
   /** Optional. */
   customerPhone: optionalText(30),
   customerEmail: z.string().email("Invalid email address").max(500).optional().or(z.literal("")),
