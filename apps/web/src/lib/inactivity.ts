@@ -15,7 +15,7 @@ export type InactivityResult = { checked: number; inactive: number; alerted: num
 export async function runInactivityAlerts(now = new Date()): Promise<InactivityResult> {
   const people = await prisma.user.findMany({
     where: { role: "MARKETING", active: true, divisions: { some: {} } },
-    select: { id: true, name: true, email: true, createdAt: true, divisions: { select: { division: { select: { name: true } } } } },
+    select: { id: true, name: true, email: true, createdAt: true, organization: { select: { name: true } }, divisions: { select: { division: { select: { name: true } } } } },
   });
   const leaders = await prisma.user.findMany({ where: { role: { in: ["SUPER_ADMIN", "MANAGING_DIRECTOR"] }, active: true }, select: { id: true, email: true } });
   const result: InactivityResult = { checked: people.length, inactive: 0, alerted: 0, skippedRecent: 0, recipients: leaders.length, emailed: 0, failed: 0 };
@@ -45,20 +45,27 @@ export async function runInactivityAlerts(now = new Date()): Promise<InactivityR
     }
 
     const data: InactivityMail = {
-      person: { name: p.name, email: p.email, divisions: p.divisions.map((d) => d.division.name), joinedAt: p.createdAt },
+      person: { name: p.name, email: p.email, organization: p.organization?.name ?? null, divisions: p.divisions.map((d) => d.division.name), joinedAt: p.createdAt },
       days, thresholdDays: INACTIVITY_DAYS,
       last: last ? { orderNumber: last.orderNumber, orderId: last.id, client: last.companyName || last.customerName, division: last.division.name, enquiryDate: last.enquiryDate, loggedAt: last.createdAt } : null,
     };
     const mail = renderInactivityEmail(data);
     const to = leaders.map((l) => l.email);
+    // The "alert sent" record and the in-app notice are written only after the email really went out,
+    // so a failed send (Resend down, key missing) is retried on the next daily run instead of being silenced for a week.
     sends.push(async () => {
       const r = await sendEmail({ to, subject: mail.subject, html: mail.html, text: mail.text });
-      if (r.ok) result.emailed++; else result.failed++;
+      if (!r.ok) {
+        result.failed++;
+        console.error(`[inactivity] email for ${p.name} not sent, will retry next run:`, r.error);
+        return r;
+      }
+      result.emailed++;
+      result.alerted++;
+      await notify(leaders.map((l) => l.id), { type: "INACTIVITY", title: `Nil enquiries: ${p.name}${p.organization ? ` (${p.organization.name})` : ""}`, body: last ? `No enquiry for ${days} days. Last entry ${last.orderNumber} on ${last.createdAt.toLocaleDateString("en-IN", { day: "2-digit", month: "short", timeZone: "Asia/Kolkata" })}.` : `No enquiry entered since joining (${days} days).`, link: "/team" });
+      await prisma.auditLog.create({ data: { userName: "System", category: "TEAM", action: "INACTIVITY_ALERT_SENT", entityType: "User", entityId: p.id, entityLabel: p.name, detail: `${days} days without an enquiry` } });
       return r;
     });
-    await notify(leaders.map((l) => l.id), { type: "INACTIVITY", title: `Nil enquiries: ${p.name}`, body: last ? `No enquiry for ${days} days. Last entry ${last.orderNumber} on ${last.createdAt.toLocaleDateString("en-IN", { day: "2-digit", month: "short", timeZone: "Asia/Kolkata" })}.` : `No enquiry entered since joining (${days} days).`, link: "/team" });
-    await prisma.auditLog.create({ data: { userName: "System", category: "TEAM", action: "INACTIVITY_ALERT_SENT", entityType: "User", entityId: p.id, entityLabel: p.name, detail: `${days} days without an enquiry` } });
-    result.alerted++;
   }
   await sendEmailsThrottled(sends);
   return result;

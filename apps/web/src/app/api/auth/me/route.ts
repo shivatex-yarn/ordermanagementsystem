@@ -1,5 +1,6 @@
 import { NextResponse, after } from "next/server";
 import { runInactivityCheckIfDue } from "@/lib/inactivity";
+import { runWeeklyReportIfDue } from "@/lib/weekly-report";
 import { prisma } from "@/lib/db";
 import { withAuth } from "@/lib/with-auth";
 
@@ -30,6 +31,7 @@ export async function GET() {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
     after(() => runInactivityCheckIfDue()); // daily 10:30 IST check, runs once, after the response
+    after(() => runWeeklyReportIfDue()); // Monday 10:00 IST weekly report, sent once
     const { divisions, ...rest } = user;
     const list = rest.role !== "MARKETING" && rest.role !== "SALES"
       ? await prisma.division.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } })

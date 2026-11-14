@@ -2,7 +2,7 @@ import type { Prisma, Role } from "@prisma/client";
 import { scopeWhere } from "@/lib/orders";
 
 /**
- * Turns the enquiry list filters (status, divisionId, from, to, q, mine) into Prisma `where` clauses.
+ * Turns the enquiry list filters (status, divisionId, organizationId, from, to, q, mine) into Prisma `where` clauses.
  * `base` ignores status (used for tab counts); `where` includes it. Always limited to the divisions the person can see.
  */
 export async function buildOrderWhere(sp: URLSearchParams, payload: { sub: string; role: Role }) {
@@ -12,6 +12,9 @@ export async function buildOrderWhere(sp: URLSearchParams, payload: { sub: strin
 
   const divisionId = Number(sp.get("divisionId"));
   if (divisionId) and.push({ divisionId });
+
+  const organizationId = Number(sp.get("organizationId"));
+  if (organizationId) and.push({ createdBy: { organizationId } });
 
   const from = sp.get("from");
   const to = sp.get("to");

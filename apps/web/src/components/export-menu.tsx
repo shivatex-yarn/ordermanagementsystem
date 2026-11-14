@@ -7,6 +7,17 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { api } from "@/lib/format";
 import type { ExportRow } from "@/lib/export-enquiries";
 
+/** Turns a dashboard's period + filters into the enquiry export query, so the file holds only what is on screen. */
+export function rangeQuery(days: number, from: string, to: string, divisionId: string, organizationId: string) {
+  const qs = new URLSearchParams();
+  const day = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  if (from || to) { if (from) qs.set("from", from); if (to) qs.set("to", to); }
+  else { qs.set("from", day(new Date(Date.now() - days * 864e5))); qs.set("to", day(new Date())); }
+  if (divisionId) qs.set("divisionId", divisionId);
+  if (organizationId) qs.set("organizationId", organizationId);
+  return qs.toString();
+}
+
 /** Download the enquiries matching the current filters as Excel or PDF. */
 export function ExportMenu({ query, filters, generatedBy }: { query: string; filters: string[]; generatedBy: string }) {
   const [busy, setBusy] = useState<"excel" | "pdf" | null>(null);

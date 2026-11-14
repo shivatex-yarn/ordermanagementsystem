@@ -48,6 +48,7 @@ function List() {
   const sp = useSearchParams();
   const [status, setStatus] = useState(sp.get("status") ?? "");
   const [division, setDivision] = useState("");
+  const [organization, setOrganization] = useState("");
   const [q, setQ] = useState(sp.get("q") ?? "");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -57,25 +58,29 @@ function List() {
   const qs = new URLSearchParams();
   if (status) qs.set("status", status);
   if (division) qs.set("divisionId", division);
+  if (organization) qs.set("organizationId", organization);
   if (q.trim()) qs.set("q", q.trim());
   if (from) qs.set("from", from);
   if (to) qs.set("to", to);
   const exportQuery = qs.toString();
   qs.set("page", String(page));
   const { data, isLoading } = useQuery({
-    queryKey: ["orders", status, division, q, from, to, page],
+    queryKey: ["orders", status, division, organization, q, from, to, page],
     queryFn: () => api<Data>(`/api/orders?${qs}`),
     staleTime: 15_000,
     placeholderData: keepPreviousData,
   });
   const counts = data?.counts ?? {};
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
-  const filtered = !!(status || division || q.trim() || from || to);
+  const filtered = !!(status || division || organization || q.trim() || from || to);
   const pages = Math.max(1, Math.ceil((data?.total ?? 0) / (data?.pageSize ?? 10)));
   const firstRow = data && data.total ? (data.page - 1) * data.pageSize + 1 : 0;
   const lastRow = data ? Math.min(data.total, data.page * data.pageSize) : 0;
   const role = user?.role;
   const divisions = user?.divisions ?? [];
+  const canFilterOrg = role === "SUPER_ADMIN" || role === "MANAGING_DIRECTOR" || role === "ACCOUNTS";
+  const { data: og } = useQuery({ queryKey: ["organizations"], queryFn: () => api<{ organizations: { id: number; name: string }[] }>("/api/organizations"), enabled: canFilterOrg, staleTime: 60_000 });
+  const organizations = og?.organizations ?? [];
   const viewer = role === "ACCOUNTS" || role === "MANAGING_DIRECTOR";
 
   let next: React.ReactNode = null;
@@ -109,6 +114,7 @@ function List() {
         {user ? <ExportMenu query={exportQuery} generatedBy={user.name} filters={[
           ...(status ? [`Status: ${TABS.find((t) => t.key === status)?.label}`] : []),
           ...(division ? [`Division: ${divisions.find((d) => String(d.id) === division)?.name ?? division}`] : []),
+          ...(organization ? [`Organization: ${organizations.find((o) => String(o.id) === organization)?.name ?? organization}`] : []),
           ...(from ? [`From ${from}`] : []),
           ...(to ? [`To ${to}`] : []),
           ...(q.trim() ? [`Search: "${q.trim()}"`] : []),
@@ -141,6 +147,12 @@ function List() {
                 {divisions.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
             ) : null}
+            {canFilterOrg && organizations.length > 0 ? (
+              <select aria-label="Organization" value={organization} onChange={(e) => change(setOrganization)(e.target.value)} className={cn(selectClass, "w-48")}>
+                <option value="">All organizations</option>
+                {organizations.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+              </select>
+            ) : null}
             <label className="flex items-center gap-1.5 text-xs font-semibold text-[var(--app-ink-3)]">From
               <input type="date" value={from} max={to || undefined} onChange={(e) => change(setFrom)(e.target.value)} aria-label="From date" className="h-10 rounded-xl border border-[var(--app-line)] bg-white px-2.5 text-sm text-[var(--app-ink)]" />
             </label>
@@ -153,7 +165,7 @@ function List() {
                 className="h-10 w-full rounded-xl border border-[var(--app-line)] bg-[var(--app-surface-sunk)] pl-9 pr-3 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-[var(--app-brand)]/20" />
             </div>
             {filtered ? (
-              <button onClick={() => { setStatus(""); setDivision(""); setQ(""); setFrom(""); setTo(""); setPage(1); }} className="inline-flex h-10 items-center gap-1 rounded-xl px-3 text-xs font-semibold text-[var(--app-ink-3)] hover:bg-[var(--app-surface-sunk)] hover:text-[var(--app-ink)]"><X className="h-3.5 w-3.5" />Clear</button>
+              <button onClick={() => { setStatus(""); setDivision(""); setOrganization(""); setQ(""); setFrom(""); setTo(""); setPage(1); }} className="inline-flex h-10 items-center gap-1 rounded-xl px-3 text-xs font-semibold text-[var(--app-ink-3)] hover:bg-[var(--app-surface-sunk)] hover:text-[var(--app-ink)]"><X className="h-3.5 w-3.5" />Clear</button>
             ) : null}
           </div>
         </div>

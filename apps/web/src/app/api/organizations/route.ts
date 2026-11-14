@@ -4,9 +4,9 @@ import { logAudit } from "@/lib/activity";
 import { withRole } from "@/lib/with-auth";
 import { organizationCreateSchema } from "@/lib/validation";
 
-/** Super admin: list organizations (used by the Organizations page and the Add team member form). */
+/** List organizations: Super admin (Organizations page, team form) and MD / Accounts (organization filter). */
 export async function GET() {
-  const auth = await withRole(["SUPER_ADMIN"]);
+  const auth = await withRole(["SUPER_ADMIN", "MANAGING_DIRECTOR", "ACCOUNTS"]);
   if (auth.response) return auth.response;
   const organizations = await prisma.organization.findMany({
     orderBy: [{ active: "desc" }, { name: "asc" }],

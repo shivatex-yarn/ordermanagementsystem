@@ -6,7 +6,7 @@ const appUrl = () => (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "") 
 const fmt = (d: Date) => d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
 
 export type InactivityMail = {
-  person: { name: string; email: string; divisions: string[]; joinedAt: Date };
+  person: { name: string; email: string; organization?: string | null; divisions: string[]; joinedAt: Date };
   days: number;
   thresholdDays: number;
   /** null = this person has never entered an enquiry */
@@ -21,9 +21,10 @@ export function renderInactivityEmail(m: InactivityMail): { subject: string; htm
   const logo = `${base}/company-logo.png`;
   const link = `${base}/team`;
   const never = !m.last;
-  const subject = never
+  const org = m.person.organization ?? "";
+  const subject = (org ? `[${org}] ` : "") + (never
     ? `Nil enquiries: ${m.person.name} has not entered any enquiry`
-    : `Nil enquiries for ${m.days} days: ${m.person.name}`;
+    : `Nil enquiries for ${m.days} days: ${m.person.name}`);
   const since = never ? m.person.joinedAt : m.last!.loggedAt;
 
   const last = never
@@ -74,6 +75,7 @@ export function renderInactivityEmail(m: InactivityMail): { subject: string; htm
           <td style="padding-left:14px;vertical-align:middle;">
             <div style="font-size:16px;font-weight:700;color:#101828;">${esc(m.person.name)}</div>
             <div style="font-size:13px;color:#667085;margin-top:2px;">${esc(m.person.email)}</div>
+            ${org ? `<div style="font-size:12px;color:#101828;font-weight:800;margin-top:3px;">${esc(org)}</div>` : ""}
             <div style="font-size:12px;color:#4338ca;font-weight:600;margin-top:3px;">${esc(m.person.divisions.join("  ·  ") || "No division mapped")}</div>
           </td>
         </tr></table>
@@ -100,6 +102,7 @@ export function renderInactivityEmail(m: InactivityMail): { subject: string; htm
   const text = [
     subject, "",
     `${m.person.name} (${m.person.email}) has not entered any enquiry ${never ? "since joining" : `in ${m.days} days`}.`,
+    ...(org ? [`Organization: ${org}`] : []),
     `Divisions: ${m.person.divisions.join(", ") || "none"}`,
     never
       ? `Account created: ${fmt(m.person.joinedAt)}`
