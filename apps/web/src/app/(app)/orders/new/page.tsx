@@ -13,7 +13,6 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Field, FormError, Segmented, textareaClass } from "@/components/ui/field";
 import { canCreateEnquiry } from "@/lib/roles";
-import { cn } from "@/lib/utils";
 
 type Customer = { companyName: string | null; customerName: string; customerPhone: string | null; customerEmail: string | null; customerAddress: string | null; gstNumber: string | null };
 
@@ -26,7 +25,6 @@ export default function NewEnquiryPage() {
     enquiryDate: todayInput(), customerName: "", companyName: "", customerPhone: "", customerEmail: "",
     customerAddress: "", gstNumber: "", productDetails: "",
   });
-  const [divisionId, setDivisionId] = useState<number | null>(null);
   const [isSample, setIsSample] = useState(false);
   const [gst, setGst] = useState<{ url: string; name: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -85,9 +83,10 @@ export default function NewEnquiryPage() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    // Their division is already mapped by the admin: use it automatically when they have exactly one.
-    const chosen = divisions.length === 1 ? divisions[0].id : divisionId;
-    if (!chosen) return setError(divisions.length ? "Pick a division" : "You aren't mapped to a division yet. Ask the admin.");
+    // The division is not asked here: the admin already mapped it. The first mapped division is used;
+    // it can be changed later from Edit on the enquiry.
+    const chosen = divisions[0]?.id;
+    if (!chosen) return setError("You aren't mapped to a division yet. Ask the admin.");
     setBusy(true);
     try {
       const order = await api<{ id: number }>("/api/orders", {
@@ -140,18 +139,6 @@ export default function NewEnquiryPage() {
         <Panel>
           <PanelHeader title="What they need" caption="Works for every division." />
           <div className="space-y-5 p-5">
-            {divisions.length > 1 ? (
-              <Field label="Division" required hint="You work in more than one division. Pick the one this enquiry belongs to.">
-                <div className="flex flex-wrap gap-2">
-                  {divisions.map((d) => (
-                    <button key={d.id} type="button" aria-pressed={divisionId === d.id} onClick={() => setDivisionId(d.id)}
-                      className={cn("rounded-full border px-4 py-2 text-sm font-semibold transition-colors", divisionId === d.id ? "border-[var(--app-brand)] bg-[var(--app-brand)] text-white" : "border-[var(--app-line)] bg-white text-[var(--app-ink-2)] hover:border-[var(--app-brand-line)]")}>
-                      {d.name}
-                    </button>
-                  ))}
-                </div>
-              </Field>
-            ) : null}
             <Field label="Product / requirement details" required htmlFor="pd" hint="Describe the product, specification and quantity the client wants.">
               <textarea id="pd" required className={textareaClass} value={f.productDetails} onChange={set("productDetails")} placeholder="e.g. Laminated fabric, 120 gsm, 5,000 metres, navy blue" />
             </Field>
