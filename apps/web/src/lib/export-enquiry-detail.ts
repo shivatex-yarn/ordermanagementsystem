@@ -4,6 +4,8 @@ import { download, fileStamp, fmtD, loadLogo, RESP, STATUS, stamp } from "@/lib/
 
 export type EnquiryDetail = {
   orderNumber: string; status: string; enquiryDate: string;
+  /** When the enquiry was entered. Only present for the Super admin. */
+  createdAt?: string;
   customerName: string; companyName: string | null; customerPhone: string | null; customerEmail: string | null; customerAddress: string | null;
   gstNumber: string | null; productDetails: string | null; isSample: boolean;
   sampleSentAt: string | null; sampleCourierName: string | null; sampleTrackingId: string | null; sampleRemarks: string | null;
@@ -73,7 +75,7 @@ export async function exportEnquiryPdf(o: EnquiryDetail, generatedBy: string) {
   doc.setFillColor(...pill.bg).roundedRect(nx, 41.4, pw, 6.4, 3.2, 3.2, "F");
   doc.setFillColor(...pill.bar).circle(nx + 3.6, 44.6, 1, "F");
   doc.setFont("helvetica", "bold").setFontSize(8).setTextColor(...pill.fg).text(label, nx + 6, 45);
-  doc.setFont("helvetica", "normal").setFontSize(9.5).setTextColor(...GREY).text(`${o.companyName || o.customerName}   ·   ${o.division.name}   ·   Enquiry date ${fmtD(o.enquiryDate)}`, M, 53.5);
+  doc.setFont("helvetica", "normal").setFontSize(9.5).setTextColor(...GREY).text(`${o.companyName || o.customerName}   ·   ${o.division.name}   ·   Enquiry date ${fmtD(o.enquiryDate)}${o.createdAt ? `   ·   Submitted ${dt(o.createdAt)}` : ""}`, M, 53.5);
 
   /* Progress stepper */
   const steps = [
@@ -214,7 +216,7 @@ export async function exportEnquiryExcel(o: EnquiryDetail, generatedBy: string) 
   };
 
   block("Client", [["Contact person", o.customerName], ["Company", o.companyName], ["Phone", o.customerPhone], ["Email", o.customerEmail], ["GST number", o.gstNumber], ["Address", o.customerAddress]]);
-  block("Requirement", [["Enquiry date", fmtD(o.enquiryDate)], ["Division", o.division.name], ["Is a sample?", o.isSample ? "Yes" : "No"], ["Details", o.productDetails], ["Logged by", o.createdBy.name]]);
+  block("Requirement", [["Enquiry date", fmtD(o.enquiryDate)], ...(o.createdAt ? [["Submitted on", dt(o.createdAt)] as [string, string]] : []), ["Division", o.division.name], ["Is a sample?", o.isSample ? "Yes" : "No"], ["Details", o.productDetails], ["Logged by", o.createdBy.name]]);
   block("Pricing", o.pricedAt
     ? [["Rate (INR)", o.pricePerUnit ? Number(o.pricePerUnit) : null], ["Per", o.priceUnit], ["Quantity", o.quantity], ["Payment terms", o.paymentTerms], ["Delivery time", o.deliveryTime], ["Notes", o.pricingNotes], ["Priced by", `${o.pricedBy?.name ?? "-"}, ${dt(o.pricedAt)}`]]
     : [["Status", "Not priced yet"]]);

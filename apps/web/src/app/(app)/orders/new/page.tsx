@@ -50,12 +50,14 @@ export default function NewEnquiryPage() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!divisionId) return setError("Pick a division");
+    // Their division is already mapped by the admin: use it automatically when they have exactly one.
+    const chosen = divisions.length === 1 ? divisions[0].id : divisionId;
+    if (!chosen) return setError(divisions.length ? "Pick a division" : "You aren't mapped to a division yet. Ask the admin.");
     setBusy(true);
     try {
       const order = await api<{ id: number }>("/api/orders", {
         method: "POST",
-        json: { ...f, divisionId, isSample, gstCopyUrl: gst?.url },
+        json: { ...f, divisionId: chosen, isSample, gstCopyUrl: gst?.url },
       });
       await qc.invalidateQueries({ queryKey: ["orders"] });
       router.push(`/orders/${order.id}`);
@@ -80,8 +82,8 @@ export default function NewEnquiryPage() {
         <Panel>
           <PanelHeader title="Client" caption="Who is asking?" />
           <div className="grid gap-5 p-5 sm:grid-cols-2">
-            <Field label="Enquiry date" htmlFor="d"><Input id="d" type="date" required value={f.enquiryDate} onChange={set("enquiryDate")} /></Field>
-            <Field label="Contact person" htmlFor="cn"><Input id="cn" required value={f.customerName} onChange={set("customerName")} placeholder="Lakshmi Narayan" /></Field>
+            <Field label="Enquiry date" required htmlFor="d" hint="The day the client asked. Can be an earlier date. The date you enter it is saved automatically."><Input id="d" type="date" required value={f.enquiryDate} onChange={set("enquiryDate")} /></Field>
+            <Field label="Contact person" required htmlFor="cn"><Input id="cn" required value={f.customerName} onChange={set("customerName")} placeholder="Lakshmi Narayan" /></Field>
             <Field label="Company" optional htmlFor="co"><Input id="co" value={f.companyName} onChange={set("companyName")} placeholder="Lakshmi Textiles" /></Field>
             <Field label="Phone" optional htmlFor="ph"><Input id="ph" inputMode="tel" value={f.customerPhone} onChange={set("customerPhone")} placeholder="98450 11223" /></Field>
             <Field label="Email" optional htmlFor="em"><Input id="em" type="email" value={f.customerEmail} onChange={set("customerEmail")} placeholder="buyer@company.in" /></Field>
@@ -100,18 +102,19 @@ export default function NewEnquiryPage() {
         <Panel>
           <PanelHeader title="What they need" caption="Works for every division." />
           <div className="space-y-5 p-5">
-            <Field label="Division">
-              <div className="flex flex-wrap gap-2">
-                {divisions.map((d) => (
-                  <button key={d.id} type="button" aria-pressed={divisionId === d.id} onClick={() => setDivisionId(d.id)}
-                    className={cn("rounded-full border px-4 py-2 text-sm font-semibold transition-colors", divisionId === d.id ? "border-[var(--app-brand)] bg-[var(--app-brand)] text-white" : "border-[var(--app-line)] bg-white text-[var(--app-ink-2)] hover:border-[var(--app-brand-line)]")}>
-                    {d.name}
-                  </button>
-                ))}
-                {divisions.length === 0 ? <span className="text-sm text-[var(--app-ink-3)]">No divisions available</span> : null}
-              </div>
-            </Field>
-            <Field label="Product / requirement details" htmlFor="pd" hint="Describe the product, specification and quantity the client wants.">
+            {divisions.length > 1 ? (
+              <Field label="Division" required hint="You work in more than one division. Pick the one this enquiry belongs to.">
+                <div className="flex flex-wrap gap-2">
+                  {divisions.map((d) => (
+                    <button key={d.id} type="button" aria-pressed={divisionId === d.id} onClick={() => setDivisionId(d.id)}
+                      className={cn("rounded-full border px-4 py-2 text-sm font-semibold transition-colors", divisionId === d.id ? "border-[var(--app-brand)] bg-[var(--app-brand)] text-white" : "border-[var(--app-line)] bg-white text-[var(--app-ink-2)] hover:border-[var(--app-brand-line)]")}>
+                      {d.name}
+                    </button>
+                  ))}
+                </div>
+              </Field>
+            ) : null}
+            <Field label="Product / requirement details" required htmlFor="pd" hint="Describe the product, specification and quantity the client wants.">
               <textarea id="pd" required className={textareaClass} value={f.productDetails} onChange={set("productDetails")} placeholder="e.g. Laminated fabric, 120 gsm, 5,000 metres, navy blue" />
             </Field>
             <Field label="Is this a sample?" hint="Choose Yes if the client wants a sample before ordering.">

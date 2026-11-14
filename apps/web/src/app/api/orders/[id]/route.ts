@@ -28,6 +28,12 @@ export async function GET(_req: Request, ctx: Ctx) {
       },
     },
   });
+  // The submitted (entered) date is for the Super admin only.
+  if (order && auth.payload.role !== "SUPER_ADMIN") {
+    const { createdAt: _hidden, ...rest } = order;
+    void _hidden;
+    return NextResponse.json({ order: rest });
+  }
   return NextResponse.json({ order });
 }
 

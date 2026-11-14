@@ -9,6 +9,7 @@ const LIMIT = 5000;
 export async function GET(req: Request) {
   const auth = await withAuth();
   if (auth.response) return auth.response;
+  const isAdmin = auth.payload.role === "SUPER_ADMIN";
   const { where } = await buildOrderWhere(new URL(req.url).searchParams, auth.payload);
   const [rows, total] = await Promise.all([
     prisma.order.findMany({
@@ -16,7 +17,7 @@ export async function GET(req: Request) {
       orderBy: [{ enquiryDate: "desc" }, { id: "desc" }],
       take: LIMIT,
       select: {
-        orderNumber: true, status: true, enquiryDate: true, customerName: true, companyName: true, customerPhone: true,
+        orderNumber: true, status: true, enquiryDate: true, ...(isAdmin ? { createdAt: true } : {}), customerName: true, companyName: true, customerPhone: true,
         customerEmail: true, customerAddress: true, gstNumber: true, productDetails: true, isSample: true, sampleSentAt: true,
         sampleCourierName: true, sampleTrackingId: true, pricePerUnit: true, priceUnit: true, quantity: true, paymentTerms: true,
         deliveryTime: true, pricedAt: true, clientResponse: true, clientFeedback: true, clientFeedbackAt: true,
