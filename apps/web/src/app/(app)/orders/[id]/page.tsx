@@ -303,7 +303,7 @@ export default function EnquiryPage({ params }: { params: Promise<{ id: string }
 
   let next: React.ReactNode = null;
   if (o.status === "CANCELLED") next = <NextStep tone="info" eyebrow="Cancelled" title="This enquiry was cancelled" description={o.cancellationReason ?? undefined} />;
-  else if (o.status === "CLOSED") next = <NextStep tone="done" eyebrow="Closed" title={`Client ${o.clientResponse === "ACCEPTED" ? "accepted" : "declined"}`} description="Nothing more to do on this enquiry." />;
+  else if (o.status === "CLOSED") next = <NextStep tone="done" eyebrow="Closed" title={`Client ${o.clientResponse === "ACCEPTED" ? "accepted" : "declined"}`} description={o.clientResponse === "DECLINED" && sales ? "If the client comes back, reopen it from Client feedback below." : "Nothing more to do on this enquiry."} />;
   else if (o.status === "PLACED") next = sales
     ? <NextStep title="Add your pricing" description="Fill in the price below, then quote the client." actionLabel="Go to pricing" onAction={() => document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" })} />
     : <NextStep tone="wait" eyebrow="Waiting" title="Pricing is yet to be added" description="You'll see the price here as soon as it's added." />;
