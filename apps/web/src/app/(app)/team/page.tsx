@@ -258,6 +258,24 @@ export default function TeamPage() {
       setRowError((err as Error).message);
     }
   }
+  const [exporting, setExporting] = useState(false);
+  async function downloadAll() {
+    setExporting(true);
+    setRowError(null);
+    try {
+      const res = await fetch("/api/team/export");
+      if (!res.ok) throw new Error("Couldn't prepare the download. Please try again.");
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(await res.blob());
+      a.download = `team-with-audit-logs-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (err) {
+      setRowError((err as Error).message);
+    } finally {
+      setExporting(false);
+    }
+  }
   async function toggle(p: Person) {
     await api(`/api/team/${p.id}`, { method: "PATCH", json: { active: !p.active } });
     await qc.invalidateQueries({ queryKey: ["team"] });
@@ -266,6 +284,7 @@ export default function TeamPage() {
   return (
     <>
       <PageHeader title="Team" description="Add people and map each one to the divisions they work in.">
+        <Button variant="outline" disabled={exporting} onClick={() => void downloadAll()}><Download className="h-4 w-4" /> {exporting ? "Preparing…" : "Download users + audit logs"}</Button>
         <Button variant="outline" onClick={() => { setBulk(true); setAdding(false); setEditing(null); }}><Upload className="h-4 w-4" /> Bulk upload</Button>
         <Button onClick={() => { setAdding(true); setBulk(false); setEditing(null); }}><Plus className="h-4 w-4" /> Add team member</Button>
       </PageHeader>
