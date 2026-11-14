@@ -9,7 +9,7 @@ export type EnquiryDetail = {
   createdAt?: string;
   customerName: string; companyName: string | null; customerPhone: string | null; customerEmail: string | null; customerAddress: string | null;
   gstNumber: string | null; productDetails: string | null; isSample: boolean;
-  sampleSentAt: string | null; sampleCourierName: string | null; sampleTrackingId: string | null; sampleRemarks: string | null;
+  sampleSentAt: string | null; sampleRemarks: string | null;
   pricePerUnit: string | null; priceUnit: string | null; quantity: string | null; paymentTerms: string | null; deliveryTime: string | null; pricingNotes: string | null;
   pricedAt: string | null; pricedBy: { name: string } | null;
   clientResponse: string | null; clientFeedback: string | null; clientFeedbackAt: string | null; cancellationReason: string | null;
@@ -130,7 +130,7 @@ export async function exportEnquiryPdf(o: EnquiryDetail, generatedBy: string) {
   section("Pricing", o.pricedAt
     ? [["Rate", o.pricePerUnit ? `${rupee(o.pricePerUnit, "Rs. ")} per ${o.priceUnit ?? ""}` : "-"], ["Quantity", or(o.quantity)], ["Payment terms", or(o.paymentTerms)], ["Delivery time", or(o.deliveryTime)], ["Notes", or(o.pricingNotes)], ["Priced by", `${o.pricedBy?.name ?? "-"}  ·  ${dt(o.pricedAt)}`]]
     : [["Status", "Not priced yet"]]);
-  if (o.isSample) section("Sample", [["Sent on", fmtD(o.sampleSentAt) || "-"], ["Courier", or(o.sampleCourierName)], ["Tracking ID", or(o.sampleTrackingId)], ["Remarks", or(o.sampleRemarks)]]);
+  section("Remarks", [[o.isSample ? "Sample" : "Full order", or(o.sampleRemarks)]]);
   section("Client feedback", fbRows(o));
   if (o.cancellationReason) section("Cancellation", [["Reason", o.cancellationReason]]);
 
@@ -229,7 +229,7 @@ export async function exportEnquiryExcel(o: EnquiryDetail, generatedBy: string) 
     : [["Status", "Not priced yet"]]);
   const rateRow = ws.getRows(1, r)?.find((row) => row.getCell(1).value === "Rate (INR)");
   if (rateRow) rateRow.getCell(2).numFmt = "#,##0.00";
-  if (o.isSample) block("Sample", [["Sent on", fmtD(o.sampleSentAt)], ["Courier", o.sampleCourierName], ["Tracking ID", o.sampleTrackingId], ["Remarks", o.sampleRemarks]]);
+  block("Remarks", [[o.isSample ? "Sample" : "Full order", o.sampleRemarks]]);
   block("Client feedback", fbRows(o));
   if (o.cancellationReason) block("Cancellation", [["Reason", o.cancellationReason]]);
   ws.pageSetup = { orientation: "portrait", paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.5, right: 0.5, top: 0.6, bottom: 0.7, header: 0.3, footer: 0.3 } };

@@ -18,8 +18,8 @@ export async function GET(req: Request) {
       take: LIMIT,
       select: {
         orderNumber: true, status: true, enquiryDate: true, ...(isAdmin ? { createdAt: true } : {}), customerName: true, companyName: true, customerPhone: true,
-        customerEmail: true, customerAddress: true, gstNumber: true, productDetails: true, isSample: true, sampleSentAt: true,
-        sampleCourierName: true, sampleTrackingId: true, pricePerUnit: true, priceUnit: true, quantity: true, paymentTerms: true,
+        customerEmail: true, customerAddress: true, gstNumber: true, productDetails: true, isSample: true, sampleRemarks: true,
+        pricePerUnit: true, priceUnit: true, quantity: true, paymentTerms: true,
         deliveryTime: true, pricedAt: true, clientResponse: true, clientFeedback: true, clientFeedbackAt: true,
         division: { select: { name: true } }, createdBy: { select: { name: true } }, pricedBy: { select: { name: true } },
       },

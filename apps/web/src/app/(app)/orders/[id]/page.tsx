@@ -89,23 +89,16 @@ function PricingForm({ o }: { o: Order }) {
   );
 }
 
-function SampleForm({ o }: { o: Order }) {
+function RemarksForm({ o }: { o: Order }) {
   const { run, error, busy } = useAction(o.id);
-  const [f, setF] = useState({
-    sampleSentAt: o.sampleSentAt ? o.sampleSentAt.slice(0, 10) : todayInput(),
-    sampleCourierName: o.sampleCourierName ?? "", sampleTrackingId: o.sampleTrackingId ?? "", sampleRemarks: o.sampleRemarks ?? "",
-  });
-  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) => setF((p) => ({ ...p, [k]: e.target.value }));
+  const [text, setText] = useState(o.sampleRemarks ?? "");
   return (
-    <form onSubmit={(e) => { e.preventDefault(); void run("sample", f); }} className="space-y-5 p-5">
-      <div className="grid gap-5 sm:grid-cols-2">
-        <Field label="Date sent" htmlFor="sd"><Input id="sd" type="date" value={f.sampleSentAt} onChange={set("sampleSentAt")} /></Field>
-        <Field label="Courier or carrier" optional htmlFor="sc"><Input id="sc" value={f.sampleCourierName} onChange={set("sampleCourierName")} placeholder="DTDC" /></Field>
-        <Field label="Tracking ID" optional htmlFor="st"><Input id="st" value={f.sampleTrackingId} onChange={set("sampleTrackingId")} /></Field>
-      </div>
-      <Field label="Remarks" optional htmlFor="sr"><Input id="sr" value={f.sampleRemarks} onChange={set("sampleRemarks")} /></Field>
+    <form onSubmit={(e) => { e.preventDefault(); void run("sample", { sampleRemarks: text }); }} className="space-y-4 p-5">
+      <Field label="Remarks" required htmlFor="sr">
+        <textarea id="sr" required className={textareaClass} value={text} onChange={(e) => setText(e.target.value)} placeholder={o.isSample ? "e.g. Sample sent by courier on Monday, client to confirm shade" : "e.g. Full order, client wants delivery before month end"} />
+      </Field>
       <FormError message={error} />
-      <div className="flex justify-end"><Button type="submit" disabled={busy}>{busy ? "Saving…" : o.sampleSentAt ? "Update sample" : "Mark sample as sent"}</Button></div>
+      <div className="flex justify-end"><Button type="submit" disabled={busy || !text.trim()}>{busy ? "Saving…" : o.sampleRemarks ? "Update remarks" : "Save remarks"}</Button></div>
     </form>
   );
 }
@@ -315,7 +308,7 @@ export default function EnquiryPage({ params }: { params: Promise<{ id: string }
     ? <NextStep title="Add your pricing" description="Fill in the price below, then quote the client." actionLabel="Go to pricing" onAction={() => document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" })} />
     : <NextStep tone="wait" eyebrow="Waiting" title="Pricing is yet to be added" description="You'll see the price here as soon as it's added." />;
   else next = sales
-    ? <NextStep tone="wait" eyebrow="Waiting for the client" title={o.isSample && !o.sampleSentAt ? "Send the sample, then record the client's feedback" : "Record the client's feedback when you hear back"} description="Accepting or declining closes the enquiry. Negotiating keeps it open." />
+    ? <NextStep tone="wait" eyebrow="Waiting for the client" title="Record the client's feedback when you hear back" description="Accepting or declining closes the enquiry. Negotiating keeps it open." />
     : <NextStep tone="wait" eyebrow="Waiting" title="Waiting on the client" description="Feedback will appear here." />;
 
   return (
@@ -346,14 +339,12 @@ export default function EnquiryPage({ params }: { params: Promise<{ id: string }
             </Panel>
           )}
 
-          {o.isSample ? (
-            <Panel>
-              <PanelHeader title={<span className="flex items-center gap-2"><FlaskConical className="h-4 w-4 text-[var(--app-brand)]" aria-hidden />Sample</span>} caption={o.sampleSentAt ? `Sent on ${fmtDate(o.sampleSentAt)}` : "Client asked for a sample."} />
-              {sales && !finished ? <SampleForm o={o} /> : o.sampleSentAt ? (
-                <dl className="divide-y divide-[var(--app-line-soft)] px-5 py-2"><Row k="Courier" v={o.sampleCourierName} /><Row k="Tracking ID" v={o.sampleTrackingId} /><Row k="Remarks" v={o.sampleRemarks} /></dl>
-              ) : <p className="p-5 text-sm text-[var(--app-ink-3)]">Sample not sent yet.</p>}
-            </Panel>
-          ) : null}
+          <Panel>
+            <PanelHeader title={<span className="flex items-center gap-2">{o.isSample ? <FlaskConical className="h-4 w-4 text-[var(--app-brand)]" aria-hidden /> : null}Remarks</span>} caption={o.isSample ? "Sample enquiry" : "Full order"} />
+            {sales && !finished ? <RemarksForm o={o} /> : o.sampleRemarks ? (
+              <p className="whitespace-pre-wrap p-5 text-sm text-[var(--app-ink)]">{o.sampleRemarks}</p>
+            ) : <p className="p-5 text-sm text-[var(--app-ink-3)]">No remarks yet.</p>}
+          </Panel>
 
           <Panel>
             <PanelHeader title="Client feedback" caption={o.clientFeedbackAt ? `Last recorded ${fmtDate(o.clientFeedbackAt)}` : undefined} />

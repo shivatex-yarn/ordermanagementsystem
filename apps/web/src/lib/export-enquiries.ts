@@ -7,8 +7,8 @@ import { COMPANY_NAME } from "@/lib/branding";
 export type ExportRow = {
   orderNumber: string; status: string; enquiryDate: string; createdAt?: string; customerName: string; companyName: string | null;
   customerPhone: string | null; customerEmail: string | null; customerAddress: string | null; gstNumber: string | null;
-  productDetails: string | null; isSample: boolean; sampleSentAt: string | null; sampleCourierName: string | null;
-  sampleTrackingId: string | null; pricePerUnit: string | null; priceUnit: string | null; quantity: string | null;
+  productDetails: string | null; isSample: boolean; sampleRemarks: string | null;
+  pricePerUnit: string | null; priceUnit: string | null; quantity: string | null;
   paymentTerms: string | null; deliveryTime: string | null; pricedAt: string | null; clientResponse: string | null;
   clientFeedback: string | null; clientFeedbackAt: string | null;
   division: { name: string }; createdBy: { name: string }; pricedBy: { name: string } | null;
@@ -87,9 +87,7 @@ const ALL_XL_COLS: { header: string; key: string; width: number; fmt?: string; a
   { header: "Division", key: "division", width: 14 },
   { header: "Product / requirement", key: "product", width: 36 },
   { header: "Sample?", key: "sample", width: 10, align: "center" },
-  { header: "Sample sent", key: "sampleSent", width: 14, fmt: "dd mmm yyyy", align: "center" },
-  { header: "Courier", key: "courier", width: 14 },
-  { header: "Tracking ID", key: "tracking", width: 16 },
+  { header: "Remarks", key: "remarks", width: 34 },
   { header: "Price (INR)", key: "price", width: 14, fmt: "#,##0.00", align: "right" },
   { header: "Per", key: "unit", width: 9, align: "center" },
   { header: "Quantity", key: "qty", width: 14 },
@@ -162,8 +160,8 @@ function enquirySheet(wb: XlWorkbook, name: string, logoId: number | null, rows:
     const vals: Record<string, unknown> = {
       no: r.orderNumber, date: d(r.enquiryDate), submitted: r.createdAt ? new Date(r.createdAt) : "", client: r.companyName || r.customerName, contact: r.customerName,
       phone: r.customerPhone ?? "", email: r.customerEmail ?? "", gst: r.gstNumber ?? "", division: r.division.name,
-      product: r.productDetails ?? "", sample: r.isSample ? "Yes" : "No", sampleSent: d(r.sampleSentAt), courier: r.sampleCourierName ?? "",
-      tracking: r.sampleTrackingId ?? "", price: r.pricePerUnit ? Number(r.pricePerUnit) : null, unit: r.priceUnit ?? "",
+      product: r.productDetails ?? "", sample: r.isSample ? "Yes" : "No", remarks: r.sampleRemarks ?? "",
+      price: r.pricePerUnit ? Number(r.pricePerUnit) : null, unit: r.priceUnit ?? "",
       qty: r.quantity ?? "", terms: r.paymentTerms ?? "", delivery: r.deliveryTime ?? "", pricedBy: r.pricedBy?.name ?? "",
       resp: r.clientResponse ? RESP[r.clientResponse] ?? r.clientResponse : "", feedback: r.clientFeedback ?? "",
       status: STATUS[r.status] ?? r.status, loggedBy: r.createdBy.name,
