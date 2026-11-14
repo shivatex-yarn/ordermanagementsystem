@@ -3,7 +3,7 @@
  */
 import { prisma } from "@/lib/db";
 
-export type AuditCategory = "AUTH" | "ENQUIRY" | "TEAM" | "DIVISION" | "ACCESS";
+export type AuditCategory = "AUTH" | "ENQUIRY" | "TEAM" | "DIVISION" | "ORGANIZATION" | "ACCESS";
 
 type Actor = { sub: string; role?: string } | null;
 

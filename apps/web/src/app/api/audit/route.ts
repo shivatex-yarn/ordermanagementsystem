@@ -16,7 +16,7 @@ export async function GET(req: Request) {
   const userId = Number(sp.get("userId"));
   if (userId) and.push({ userId });
   const category = sp.get("category");
-  if (category && ["AUTH", "ENQUIRY", "TEAM", "DIVISION", "ACCESS"].includes(category)) and.push({ category });
+  if (category && ["AUTH", "ENQUIRY", "TEAM", "DIVISION", "ORGANIZATION", "ACCESS"].includes(category)) and.push({ category });
   const from = sp.get("from");
   const to = sp.get("to");
   const range: Prisma.DateTimeFilter = {};
