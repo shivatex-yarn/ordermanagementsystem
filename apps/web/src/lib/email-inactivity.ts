@@ -100,14 +100,17 @@ export function renderInactivityEmail(m: InactivityMail): { subject: string; htm
 </body></html>`;
 
   const text = [
-    subject, "",
-    `${m.person.name} (${m.person.email}) has not entered any enquiry ${never ? "since joining" : `in ${m.days} days`}.`,
+    "INACTIVITY ALERT: NIL ENQUIRIES", "",
+    `${m.person.name} has not entered any enquiry ${never ? "since joining" : `in the last ${m.days} days`}. The alert limit is ${m.thresholdDays} days.`, "",
+    `Person: ${m.person.name} (${m.person.email})`,
     ...(org ? [`Organization: ${org}`] : []),
     `Divisions: ${m.person.divisions.join(", ") || "none"}`,
     never
       ? `Account created: ${fmt(m.person.joinedAt)}`
-      : `Last entry: ${m.last!.orderNumber} · ${m.last!.client} · ${m.last!.division}, entered ${fmt(m.last!.loggedAt)} (enquiry date ${fmt(m.last!.enquiryDate)})`,
-    "", `View team: ${link}`,
+      : `Last entry: ${m.last!.orderNumber} - ${m.last!.client} - ${m.last!.division}, entered ${fmt(m.last!.loggedAt)} (enquiry date ${fmt(m.last!.enquiryDate)})`,
+    "", `View team: ${link}`, "",
+    `Sent to the Super admin and the Managing director when a Marketing person goes ${m.thresholdDays} days without logging an enquiry. A reminder follows weekly while it continues.`,
+    `${COMPANY_NAME} - automated message`,
   ].join("\n");
   return { subject, html, text };
 }

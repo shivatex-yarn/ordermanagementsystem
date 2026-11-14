@@ -54,7 +54,7 @@ export async function runInactivityAlerts(now = new Date()): Promise<InactivityR
     // The "alert sent" record and the in-app notice are written only after the email really went out,
     // so a failed send (Resend down, key missing) is retried on the next daily run instead of being silenced for a week.
     sends.push(async () => {
-      const r = await sendEmail({ to, subject: mail.subject, html: mail.html, text: mail.text });
+      const r = await sendEmail({ to, subject: mail.subject, text: mail.text });
       if (!r.ok) {
         result.failed++;
         console.error(`[inactivity] email for ${p.name} not sent, will retry next run:`, r.error);
