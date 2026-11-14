@@ -22,6 +22,8 @@ export interface SendEmailOptions {
   subject: string;
   html: string;
   text?: string;
+  /** Optional file attachments (e.g. a PDF report). */
+  attachments?: Array<{ filename: string; content: Buffer }>;
 }
 
 // Simple token-bucket throttle: max 4 sends/sec to stay safely under Resend's 5/sec limit.
@@ -65,6 +67,7 @@ export async function sendEmail(options: SendEmailOptions): Promise<{ ok: boolea
       subject: options.subject,
       html: options.html,
       text: options.text,
+      ...(options.attachments?.length ? { attachments: options.attachments } : {}),
     });
     if (error) {
       console.error("[email] Resend error:", error);
