@@ -20,7 +20,7 @@ import { Download, FileSpreadsheet, FileText, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Order = {
-  id: number; divisionId: number; orderNumber: string; status: string; enquiryDate: string;
+  id: number; divisionId: number; orderNumber: string; status: string; enquiryDate: string; /** Super admin only. */ createdAt?: string;
   customerName: string; companyName: string | null; customerPhone: string | null; customerEmail: string | null;
   customerAddress: string | null; gstNumber: string | null; gstCopyUrl: string | null;
   productDetails: string | null; isSample: boolean;
@@ -133,14 +133,14 @@ function FeedbackForm({ o }: { o: Order }) {
   );
 }
 
-function DownloadMenu({ o, name }: { o: Order; name: string }) {
+function DownloadMenu({ o, name, isAdmin }: { o: Order; name: string; isAdmin: boolean }) {
   const [busy, setBusy] = useState<"pdf" | "excel" | null>(null);
   const [err, setErr] = useState<string | null>(null);
   async function go(kind: "pdf" | "excel") {
     setBusy(kind); setErr(null);
     try {
       const m = await import("@/lib/export-enquiry-detail");
-      const detail = o as unknown as import("@/lib/export-enquiry-detail").EnquiryDetail;
+      const detail = { ...o, createdAt: isAdmin ? o.createdAt : undefined } as unknown as import("@/lib/export-enquiry-detail").EnquiryDetail;
       if (kind === "pdf") await m.exportEnquiryPdf(detail, name); else await m.exportEnquiryExcel(detail, name);
     } catch (e) { setErr((e as Error).message || "Couldn't prepare the download"); } finally { setBusy(null); }
   }
@@ -276,8 +276,8 @@ export default function EnquiryPage({ params }: { params: Promise<{ id: string }
   return (
     <>
       <Link href="/orders" className="inline-flex items-center gap-1.5 text-sm font-semibold text-[var(--app-ink-3)] hover:text-[var(--app-ink)]"><ArrowLeft className="h-4 w-4" /> Enquiries</Link>
-      <PageHeader title={<span className="flex flex-wrap items-center gap-3">{o.orderNumber}<StatusPill status={o.status} /></span>} description={`${o.companyName || o.customerName} · ${o.division.name} · Enquiry date ${fmtDate(o.enquiryDate)}${user && !canPrice(user.role) && !canCreateEnquiry(user.role) ? " · View only" : ""}`}>
-        {user ? <DownloadMenu o={o} name={user.name} /> : null}
+      <PageHeader title={<span className="flex flex-wrap items-center gap-3">{o.orderNumber}<StatusPill status={o.status} /></span>} description={`${o.companyName || o.customerName} · ${o.division.name} · Enquiry date ${fmtDate(o.enquiryDate)}${user?.role === "SUPER_ADMIN" && o.createdAt ? ` · Submitted ${fmtDateTime(o.createdAt)}` : ""}${user && !canPrice(user.role) && !canCreateEnquiry(user.role) ? " · View only" : ""}`}>
+        {user ? <DownloadMenu o={o} name={user.name} isAdmin={user.role === "SUPER_ADMIN"} /> : null}
       </PageHeader>
       {next}
 

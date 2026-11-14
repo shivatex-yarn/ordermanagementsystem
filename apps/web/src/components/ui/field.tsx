@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 export function Field({
   label,
   optional,
+  required,
   hint,
   className,
   children,
@@ -12,6 +13,8 @@ export function Field({
 }: {
   label: string;
   optional?: boolean;
+  /** Mandatory field: shows a red asterisk after the label. */
+  required?: boolean;
   hint?: string;
   className?: string;
   htmlFor?: string;
@@ -21,6 +24,7 @@ export function Field({
     <div className={cn("space-y-1.5", className)}>
       <label htmlFor={htmlFor} className="flex items-center gap-2 text-xs font-semibold text-[var(--app-ink-2)]">
         {label}
+        {required ? <span className="-ml-1 text-[var(--app-late-ink)]" aria-hidden title="Required">*</span> : null}
         {optional ? (
           <span className="rounded-full bg-[var(--app-surface-sunk)] px-2 py-0.5 text-[10px] font-semibold text-[var(--app-ink-3)]">
             Optional

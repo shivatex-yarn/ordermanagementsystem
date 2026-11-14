@@ -5,7 +5,7 @@
 import { COMPANY_NAME } from "@/lib/branding";
 
 export type ExportRow = {
-  orderNumber: string; status: string; enquiryDate: string; customerName: string; companyName: string | null;
+  orderNumber: string; status: string; enquiryDate: string; createdAt?: string; customerName: string; companyName: string | null;
   customerPhone: string | null; customerEmail: string | null; customerAddress: string | null; gstNumber: string | null;
   productDetails: string | null; isSample: boolean; sampleSentAt: string | null; sampleCourierName: string | null;
   sampleTrackingId: string | null; pricePerUnit: string | null; priceUnit: string | null; quantity: string | null;
@@ -75,9 +75,10 @@ const safeSheet = (n: string, used: Set<string>) => {
 };
 
 /* ───────────────────────────── Excel ───────────────────────────── */
-const XL_COLS: { header: string; key: string; width: number; fmt?: string; align?: "left" | "center" | "right" }[] = [
+const ALL_XL_COLS: { header: string; key: string; width: number; fmt?: string; align?: "left" | "center" | "right" }[] = [
   { header: "Enquiry no.", key: "no", width: 14 },
   { header: "Enquiry date", key: "date", width: 14, fmt: "dd mmm yyyy", align: "center" },
+  { header: "Submitted on", key: "submitted", width: 20, fmt: "dd mmm yyyy hh:mm", align: "center" },
   { header: "Client", key: "client", width: 26 },
   { header: "Contact person", key: "contact", width: 20 },
   { header: "Phone", key: "phone", width: 15 },
@@ -140,6 +141,8 @@ function summaryChips(ws: XlSheet, rows: ExportRow[]) {
 }
 
 function enquirySheet(wb: XlWorkbook, name: string, logoId: number | null, rows: ExportRow[], subtitle: string, meta: ExportMeta) {
+  // "Submitted on" is Super-admin only: the API sends createdAt only to them.
+  const XL_COLS = ALL_XL_COLS.filter((c) => c.key !== "submitted" || rows.some((r) => r.createdAt));
   const ws = wb.addWorksheet(name, { views: [{ state: "frozen", ySplit: 8, showGridLines: false }] });
   ws.columns = XL_COLS.map((c) => ({ key: c.key, width: c.width }));
   banner(ws, wb, logoId, subtitle, meta, XL_COLS.length);
@@ -157,7 +160,7 @@ function enquirySheet(wb: XlWorkbook, name: string, logoId: number | null, rows:
   rows.forEach((r, idx) => {
     const row = ws.getRow(9 + idx);
     const vals: Record<string, unknown> = {
-      no: r.orderNumber, date: d(r.enquiryDate), client: r.companyName || r.customerName, contact: r.customerName,
+      no: r.orderNumber, date: d(r.enquiryDate), submitted: r.createdAt ? new Date(r.createdAt) : "", client: r.companyName || r.customerName, contact: r.customerName,
       phone: r.customerPhone ?? "", email: r.customerEmail ?? "", gst: r.gstNumber ?? "", division: r.division.name,
       product: r.productDetails ?? "", sample: r.isSample ? "Yes" : "No", sampleSent: d(r.sampleSentAt), courier: r.sampleCourierName ?? "",
       tracking: r.sampleTrackingId ?? "", price: r.pricePerUnit ? Number(r.pricePerUnit) : null, unit: r.priceUnit ?? "",
@@ -348,7 +351,7 @@ export async function exportPdf(rows: ExportRow[], meta: ExportMeta) {
   const price = (r: ExportRow) => (r.pricePerUnit ? `Rs. ${Number(r.pricePerUnit).toLocaleString("en-IN", { minimumFractionDigits: 2 })} / ${r.priceUnit ?? ""}` : "-");
   const body = (g: ExportRow[], withDivision: boolean) =>
     g.map((r) => [
-      r.orderNumber, fmtD(r.enquiryDate), r.companyName || r.customerName, ...(withDivision ? [r.division.name] : []),
+      r.orderNumber, r.createdAt ? `${fmtD(r.enquiryDate)}\nEntered ${fmtD(r.createdAt)}` : fmtD(r.enquiryDate), r.companyName || r.customerName, ...(withDivision ? [r.division.name] : []),
       r.isSample ? "Yes" : "No", price(r), r.clientResponse ? RESP[r.clientResponse] ?? "" : "-", STATUS[r.status] ?? r.status, r.createdBy.name,
     ]);
   const heads = (withDivision: boolean) => ["ENQUIRY", "DATE", "CLIENT", ...(withDivision ? ["DIVISION"] : []), "SAMPLE", "PRICE", "CLIENT RESPONSE", "STATUS", "LOGGED BY"];
