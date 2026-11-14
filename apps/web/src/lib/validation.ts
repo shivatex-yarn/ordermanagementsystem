@@ -95,11 +95,9 @@ export const pricingSchema = z.object({
   pricingNotes: optionalText(5000),
 });
 
+/** Remarks on the sample, or on the full order. Just one free-text box. */
 export const sampleSchema = z.object({
-  sampleSentAt: z.string().optional(),
-  sampleCourierName: optionalText(200),
-  sampleTrackingId: optionalText(200),
-  sampleRemarks: optionalText(5000),
+  sampleRemarks: z.string().trim().min(1, "Write the remarks").max(5000),
 });
 
 export const feedbackSchema = z.object({
