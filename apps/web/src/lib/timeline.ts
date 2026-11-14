@@ -18,6 +18,7 @@ export type TimelineEventType =
   | "SAMPLE_UPDATED"
   | "CLIENT_FEEDBACK"
   | "ENQUIRY_CLOSED"
+  | "ENQUIRY_REOPENED"
   | "ENQUIRY_CANCELLED";
 
 export interface AppendTimelineInput {
