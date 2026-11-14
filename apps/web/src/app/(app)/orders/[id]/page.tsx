@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Field, FormError, Segmented, selectClass, textareaClass } from "@/components/ui/field";
 import { canCreateEnquiry, canPrice } from "@/lib/roles";
+import { feedbackHistory } from "@/lib/feedback-history";
 import { EnquiryStepper } from "@/components/enquiry-stepper";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Download, FileSpreadsheet, FileText, Loader2 } from "lucide-react";
@@ -30,7 +31,7 @@ type Order = {
   clientFeedback: string | null; clientResponse: string | null; clientFeedbackAt: string | null;
   cancellationReason: string | null;
   division: { id: number; name: string }; createdBy: { name: string };
-  timelineEvents: { id: number; title: string; detail: string | null; createdAt: string; actor: { name: string } | null }[];
+  timelineEvents: { id: number; type?: string; metadata?: unknown; title: string; detail: string | null; createdAt: string; actor: { name: string } | null }[];
 };
 
 function Row({ k, v }: { k: string; v?: React.ReactNode }) {
@@ -112,7 +113,8 @@ function SampleForm({ o }: { o: Order }) {
 function FeedbackForm({ o }: { o: Order }) {
   const { run, error, busy } = useAction(o.id);
   const [resp, setResp] = useState<string>(o.clientResponse ?? "");
-  const [text, setText] = useState(o.clientFeedback ?? "");
+  // Every save is a new entry, so start blank. Earlier entries stay in the history below.
+  const [text, setText] = useState("");
   return (
     <form onSubmit={(e) => { e.preventDefault(); if (!resp) return; void run("feedback", { clientResponse: resp, clientFeedback: text }); }} className="space-y-5 p-5">
       <Field label="How did the client respond?">
@@ -130,6 +132,49 @@ function FeedbackForm({ o }: { o: Order }) {
       <FormError message={error ?? (!resp ? null : null)} />
       <div className="flex justify-end"><Button type="submit" disabled={busy || !resp}>{busy ? "Saving…" : "Save feedback"}</Button></div>
     </form>
+  );
+}
+
+const RESP_STYLE: Record<string, string> = {
+  ACCEPTED: "bg-[var(--app-done-bg)] text-[var(--app-done-ink)]",
+  NEGOTIATING: "bg-[var(--app-act-bg)] text-[var(--app-act-ink)]",
+  DECLINED: "bg-[var(--app-late-bg)] text-[var(--app-late-ink)]",
+};
+
+/** All client feedback entries, newest first, each with its date and who recorded it. */
+function FeedbackHistory({ o }: { o: Order }) {
+  const entries = feedbackHistory(o.timelineEvents);
+  if (!entries.length) return null;
+  return (
+    <ul className="divide-y divide-[var(--app-line-soft)] border-t border-[var(--app-line-soft)] px-5">
+      {entries.map((e, i) => (
+        <li key={i} className="space-y-1 py-3.5">
+          <p className="flex flex-wrap items-center gap-2 text-[11px] text-[var(--app-ink-3)]">
+            <span className={cn("rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide", RESP_STYLE[e.response])}>{e.response === "NEGOTIATING" ? "Negotiating" : e.response === "ACCEPTED" ? "Accepted" : "Declined"}</span>
+            {fmtDateTime(e.at)} · {e.by}
+          </p>
+          <p className="whitespace-pre-wrap text-sm text-[var(--app-ink)]">{e.text || "No note."}</p>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Declined enquiries can be reopened when the client comes back. */
+function ReopenBar({ o }: { o: Order }) {
+  const { run, error, busy } = useAction(o.id);
+  const [sure, setSure] = useState(false);
+  return (
+    <div className="space-y-2 border-t border-[var(--app-line-soft)] p-5">
+      <p className="text-sm text-[var(--app-ink-2)]">The client declined. If they come back, reopen it to record more feedback.</p>
+      {sure ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" disabled={busy} onClick={() => void run("reopen", {})}>{busy ? "Reopening…" : "Yes, reopen"}</Button>
+          <Button size="sm" variant="ghost" onClick={() => setSure(false)}>Keep closed</Button>
+        </div>
+      ) : <Button size="sm" variant="outline" onClick={() => setSure(true)}>Reopen enquiry</Button>}
+      <FormError message={error} />
+    </div>
   );
 }
 
@@ -311,10 +356,12 @@ export default function EnquiryPage({ params }: { params: Promise<{ id: string }
           ) : null}
 
           <Panel>
-            <PanelHeader title="Client feedback" caption={o.clientFeedbackAt ? `Recorded ${fmtDate(o.clientFeedbackAt)}` : undefined} />
-            {sales && !finished && o.pricedAt ? <FeedbackForm o={o} /> : o.clientFeedback ? (
-              <div className="space-y-2 p-5"><p className="text-xs font-bold uppercase tracking-wide text-[var(--app-ink-3)]">{o.clientResponse?.toLowerCase()}</p><p className="whitespace-pre-wrap text-sm text-[var(--app-ink)]">{o.clientFeedback}</p></div>
-            ) : <p className="p-5 text-sm text-[var(--app-ink-3)]">{sales && !o.pricedAt ? "Add pricing first, then record what the client says." : "No feedback yet."}</p>}
+            <PanelHeader title="Client feedback" caption={o.clientFeedbackAt ? `Last recorded ${fmtDate(o.clientFeedbackAt)}` : undefined} />
+            {sales && !finished && o.pricedAt ? <FeedbackForm o={o} /> : !o.clientFeedback ? (
+              <p className="p-5 text-sm text-[var(--app-ink-3)]">{sales && !o.pricedAt ? "Add pricing first, then record what the client says." : "No feedback yet."}</p>
+            ) : null}
+            <FeedbackHistory o={o} />
+            {sales && o.status === "CLOSED" && o.clientResponse === "DECLINED" ? <ReopenBar o={o} /> : null}
           </Panel>
         </div>
 

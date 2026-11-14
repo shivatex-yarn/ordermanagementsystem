@@ -1,5 +1,6 @@
 /** Download one enquiry's full details as a PDF or an Excel workbook, with the company logo. */
 import { COMPANY_NAME } from "@/lib/branding";
+import { feedbackHistory } from "@/lib/feedback-history";
 import { download, fileStamp, fmtD, loadLogo, RESP, STATUS, stamp } from "@/lib/export-enquiries";
 
 export type EnquiryDetail = {
@@ -13,11 +14,19 @@ export type EnquiryDetail = {
   pricedAt: string | null; pricedBy: { name: string } | null;
   clientResponse: string | null; clientFeedback: string | null; clientFeedbackAt: string | null; cancellationReason: string | null;
   division: { name: string }; createdBy: { name: string };
-  timelineEvents: { title: string; detail: string | null; createdAt: string; actor: { name: string } | null }[];
+  timelineEvents: { type?: string; metadata?: unknown; title: string; detail: string | null; createdAt: string; actor: { name: string } | null }[];
 };
 
 const rupee = (n: string | null, prefix: string) => (n ? `${prefix}${Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : "-");
 const dt = (v: string | null) => (v ? new Date(v).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "-");
+/** Every feedback entry, oldest first, so the file reads like the negotiation did. */
+function fbRows(o: EnquiryDetail): [string, string][] {
+  const h = feedbackHistory(o.timelineEvents).reverse();
+  if (!h.length) return o.clientFeedback
+    ? [["Response", RESP[o.clientResponse ?? ""] ?? or(o.clientResponse)], ["Feedback", o.clientFeedback], ["Recorded", dt(o.clientFeedbackAt)]]
+    : [["Status", "No feedback recorded yet"]];
+  return h.map((e, i) => [`${i + 1}. ${RESP[e.response] ?? e.response}`, `${dt(e.at)} · ${e.by}\n${e.text || "No note."}`]);
+}
 const or = (v: string | null | undefined) => (v && v.trim() ? v : "-");
 
 type RGB = [number, number, number];
@@ -122,9 +131,7 @@ export async function exportEnquiryPdf(o: EnquiryDetail, generatedBy: string) {
     ? [["Rate", o.pricePerUnit ? `${rupee(o.pricePerUnit, "Rs. ")} per ${o.priceUnit ?? ""}` : "-"], ["Quantity", or(o.quantity)], ["Payment terms", or(o.paymentTerms)], ["Delivery time", or(o.deliveryTime)], ["Notes", or(o.pricingNotes)], ["Priced by", `${o.pricedBy?.name ?? "-"}  ·  ${dt(o.pricedAt)}`]]
     : [["Status", "Not priced yet"]]);
   if (o.isSample) section("Sample", [["Sent on", fmtD(o.sampleSentAt) || "-"], ["Courier", or(o.sampleCourierName)], ["Tracking ID", or(o.sampleTrackingId)], ["Remarks", or(o.sampleRemarks)]]);
-  section("Client feedback", o.clientFeedback
-    ? [["Response", RESP[o.clientResponse ?? ""] ?? or(o.clientResponse)], ["Feedback", o.clientFeedback], ["Recorded", dt(o.clientFeedbackAt)]]
-    : [["Status", "No feedback recorded yet"]]);
+  section("Client feedback", fbRows(o));
   if (o.cancellationReason) section("Cancellation", [["Reason", o.cancellationReason]]);
 
   /* History */
@@ -223,7 +230,7 @@ export async function exportEnquiryExcel(o: EnquiryDetail, generatedBy: string) 
   const rateRow = ws.getRows(1, r)?.find((row) => row.getCell(1).value === "Rate (INR)");
   if (rateRow) rateRow.getCell(2).numFmt = "#,##0.00";
   if (o.isSample) block("Sample", [["Sent on", fmtD(o.sampleSentAt)], ["Courier", o.sampleCourierName], ["Tracking ID", o.sampleTrackingId], ["Remarks", o.sampleRemarks]]);
-  block("Client feedback", o.clientFeedback ? [["Response", RESP[o.clientResponse ?? ""] ?? o.clientResponse], ["Feedback", o.clientFeedback], ["Recorded", dt(o.clientFeedbackAt)]] : [["Status", "No feedback recorded yet"]]);
+  block("Client feedback", fbRows(o));
   if (o.cancellationReason) block("Cancellation", [["Reason", o.cancellationReason]]);
   ws.pageSetup = { orientation: "portrait", paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.5, right: 0.5, top: 0.6, bottom: 0.7, header: 0.3, footer: 0.3 } };
   ws.headerFooter = { oddFooter: `&L&8${COMPANY_NAME}  ·  Confidential&R&8Page &P of &N` };

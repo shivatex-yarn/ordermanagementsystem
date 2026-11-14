@@ -39,6 +39,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     title: close ? `Client ${clientResponse === "ACCEPTED" ? "accepted" : "declined"}. Enquiry closed` : "Client is negotiating",
     detail: clientFeedback,
     actorId: Number(auth.payload.sub),
+    metadata: { response: clientResponse },
   });
   await logAudit({ actor: auth.payload, action: close ? "ENQUIRY_CLOSED" : "CLIENT_FEEDBACK", category: "ENQUIRY", entityType: "Order", entityId: id, entityLabel: order.orderNumber, detail: `${clientResponse}: ${clientFeedback.slice(0, 160)}`, req });
   void notify([order.createdById, order.assignedToId], { type: "CLIENT_FEEDBACK", title: close ? `${order.orderNumber} closed: client ${clientResponse === "ACCEPTED" ? "accepted" : "declined"}` : `Client feedback on ${order.orderNumber}`, body: clientFeedback.slice(0, 140), link: `/orders/${id}` }, Number(auth.payload.sub));
