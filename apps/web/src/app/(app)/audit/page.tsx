@@ -15,7 +15,7 @@ type Data = { logs: Log[]; total: number; page: number; pageSize: number; people
 
 const CATEGORIES = [
   { key: "", label: "All activity" }, { key: "AUTH", label: "Sign-ins" }, { key: "ENQUIRY", label: "Enquiries" },
-  { key: "TEAM", label: "Team" }, { key: "DIVISION", label: "Divisions" }, { key: "ACCESS", label: "Access requests" },
+  { key: "TEAM", label: "Team" }, { key: "DIVISION", label: "Divisions" }, { key: "ORGANIZATION", label: "Organizations" }, { key: "ACCESS", label: "Access requests" },
 ];
 const TONE: Record<string, string> = {
   AUTH: "bg-[var(--app-surface-sunk)] text-[var(--app-ink-2)] border-[var(--app-line)]",

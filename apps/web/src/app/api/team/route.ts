@@ -14,6 +14,7 @@ const select = {
   email: true,
   employeeCode: true,
   phone: true,
+  organization: { select: { id: true, name: true } },
   role: true,
   active: true,
   createdAt: true,
@@ -48,6 +49,9 @@ export async function POST(req: Request) {
   if (d.employeeCode && (await prisma.user.findUnique({ where: { employeeCode: d.employeeCode } }))) {
     return NextResponse.json({ error: `Employee code ${d.employeeCode} is already used by someone else` }, { status: 409 });
   }
+  if (d.organizationId && !(await prisma.organization.findUnique({ where: { id: d.organizationId }, select: { id: true } }))) {
+    return NextResponse.json({ error: "That organization no longer exists" }, { status: 400 });
+  }
   const user = await prisma.user.create({
     data: {
       name: d.name.trim(),
@@ -55,6 +59,7 @@ export async function POST(req: Request) {
       email,
       phone: d.phone ?? null,
       role: d.role,
+      organizationId: d.organizationId ?? null,
       passwordHash: await bcrypt.hash(d.password, 10),
       divisions: { create: (d.role === "MARKETING" || d.role === "SALES" ? d.divisionIds : []).map((divisionId) => ({ divisionId })) },
     },

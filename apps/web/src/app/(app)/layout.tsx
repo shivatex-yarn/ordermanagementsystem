@@ -5,7 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { BarChart3, Bell, ClipboardList, Gauge, Globe2, LayoutDashboard, LogOut, Menu, ScrollText, UserCircle, Users, Wallet, X } from "lucide-react";
+import { BarChart3, Bell, ClipboardList, Gauge, Building2, Globe2, LayoutDashboard, LogOut, Menu, ScrollText, UserCircle, Users, Wallet, X } from "lucide-react";
 import { NotificationBell } from "@/components/notification-bell";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { performLogout } from "@/components/logout-button";
@@ -27,6 +27,7 @@ const NAV: NavItem[] = [
   { href: "/accounts", label: "Accounts", icon: Wallet, roles: ["ACCOUNTS", "SUPER_ADMIN"] },
   { href: "/orders", label: "Enquiries", icon: ClipboardList, roles: ["SUPER_ADMIN", "MANAGING_DIRECTOR", "ACCOUNTS", "MARKETING", "SALES"] },
   { href: "/divisions", label: "Divisions", icon: Globe2, roles: ["SUPER_ADMIN", "MARKETING", "SALES"] },
+  { href: "/organizations", label: "Organizations", icon: Building2, roles: ["SUPER_ADMIN"] },
   { href: "/team", label: "Team", icon: Users, roles: ["SUPER_ADMIN"] },
   { href: "/audit", label: "Audit log", icon: ScrollText, roles: ["SUPER_ADMIN"] },
   { href: "/notifications", label: "Notifications", icon: Bell, roles: ["SUPER_ADMIN", "MANAGING_DIRECTOR", "ACCOUNTS", "MARKETING", "SALES"] },

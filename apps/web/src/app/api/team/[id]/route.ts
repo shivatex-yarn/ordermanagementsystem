@@ -25,6 +25,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       return NextResponse.json({ error: `Employee code ${rest.employeeCode} is already used by someone else` }, { status: 409 });
     }
   }
+  if (rest.organizationId && !(await prisma.organization.findUnique({ where: { id: rest.organizationId }, select: { id: true } }))) {
+    return NextResponse.json({ error: "That organization no longer exists" }, { status: 400 });
+  }
   const user = await prisma.$transaction(async (tx) => {
     if (divisionIds) {
       await tx.userDivision.deleteMany({ where: { userId: id } });
@@ -37,7 +40,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         ...(email ? { email: email.trim().toLowerCase() } : {}),
         ...(password ? { passwordHash: await bcrypt.hash(password, 10) } : {}),
       },
-      select: { id: true, name: true, email: true, employeeCode: true, phone: true, role: true, active: true },
+      select: { id: true, name: true, email: true, employeeCode: true, phone: true, role: true, active: true, organization: { select: { id: true, name: true } } },
     });
   });
   const what = parsed.data.active === false ? "TEAM_MEMBER_DEACTIVATED" : parsed.data.active === true ? "TEAM_MEMBER_ACTIVATED" : "TEAM_MEMBER_EDITED";

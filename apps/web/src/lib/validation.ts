@@ -26,6 +26,7 @@ export const adminCreateUserSchema = z.object({
   password: z.string().min(8, "Password must be at least 8 characters"),
   role: teamRole,
   divisionIds: z.array(z.number().int().positive()).default([]),
+  organizationId: z.number().int().positive().nullable().optional(),
 });
 
 export const adminUpdateUserSchema = z.object({
@@ -37,6 +38,13 @@ export const adminUpdateUserSchema = z.object({
   role: teamRole.optional(),
   active: z.boolean().optional(),
   divisionIds: z.array(z.number().int().positive()).optional(),
+  organizationId: z.number().int().positive().nullable().optional(),
+});
+
+export const organizationCreateSchema = z.object({ name: z.string().min(1).max(255).trim() });
+export const organizationUpdateSchema = z.object({
+  name: z.string().min(1).max(255).trim().optional(),
+  active: z.boolean().optional(),
 });
 
 export const divisionCreateSchema = z.object({ name: z.string().min(1).max(255).trim() });

@@ -12,7 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Field, FormError, selectClass } from "@/components/ui/field";
 import { cn } from "@/lib/utils";
 
-type Person = { id: number; name: string; email: string; employeeCode: string | null; phone: string | null; role: string; active: boolean; divisions: { id: number; name: string }[] };
+type Person = { id: number; name: string; email: string; employeeCode: string | null; phone: string | null; organization: { id: number; name: string } | null; role: string; active: boolean; divisions: { id: number; name: string }[] };
+type Organization = { id: number; name: string; active: boolean };
 type Division = { id: number; name: string; active: boolean };
 
 function DivisionPicker({ all, value, onChange }: { all: Division[]; value: number[]; onChange: (v: number[]) => void }) {
@@ -31,9 +32,9 @@ function DivisionPicker({ all, value, onChange }: { all: Division[]; value: numb
   );
 }
 
-function PersonForm({ person, divisions, onDone }: { person?: Person; divisions: Division[]; onDone: () => void }) {
+function PersonForm({ person, divisions, organizations, onDone }: { person?: Person; divisions: Division[]; organizations: Organization[]; onDone: () => void }) {
   const qc = useQueryClient();
-  const [f, setF] = useState({ name: person?.name ?? "", employeeCode: person?.employeeCode ?? "", email: person?.email ?? "", phone: person?.phone ?? "", password: "", role: person?.role ?? "MARKETING" });
+  const [f, setF] = useState({ name: person?.name ?? "", employeeCode: person?.employeeCode ?? "", email: person?.email ?? "", phone: person?.phone ?? "", password: "", role: person?.role ?? "MARKETING", organizationId: person?.organization ? String(person.organization.id) : "" });
   const [divs, setDivs] = useState<number[]>(person?.divisions.map((d) => d.id) ?? []);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -46,9 +47,9 @@ function PersonForm({ person, divisions, onDone }: { person?: Person; divisions:
     setError(null);
     try {
       if (person) {
-        await api(`/api/team/${person.id}`, { method: "PATCH", json: { name: f.name, employeeCode: f.employeeCode.trim() || null, email: f.email, phone: f.phone || null, role: f.role, ...(f.password ? { password: f.password } : {}), divisionIds: needsDivisions ? divs : [] } });
+        await api(`/api/team/${person.id}`, { method: "PATCH", json: { name: f.name, employeeCode: f.employeeCode.trim() || null, email: f.email, phone: f.phone || null, role: f.role, organizationId: f.organizationId ? Number(f.organizationId) : null, ...(f.password ? { password: f.password } : {}), divisionIds: needsDivisions ? divs : [] } });
       } else {
-        await api("/api/team", { method: "POST", json: { ...f, divisionIds: needsDivisions ? divs : [] } });
+        await api("/api/team", { method: "POST", json: { ...f, organizationId: f.organizationId ? Number(f.organizationId) : null, divisionIds: needsDivisions ? divs : [] } });
       }
       await qc.invalidateQueries({ queryKey: ["team"] });
       onDone();
@@ -65,6 +66,12 @@ function PersonForm({ person, divisions, onDone }: { person?: Person; divisions:
         <Field label="Full name"><Input required value={f.name} onChange={set("name")} /></Field>
         <Field label="Employee code" optional hint="Your company ID for this person, e.g. ST-014. Must be unique."><Input value={f.employeeCode} onChange={set("employeeCode")} maxLength={40} placeholder="ST-014" /></Field>
         <Field label="Role"><select className={selectClass} value={f.role} onChange={set("role")}>{ASSIGNABLE_ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}</select></Field>
+        <Field label="Organization" hint={organizations.length ? "Which company this person belongs to." : "No organizations yet. Add them on the Organizations page."}>
+          <select className={selectClass} value={f.organizationId} onChange={set("organizationId")}>
+            <option value="">No organization</option>
+            {organizations.filter((o) => o.active || String(o.id) === f.organizationId).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+          </select>
+        </Field>
         <Field label="Email"><Input required type="email" value={f.email} onChange={set("email")} /></Field>
         <Field label="Phone" optional><Input inputMode="tel" value={f.phone} onChange={set("phone")} /></Field>
         <Field label={person ? "New password" : "Password"} optional={!!person} hint={person ? "Leave blank to keep the current one." : "At least 8 characters. Share it with them."}>
@@ -214,6 +221,8 @@ export default function TeamPage() {
   const [adding, setAdding] = useState(false);
   const [bulk, setBulk] = useState(false);
   const [editing, setEditing] = useState<number | null>(null);
+  const { data: og } = useQuery({ queryKey: ["organizations"], queryFn: () => api<{ organizations: Organization[] }>("/api/organizations") });
+  const organizations = og?.organizations ?? [];
   const divisions = dv?.divisions ?? [];
   const allUsers = data?.users ?? [];
   const [q, setQ] = useState("");
@@ -225,7 +234,7 @@ export default function TeamPage() {
     if (statusFilter === "active" && !u.active) return false;
     if (statusFilter === "inactive" && u.active) return false;
     if (!term) return true;
-    return [u.name, u.employeeCode ?? "", u.email, u.phone ?? "", roleLabel(u.role as never), ...u.divisions.map((d) => d.name)].some((v) => v.toLowerCase().includes(term));
+    return [u.name, u.employeeCode ?? "", u.email, u.phone ?? "", roleLabel(u.role as never), u.organization?.name ?? "", ...u.divisions.map((d) => d.name)].some((v) => v.toLowerCase().includes(term));
   });
   const filtering = !!(term || roleFilter || statusFilter);
   const active = allUsers.filter((u) => u.active);
@@ -265,7 +274,7 @@ export default function TeamPage() {
         <div className="flex flex-wrap items-center gap-2 border-b border-[var(--app-line-soft)] p-4">
           <div className="relative min-w-[14rem] flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--app-ink-3)]" aria-hidden />
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by name, code, email, phone, role or division" aria-label="Search team"
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by name, code, email, phone, role, organization or division" aria-label="Search team"
               className="h-10 w-full rounded-xl border border-[var(--app-line)] bg-[var(--app-surface-sunk)] pl-9 pr-3 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-[var(--app-brand)]/20" />
           </div>
           <select aria-label="Role" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} className={cn(selectClass, "w-44")}>
@@ -281,7 +290,7 @@ export default function TeamPage() {
           {filtering ? <button onClick={() => { setQ(""); setRoleFilter(""); setStatusFilter(""); }} className="inline-flex h-10 items-center gap-1 rounded-xl px-3 text-xs font-semibold text-[var(--app-ink-3)] hover:bg-[var(--app-surface-sunk)]"><X className="h-3.5 w-3.5" />Clear</button> : null}
         </div>
         {bulk ? <BulkUpload divisions={divisions} onDone={() => setBulk(false)} /> : null}
-        {adding ? <PersonForm divisions={divisions} onDone={() => setAdding(false)} /> : null}
+        {adding ? <PersonForm divisions={divisions} organizations={organizations} onDone={() => setAdding(false)} /> : null}
         {rowError ? <p className="border-b border-[var(--app-line-soft)] px-5 py-3 text-sm text-[var(--app-late-ink)]">{rowError}</p> : null}
         {isLoading ? <PanelSkeleton className="m-4 h-48" /> : users.length === 0 ? (
           filtering
@@ -291,12 +300,12 @@ export default function TeamPage() {
           <ul>
             {users.map((p) => (
               <li key={p.id} className="border-t border-[var(--app-line-soft)] first:border-0">
-                {editing === p.id ? <PersonForm person={p} divisions={divisions} onDone={() => setEditing(null)} /> : (
+                {editing === p.id ? <PersonForm person={p} divisions={divisions} organizations={organizations} onDone={() => setEditing(null)} /> : (
                   <div className={cn("flex flex-wrap items-center gap-x-6 gap-y-2 px-5 py-4", !p.active && "opacity-55")}>
                     <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--app-brand-tint)] text-xs font-bold text-[var(--app-brand)]">{p.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}</span>
                     <div className="min-w-[10rem] flex-1">
                       <p className="text-sm font-bold text-[var(--app-ink)]">{p.name} <span className="ml-1 rounded-full bg-[var(--app-surface-sunk)] px-2 py-0.5 text-[10px] font-bold text-[var(--app-ink-2)]">{roleLabel(p.role as never)}</span></p>
-                      <p className="text-xs text-[var(--app-ink-3)]">{p.employeeCode ? <span className="font-semibold text-[var(--app-ink-2)]">{p.employeeCode} · </span> : null}{p.email}{p.phone ? ` · ${p.phone}` : ""}</p>
+                      <p className="text-xs text-[var(--app-ink-3)]">{p.employeeCode ? <span className="font-semibold text-[var(--app-ink-2)]">{p.employeeCode} · </span> : null}{p.email}{p.phone ? ` · ${p.phone}` : ""}{p.organization ? ` · ${p.organization.name}` : ""}</p>
                     </div>
                     <div className="flex min-w-[8rem] flex-1 flex-wrap gap-1.5">
                       {(p.role === "MARKETING" || p.role === "SALES") ? (p.divisions.length ? p.divisions.map((d) => <span key={d.id} className="rounded-full bg-[var(--app-brand-tint)] px-2.5 py-1 text-[11px] font-semibold text-[var(--app-brand)]">{d.name}</span>) : <span className="text-xs font-semibold text-[var(--app-act-ink)]">No division yet</span>) : p.role === "SUPER_ADMIN" ? null : <span className="text-xs text-[var(--app-ink-3)]">All divisions, read-only</span>}

@@ -39,6 +39,9 @@ model User {
   employeeCode String?  @unique @map("employee_code")
   /// Optional contact number.
   phone        String?
+  /// Organization this person belongs to (managed by Super Admin). Optional.
+  organizationId Int?   @map("organization_id")
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
   passwordHash String   @map("password_hash")
   role         Role     @default(MARKETING)
   active       Boolean  @default(true)
@@ -60,6 +63,19 @@ model User {
   divisions              UserDivision[]
   divisionAccessRequests DivisionAccessRequest[] @relation("AccessRequestUser")
   divisionAccessDecided  DivisionAccessRequest[] @relation("AccessRequestDecidedBy")
+}
+
+/// Companies / entities the team is grouped under. Created and managed by Super Admin.
+model Organization {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users User[]
+
+  @@map("organizations")
 }
 
 model UserLoginSession {
