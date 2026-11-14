@@ -61,6 +61,7 @@ async function buildSection(title: string, orders: OrderRow[], marketers: Market
       orderNumber: o.orderNumber, enquiryDate: o.enquiryDate, client: o.companyName || o.customerName, division: o.division.name,
       statusLabel: label, tone, price, response,
       priced: o.pricedAt !== null, accepted: o.status === "CLOSED" && o.clientResponse === "ACCEPTED", declined: o.status === "CLOSED" && o.clientResponse === "DECLINED",
+      negotiating: o.status === "PRICED" && o.clientResponse === "NEGOTIATING",
       open: o.status === "PLACED" || o.status === "PRICED", sampleSent: o.isSample && o.sampleSentAt !== null,
     };
     person(o.createdBy.id, o.createdBy.name, []).rows.push(row);
