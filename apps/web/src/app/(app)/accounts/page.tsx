@@ -12,6 +12,8 @@ import { FilterBar } from "@/components/dashboard/insights";
 import { Donut } from "@/components/dashboard/charts";
 import { cn } from "@/lib/utils";
 
+import { ExportMenu, rangeQuery } from "@/components/export-menu";
+
 type Data = {
   days: number;
   kpis: { quotes: number; accepted: number; declined: number; acceptRate: number | null; awaiting: number; avgDaysToClose: number | null; gstMissing: number; gstCopyMissing: number };
@@ -83,11 +85,14 @@ export default function AccountsPage() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [division, setDivision] = useState("");
+  const [organization, setOrganization] = useState("");
+  const { data: og } = useQuery({ queryKey: ["organizations"], queryFn: () => api<{ organizations: { id: number; name: string; active: boolean }[] }>("/api/organizations"), staleTime: 60_000 });
   const qs = new URLSearchParams({ days: String(days) });
   if (from) qs.set("from", from);
   if (to) qs.set("to", to);
   if (division) qs.set("divisionId", division);
-  const { data, isLoading } = useQuery({ queryKey: ["accounts", days, from, to, division], queryFn: () => api<Data>(`/api/accounts?${qs}`), placeholderData: keepPreviousData, staleTime: 30_000 });
+  if (organization) qs.set("organizationId", organization);
+  const { data, isLoading } = useQuery({ queryKey: ["accounts", days, from, to, division, organization], queryFn: () => api<Data>(`/api/accounts?${qs}`), placeholderData: keepPreviousData, staleTime: 30_000 });
   if (isLoading || !data) return <PanelSkeleton className="h-[40rem]" />;
   const k = data.kpis;
   const terms = data.paymentTerms.map((t, i) => ({ ...t, color: TERM_COLORS[i % TERM_COLORS.length] }));
@@ -95,8 +100,14 @@ export default function AccountsPage() {
 
   return (
     <>
-      <PageHeader title="Accounts" description="Quotes, deals, rates and payment terms across every division. Read-only." />
-      <FilterBar days={days} onDays={setDays} from={from} to={to} onRange={(f, t) => { setFrom(f); setTo(t); }} division={division} onDivision={setDivision} divisions={user?.divisions ?? []} />
+      <PageHeader title="Accounts" description="Quotes, deals, rates and payment terms across every division. Read-only.">
+        {user ? <ExportMenu generatedBy={user.name} query={rangeQuery(days, from, to, division, organization)} filters={[
+          from || to ? `${from || "start"} to ${to || "today"}` : `Last ${days} days`,
+          ...(organization ? [`Organization: ${og?.organizations.find((o) => String(o.id) === organization)?.name ?? organization}`] : []),
+          ...(division ? [`Division: ${user.divisions.find((d) => String(d.id) === division)?.name ?? division}`] : []),
+        ]} /> : null}
+      </PageHeader>
+      <FilterBar days={days} onDays={setDays} from={from} to={to} onRange={(f, t) => { setFrom(f); setTo(t); }} division={division} onDivision={setDivision} divisions={user?.divisions ?? []} organization={organization} onOrganization={setOrganization} organizations={og?.organizations ?? []} />
 
       {k.gstMissing + k.gstCopyMissing > 0 ? (
         <div className="flex items-center gap-3 rounded-2xl border border-[var(--app-act-line)] bg-[var(--app-act-bg)] px-4 py-3 text-sm text-[var(--app-act-ink)]">

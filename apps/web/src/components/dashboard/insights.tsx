@@ -8,15 +8,17 @@ import { fmtDate } from "@/lib/format";
 
 const PERIODS = [
   { days: 7, label: "7 days" },
+  { days: 15, label: "15 days" },
   { days: 30, label: "30 days" },
   { days: 90, label: "90 days" },
   { days: 365, label: "1 year" },
 ];
 
 /** Quick periods, a custom from/to range, and an optional division picker. They drive every number below. */
-export function FilterBar({ days, onDays, from, to, onRange, division, onDivision, divisions }: {
+export function FilterBar({ days, onDays, from, to, onRange, division, onDivision, divisions, organization, onOrganization, organizations }: {
   days: number; onDays: (d: number) => void; from: string; to: string; onRange: (from: string, to: string) => void;
   division: string; onDivision: (v: string) => void; divisions: { id: number; name: string }[];
+  organization?: string; onOrganization?: (v: string) => void; organizations?: { id: number; name: string }[];
 }) {
   const custom = !!(from || to);
   return (
@@ -44,6 +46,13 @@ export function FilterBar({ days, onDays, from, to, onRange, division, onDivisio
           className="h-10 rounded-xl border border-[var(--app-line)] bg-white px-3 text-sm text-[var(--app-ink)]">
           <option value="">All divisions</option>
           {divisions.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+        </select>
+      ) : null}
+      {onOrganization && organizations && organizations.length > 0 ? (
+        <select aria-label="Organization" value={organization ?? ""} onChange={(e) => onOrganization(e.target.value)}
+          className="h-10 rounded-xl border border-[var(--app-line)] bg-white px-3 text-sm text-[var(--app-ink)]">
+          <option value="">All organizations</option>
+          {organizations.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
         </select>
       ) : null}
     </div>

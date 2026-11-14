@@ -10,6 +10,8 @@ import { api, fmtDateTime } from "@/lib/format";
 import { PanelSkeleton } from "@/components/ui/panel";
 import { cn } from "@/lib/utils";
 
+import { ExportMenu, rangeQuery } from "@/components/export-menu";
+
 type Stats = { logged: number; priced: number; accepted: number; declined: number; replied: number; acceptRate: number | null; hoursToPrice: number | null; daysToClose: number | null; samples: number };
 type Data = {
   days: number; comparedWith: { from: string; to: string }; current: Stats; previous: Stats;
@@ -29,7 +31,7 @@ type Data = {
 const P = { indigo: "#4f46e5", green: "#10b981", amber: "#f59e0b", rose: "#f43f5e", sky: "#0ea5e9", grid: "#eceef5", axis: "#667085" };
 const tip = { background: "#ffffff", border: "1px solid #e6e8ec", borderRadius: 12, fontSize: 12, color: "#101828", boxShadow: "none" } as const;
 const card = "rounded-2xl border border-[#e8e8f6] bg-[#fafaff]";
-const PERIODS = [{ d: 7, l: "7D" }, { d: 30, l: "30D" }, { d: 90, l: "90D" }, { d: 365, l: "1Y" }];
+const PERIODS = [{ d: 7, l: "7D" }, { d: 15, l: "15D" }, { d: 30, l: "30D" }, { d: 90, l: "90D" }, { d: 365, l: "1Y" }];
 
 function Delta({ cur, prev, lowerIsBetter }: { cur: number | null; prev: number | null; lowerIsBetter?: boolean }) {
   if (cur === null || prev === null || prev === 0) return <span className="rounded-full bg-[#eceef5] px-2 py-0.5 text-[11px] font-semibold text-indigo-700">{cur === null ? "—" : "new"}</span>;
@@ -84,11 +86,14 @@ export default function MdDashboard() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [division, setDivision] = useState("");
+  const [organization, setOrganization] = useState("");
+  const { data: og } = useQuery({ queryKey: ["organizations"], queryFn: () => api<{ organizations: { id: number; name: string; active: boolean }[] }>("/api/organizations"), staleTime: 60_000 });
   const qs = new URLSearchParams({ days: String(days) });
   if (from) qs.set("from", from);
   if (to) qs.set("to", to);
   if (division) qs.set("divisionId", division);
-  const { data, isLoading } = useQuery({ queryKey: ["md", days, from, to, division], queryFn: () => api<Data>(`/api/md?${qs}`), placeholderData: keepPreviousData, staleTime: 30_000 });
+  if (organization) qs.set("organizationId", organization);
+  const { data, isLoading } = useQuery({ queryKey: ["md", days, from, to, division, organization], queryFn: () => api<Data>(`/api/md?${qs}`), placeholderData: keepPreviousData, staleTime: 30_000 });
   if (isLoading || !data) return <PanelSkeleton className="h-[48rem]" />;
 
   const c = data.current, p = data.previous;
@@ -126,6 +131,17 @@ export default function MdDashboard() {
             <select aria-label="Division" value={division} onChange={(e) => setDivision(e.target.value)} className="h-10 rounded-xl border border-[#e8e8f6] bg-white px-3 text-xs font-semibold text-[var(--app-ink)] focus:outline-none">
               <option value="">All divisions</option>
               {user?.divisions.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+          ) : null}
+          {user ? <ExportMenu generatedBy={user.name} query={rangeQuery(days, from, to, division, organization)} filters={[
+            custom ? `${from || "start"} to ${to || "today"}` : `Last ${days} days`,
+            ...(organization ? [`Organization: ${og?.organizations.find((o) => String(o.id) === organization)?.name ?? organization}`] : []),
+            ...(division ? [`Division: ${user.divisions.find((d) => String(d.id) === division)?.name ?? division}`] : []),
+          ]} /> : null}
+          {(og?.organizations.length ?? 0) > 0 ? (
+            <select aria-label="Organization" value={organization} onChange={(e) => setOrganization(e.target.value)} className="h-10 rounded-xl border border-[#e8e8f6] bg-white px-3 text-xs font-semibold text-[var(--app-ink)] focus:outline-none">
+              <option value="">All organizations</option>
+              {og?.organizations.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
             </select>
           ) : null}
         </div>

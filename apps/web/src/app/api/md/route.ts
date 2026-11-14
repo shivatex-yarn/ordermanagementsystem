@@ -7,7 +7,7 @@ const dayKey = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: TZ });
 const r1 = (n: number) => Math.round(n * 10) / 10;
 const DAY = 864e5;
 
-/** Executive roll-up for the Managing director. Filters: days, from, to, divisionId. Compares with the previous equal period. */
+/** Executive roll-up for the Managing director. Filters: days, from, to, divisionId, organizationId. Compares with the previous equal period. */
 export async function GET(req: Request) {
   const auth = await withRole(["MANAGING_DIRECTOR", "SUPER_ADMIN"]);
   if (auth.response) return auth.response;
@@ -15,17 +15,18 @@ export async function GET(req: Request) {
   const ok = (v: string | null) => (v && !Number.isNaN(new Date(v).getTime()) ? v : undefined);
   const from = ok(sp.get("from"));
   const to = ok(sp.get("to"));
-  const preset = [7, 30, 90, 180, 365].includes(Number(sp.get("days"))) ? Number(sp.get("days")) : 30;
+  const preset = [7, 15, 30, 90, 180, 365].includes(Number(sp.get("days"))) ? Number(sp.get("days")) : 30;
   const end = to ? new Date(`${to}T23:59:59.999+05:30`) : new Date();
   const start = from ? new Date(`${from}T00:00:00+05:30`) : new Date(end.getTime() - preset * DAY);
   const span = end.getTime() - start.getTime();
   const days = Math.max(1, Math.round(span / DAY));
   const prevStart = new Date(start.getTime() - span);
   const divisionId = Number(sp.get("divisionId")) || undefined;
+  const organizationId = Number(sp.get("organizationId")) || undefined;
   const sixMonthsAgo = new Date(Date.now() - 183 * DAY);
 
   const rowsAll = await prisma.order.findMany({
-    where: { enquiryDate: { gte: new Date(Math.min(prevStart.getTime(), sixMonthsAgo.getTime())) }, ...(divisionId ? { divisionId } : {}) },
+    where: { enquiryDate: { gte: new Date(Math.min(prevStart.getTime(), sixMonthsAgo.getTime())) }, ...(divisionId ? { divisionId } : {}), ...(organizationId ? { createdBy: { organizationId } } : {}) },
     take: 8000,
     select: {
       id: true, orderNumber: true, status: true, enquiryDate: true, createdAt: true, customerName: true, companyName: true, isSample: true,

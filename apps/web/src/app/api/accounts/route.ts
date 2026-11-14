@@ -6,7 +6,7 @@ const TZ = "Asia/Kolkata";
 const dayKey = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: TZ });
 const money = (n: number) => Math.round(n * 100) / 100;
 
-/** Commercial view for Accounts: quotes, deals, rates, payment terms and GST gaps. Filters: days, from, to, divisionId. */
+/** Commercial view for Accounts: quotes, deals, rates, payment terms and GST gaps. Filters: days, from, to, divisionId, organizationId. */
 export async function GET(req: Request) {
   const auth = await withRole(["ACCOUNTS", "SUPER_ADMIN", "MANAGING_DIRECTOR"]);
   if (auth.response) return auth.response;
@@ -15,14 +15,15 @@ export async function GET(req: Request) {
   const ok = (v: string | null) => (v && !Number.isNaN(new Date(v).getTime()) ? v : undefined);
   const from = ok(sp.get("from"));
   const to = ok(sp.get("to"));
-  const preset = [7, 30, 90, 180, 365].includes(Number(sp.get("days"))) ? Number(sp.get("days")) : 30;
+  const preset = [7, 15, 30, 90, 180, 365].includes(Number(sp.get("days"))) ? Number(sp.get("days")) : 30;
   const end = to ? new Date(`${to}T23:59:59.999+05:30`) : new Date();
   const start = from ? new Date(`${from}T00:00:00+05:30`) : new Date(end.getTime() - preset * 864e5);
   const days = Math.max(1, Math.round((end.getTime() - start.getTime()) / 864e5));
   const divisionId = Number(sp.get("divisionId")) || undefined;
+  const organizationId = Number(sp.get("organizationId")) || undefined;
 
   const rows = await prisma.order.findMany({
-    where: { enquiryDate: { gte: start, lte: end }, ...(divisionId ? { divisionId } : {}) },
+    where: { enquiryDate: { gte: start, lte: end }, ...(divisionId ? { divisionId } : {}), ...(organizationId ? { createdBy: { organizationId } } : {}) },
     orderBy: { enquiryDate: "desc" },
     take: 5000,
     select: {
