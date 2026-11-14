@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
@@ -13,7 +13,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Field, FormError, Segmented, textareaClass } from "@/components/ui/field";
 import { canCreateEnquiry } from "@/lib/roles";
-import { cn } from "@/lib/utils";
+
+type Customer = { companyName: string | null; customerName: string; customerPhone: string | null; customerEmail: string | null; customerAddress: string | null; gstNumber: string | null };
 
 export default function NewEnquiryPage() {
   const router = useRouter();
@@ -24,12 +25,44 @@ export default function NewEnquiryPage() {
     enquiryDate: todayInput(), customerName: "", companyName: "", customerPhone: "", customerEmail: "",
     customerAddress: "", gstNumber: "", productDetails: "",
   });
-  const [divisionId, setDivisionId] = useState<number | null>(null);
   const [isSample, setIsSample] = useState(false);
   const [gst, setGst] = useState<{ url: string; name: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setF((p) => ({ ...p, [k]: e.target.value }));
+
+  // Auto-fill from earlier enquiries: typing a known company name (or a full GST number) fills the blank contact fields.
+  const [known, setKnown] = useState<Customer[]>([]);
+  const [filledFrom, setFilledFrom] = useState<string | null>(null);
+  const q = f.companyName.trim();
+  const gstTyped = f.gstNumber.trim().toUpperCase();
+  useEffect(() => {
+    const byGst = gstTyped.length >= 15;
+    if (!byGst && q.length < 2) { setKnown([]); return; }
+    const t = setTimeout(() => {
+      api<{ customers: Customer[] }>(`/api/orders/customers?${byGst ? `gst=${encodeURIComponent(gstTyped)}` : `q=${encodeURIComponent(q)}`}`)
+        .then((r) => {
+          setKnown(r.customers);
+          const hit = byGst ? r.customers[0] : r.customers.find((c) => (c.companyName ?? "").toLowerCase() === q.toLowerCase());
+          if (hit) fill(hit);
+        })
+        .catch(() => undefined);
+    }, 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, gstTyped]);
+  function fill(c: Customer) {
+    setF((p) => ({
+      ...p,
+      companyName: p.companyName.trim() ? p.companyName : c.companyName ?? "",
+      customerName: p.customerName.trim() ? p.customerName : c.customerName ?? "",
+      customerPhone: p.customerPhone.trim() ? p.customerPhone : c.customerPhone ?? "",
+      customerEmail: p.customerEmail.trim() ? p.customerEmail : c.customerEmail ?? "",
+      customerAddress: p.customerAddress.trim() ? p.customerAddress : c.customerAddress ?? "",
+      gstNumber: p.gstNumber.trim() ? p.gstNumber : c.gstNumber ?? "",
+    }));
+    setFilledFrom(c.companyName);
+  }
 
   if (user && !canCreateEnquiry(user.role)) {
     return <Callout tone="info" title="Only Marketing logs enquiries">Open an enquiry from the list to add pricing or feedback.</Callout>;
@@ -50,9 +83,10 @@ export default function NewEnquiryPage() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    // Their division is already mapped by the admin: use it automatically when they have exactly one.
-    const chosen = divisions.length === 1 ? divisions[0].id : divisionId;
-    if (!chosen) return setError(divisions.length ? "Pick a division" : "You aren't mapped to a division yet. Ask the admin.");
+    // The division is not asked here: the admin already mapped it. The first mapped division is used;
+    // it can be changed later from Edit on the enquiry.
+    const chosen = divisions[0]?.id;
+    if (!chosen) return setError("You aren't mapped to a division yet. Ask the admin.");
     setBusy(true);
     try {
       const order = await api<{ id: number }>("/api/orders", {
@@ -84,7 +118,10 @@ export default function NewEnquiryPage() {
           <div className="grid gap-5 p-5 sm:grid-cols-2">
             <Field label="Enquiry date" required htmlFor="d" hint="The day the client asked. Can be an earlier date. The date you enter it is saved automatically."><Input id="d" type="date" required value={f.enquiryDate} onChange={set("enquiryDate")} /></Field>
             <Field label="Contact person" required htmlFor="cn"><Input id="cn" required value={f.customerName} onChange={set("customerName")} placeholder="Lakshmi Narayan" /></Field>
-            <Field label="Company" optional htmlFor="co"><Input id="co" value={f.companyName} onChange={set("companyName")} placeholder="Lakshmi Textiles" /></Field>
+            <Field label="Company" required htmlFor="co" hint={filledFrom ? `Contact details filled from your earlier enquiry for ${filledFrom}. Edit anything that changed.` : "Type a client you have logged before and their details fill in automatically."}>
+              <Input id="co" required list="known-companies" autoComplete="off" value={f.companyName} onChange={set("companyName")} placeholder="Lakshmi Textiles" />
+              <datalist id="known-companies">{known.map((c) => <option key={c.companyName} value={c.companyName ?? ""} />)}</datalist>
+            </Field>
             <Field label="Phone" optional htmlFor="ph"><Input id="ph" inputMode="tel" value={f.customerPhone} onChange={set("customerPhone")} placeholder="98450 11223" /></Field>
             <Field label="Email" optional htmlFor="em"><Input id="em" type="email" value={f.customerEmail} onChange={set("customerEmail")} placeholder="buyer@company.in" /></Field>
             <Field label="GST number" optional htmlFor="gs"><Input id="gs" value={f.gstNumber} onChange={set("gstNumber")} placeholder="29ABCDE1234F1Z5" /></Field>
@@ -102,18 +139,6 @@ export default function NewEnquiryPage() {
         <Panel>
           <PanelHeader title="What they need" caption="Works for every division." />
           <div className="space-y-5 p-5">
-            {divisions.length > 1 ? (
-              <Field label="Division" required hint="You work in more than one division. Pick the one this enquiry belongs to.">
-                <div className="flex flex-wrap gap-2">
-                  {divisions.map((d) => (
-                    <button key={d.id} type="button" aria-pressed={divisionId === d.id} onClick={() => setDivisionId(d.id)}
-                      className={cn("rounded-full border px-4 py-2 text-sm font-semibold transition-colors", divisionId === d.id ? "border-[var(--app-brand)] bg-[var(--app-brand)] text-white" : "border-[var(--app-line)] bg-white text-[var(--app-ink-2)] hover:border-[var(--app-brand-line)]")}>
-                      {d.name}
-                    </button>
-                  ))}
-                </div>
-              </Field>
-            ) : null}
             <Field label="Product / requirement details" required htmlFor="pd" hint="Describe the product, specification and quantity the client wants.">
               <textarea id="pd" required className={textareaClass} value={f.productDetails} onChange={set("productDetails")} placeholder="e.g. Laminated fabric, 120 gsm, 5,000 metres, navy blue" />
             </Field>
