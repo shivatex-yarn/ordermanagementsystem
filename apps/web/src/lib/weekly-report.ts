@@ -36,7 +36,7 @@ const loadOrders = (start: Date, end: Date) =>
     select: {
       id: true, orderNumber: true, enquiryDate: true, customerName: true, companyName: true, status: true, isSample: true, sampleSentAt: true,
       pricePerUnit: true, priceUnit: true, pricedAt: true, clientResponse: true, clientFeedback: true,
-      division: { select: { name: true } }, createdBy: { select: { id: true, name: true, organizationId: true } },
+      division: { select: { name: true } }, createdBy: { select: { id: true, name: true, organizationId: true, active: true } },
     },
   });
 type Marketer = { id: number; name: string; organizationId: number | null; divisions: { division: { name: string } }[] };
@@ -99,7 +99,8 @@ async function buildSection(title: string, orders: OrderRow[], marketers: Market
 export async function gatherWeeklyData(now = new Date()): Promise<WeeklyData> {
   const { start, end, endDay } = weekWindow(now);
   const [orders, marketers, organizations] = await Promise.all([
-    loadOrders(start, end),
+    // Only active people appear in the report: enquiries logged by a deactivated person are left out.
+    loadOrders(start, end).then((rows) => rows.filter((o) => o.createdBy.active)),
     prisma.user.findMany({
       where: { role: "MARKETING", active: true, divisions: { some: {} } },
       orderBy: { name: "asc" },
