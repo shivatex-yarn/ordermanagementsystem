@@ -56,7 +56,7 @@ export async function POST(req: Request) {
   const order = await createOrderRow({
     enquiryDate,
     customerName: d.customerName,
-    companyName: d.companyName ?? null,
+    companyName: d.companyName,
     customerPhone: d.customerPhone ?? null,
     customerEmail: d.customerEmail || null,
     customerAddress: d.customerAddress ?? null,
