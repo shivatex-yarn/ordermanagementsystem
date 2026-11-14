@@ -20,7 +20,8 @@ export function getResendEmailStatus(): {
 export interface SendEmailOptions {
   to: string | string[];
   subject: string;
-  html: string;
+  /** Omit to send a plain-text email. */
+  html?: string;
   text?: string;
   /** Optional file attachments (e.g. a PDF report). */
   attachments?: Array<{ filename: string; content: Buffer }>;
@@ -65,8 +66,7 @@ export async function sendEmail(options: SendEmailOptions): Promise<{ ok: boolea
       from,
       to,
       subject: options.subject,
-      html: options.html,
-      text: options.text,
+      ...(options.html ? { html: options.html, text: options.text } : { text: options.text ?? "" }),
       ...(options.attachments?.length ? { attachments: options.attachments } : {}),
     });
     if (error) {

@@ -74,7 +74,7 @@ export function weeklyFileName(d: WeeklyData) {
   return `Weekly-Enquiry-Report-${f(d.start)}-${f(d.endDay)}-${d.endDay.toLocaleDateString("en-GB", { year: "numeric", timeZone: IST })}.pdf`;
 }
 
-async function loadLogo(): Promise<string | null> {
+export async function loadLogo(): Promise<string | null> {
   try {
     const res = await fetch(`${appUrl()}/company-logo.png`, { signal: AbortSignal.timeout(5000) });
     if (res.ok) return `data:image/png;base64,${Buffer.from(await res.arrayBuffer()).toString("base64")}`;
