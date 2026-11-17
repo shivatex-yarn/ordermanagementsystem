@@ -14,11 +14,6 @@ const plusJakarta = Plus_Jakarta_Sans({
 export const metadata: Metadata = {
   title: `${COMPANY_NAME} · ${APP_NAME}`,
   description: `${COMPANY_NAME} — enterprise enquiry management with divisions, SLA, and audit`,
-  icons: {
-    icon: "/company-logo.png",
-    shortcut: "/company-logo.png",
-    apple: "/company-logo.png",
-  },
 };
 
 export default function RootLayout({
