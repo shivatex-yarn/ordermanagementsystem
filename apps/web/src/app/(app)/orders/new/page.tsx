@@ -93,7 +93,7 @@ export default function NewEnquiryPage() {
         method: "POST",
         json: { ...f, divisionId: chosen, isSample, gstCopyUrl: gst?.url },
       });
-      await qc.invalidateQueries({ queryKey: ["orders"] });
+      void qc.invalidateQueries({ queryKey: ["orders"] }); // don't block navigation on a list refetch
       router.push(`/orders/${order.id}`);
     } catch (err) {
       setError((err as Error).message);
