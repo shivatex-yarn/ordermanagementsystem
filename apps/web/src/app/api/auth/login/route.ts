@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
 import { signToken } from "@/lib/auth";
@@ -196,7 +196,9 @@ export async function POST(req: Request) {
         sid: sessionId,
       }),
     ]);
-    await logAudit({ actor: { sub: String(user.id), role: user.role }, action: "LOGIN", category: "AUTH", detail: describeDevice(userAgent), req });
+    // Audit write is best-effort; do it after the response so login isn't held up by two extra DB round trips.
+    const loginActor = { sub: String(user.id), role: user.role };
+    after(() => logAudit({ actor: loginActor, action: "LOGIN", category: "AUTH", detail: describeDevice(userAgent), req }));
     const response = NextResponse.json(
       {
         user: {

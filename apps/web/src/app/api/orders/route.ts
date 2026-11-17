@@ -68,6 +68,7 @@ export async function POST(req: Request) {
     assignedToId: d.assignedToId ?? null,
     createdById: Number(auth.payload.sub),
   });
+  const me = Number(auth.payload.sub);
   await appendTimeline({
     orderId: order.id,
     type: "ENQUIRY_CREATED",
@@ -75,10 +76,14 @@ export async function POST(req: Request) {
     detail: d.isSample ? "Client wants a sample." : null,
     actorId: Number(auth.payload.sub),
   });
-  const me = Number(auth.payload.sub);
-  await logAudit({ actor: auth.payload, action: "ENQUIRY_CREATED", category: "ENQUIRY", entityType: "Order", entityId: order.id, entityLabel: order.orderNumber, detail: `${d.companyName || d.customerName}${d.isSample ? " · sample" : ""}`, req });
-  void notify(await salesInDivision(d.divisionId), { type: "ENQUIRY_NEW", title: `New enquiry ${order.orderNumber}`, body: `${d.companyName || d.customerName} needs pricing${d.isSample ? " (sample requested)" : ""}.`, link: `/orders/${order.id}` }, me);
-  void notify(await superAdminIds(), { type: "ENQUIRY_NEW", title: `New enquiry ${order.orderNumber}`, body: `${d.companyName || d.customerName} logged by ${auth.payload.email}.`, link: `/orders/${order.id}` }, me);
+  // Audit + notifications are best-effort and nobody waits on them: run them after the response has gone out.
+  after(async () => {
+    await Promise.all([
+      logAudit({ actor: auth.payload, action: "ENQUIRY_CREATED", category: "ENQUIRY", entityType: "Order", entityId: order.id, entityLabel: order.orderNumber, detail: `${d.companyName || d.customerName}${d.isSample ? " · sample" : ""}`, req }),
+      salesInDivision(d.divisionId).then((ids) => notify(ids, { type: "ENQUIRY_NEW", title: `New enquiry ${order.orderNumber}`, body: `${d.companyName || d.customerName} needs pricing${d.isSample ? " (sample requested)" : ""}.`, link: `/orders/${order.id}` }, me)),
+      superAdminIds().then((ids) => notify(ids, { type: "ENQUIRY_NEW", title: `New enquiry ${order.orderNumber}`, body: `${d.companyName || d.customerName} logged by ${auth.payload.email}.`, link: `/orders/${order.id}` }, me)),
+    ]);
+  });
   // Email the Super admin(s) and the person who logged it, after the response has gone out.
   after(() => sendEnquiryCreatedEmails(order.id));
   return NextResponse.json(order, { status: 201 });
