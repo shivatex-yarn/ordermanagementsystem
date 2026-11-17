@@ -19,6 +19,24 @@ export type Analytics = {
   oldestWaiting: { orderNumber: string; id: number; name: string; days: number } | null;
   days: number;
 };
+/** Calendar dots (enquiry logged / sample sent / client feedback) for the last ~120 days of enquiries inside `scope`. */
+export async function calendarEvents(scope: Prisma.OrderWhereInput): Promise<Record<string, CalendarEvent[]>> {
+  const rows = await prisma.order.findMany({
+    where: { ...scope, enquiryDate: { gte: new Date(Date.now() - 120 * 864e5) } },
+    orderBy: { enquiryDate: "desc" },
+    take: 3000,
+    select: { id: true, orderNumber: true, enquiryDate: true, customerName: true, companyName: true, sampleSentAt: true, clientFeedbackAt: true },
+  });
+  const calendar: Record<string, CalendarEvent[]> = {};
+  const add = (d: Date | null, ev: CalendarEvent) => { if (d) (calendar[dayKey(d)] ??= []).push(ev); };
+  for (const r of rows) {
+    const base = { id: r.id, orderNumber: r.orderNumber, name: r.companyName || r.customerName };
+    add(r.enquiryDate, { ...base, kind: "enquiry" });
+    add(r.sampleSentAt, { ...base, kind: "sample" });
+    add(r.clientFeedbackAt, { ...base, kind: "feedback" });
+  }
+  return calendar;
+}
 export type AnalyticsOptions = { days?: number; divisionId?: number; from?: string; to?: string };
 
 /** Everything the dashboard charts need, from the last 180 days of enquiries inside `scope`. */
