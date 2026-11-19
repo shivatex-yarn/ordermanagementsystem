@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import type { Prisma } from "@prisma/client";
+import { auditWhere } from "@/lib/audit-filter";
 import { prisma } from "@/lib/db";
 import { withRole } from "@/lib/with-auth";
 
@@ -10,32 +10,7 @@ export async function GET(req: Request) {
   const auth = await withRole(["SUPER_ADMIN"]);
   if (auth.response) return auth.response;
   const sp = new URL(req.url).searchParams;
-  const where: Prisma.AuditLogWhereInput = {};
-  const and: Prisma.AuditLogWhereInput[] = [];
-
-  const userId = Number(sp.get("userId"));
-  if (userId) and.push({ userId });
-  const category = sp.get("category");
-  if (category && ["AUTH", "ENQUIRY", "TEAM", "DIVISION", "ORGANIZATION", "ACCESS"].includes(category)) and.push({ category });
-  const from = sp.get("from");
-  const to = sp.get("to");
-  const range: Prisma.DateTimeFilter = {};
-  if (from && !Number.isNaN(new Date(from).getTime())) range.gte = new Date(`${from}T00:00:00+05:30`);
-  if (to && !Number.isNaN(new Date(to).getTime())) range.lte = new Date(`${to}T23:59:59.999+05:30`);
-  if (range.gte || range.lte) and.push({ createdAt: range });
-  const q = sp.get("q")?.trim();
-  if (q) {
-    and.push({
-      OR: [
-        { userName: { contains: q, mode: "insensitive" } },
-        { action: { contains: q, mode: "insensitive" } },
-        { entityLabel: { contains: q, mode: "insensitive" } },
-        { detail: { contains: q, mode: "insensitive" } },
-        { ipAddress: { contains: q } },
-      ],
-    });
-  }
-  if (and.length) where.AND = and;
+  const where = auditWhere(sp);
 
   const page = Math.max(1, Number(sp.get("page")) || 1);
   const [logs, total, people] = await Promise.all([

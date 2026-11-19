@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, ScrollText, Search, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Loader2, ScrollText, Search, X } from "lucide-react";
 import { api, fmtDateTime } from "@/lib/format";
 import { roleLabel } from "@/lib/roles";
 import { EmptyState, PageHeader, Panel, PanelSkeleton } from "@/components/ui/panel";
@@ -43,6 +43,28 @@ export default function AuditPage() {
   if (to) qs.set("to", to);
   const { data, isLoading } = useQuery({ queryKey: ["audit", q, userId, category, from, to, page], queryFn: () => api<Data>(`/api/audit?${qs}`), placeholderData: keepPreviousData, staleTime: 10_000 });
 
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState("");
+  async function download() {
+    setExporting(true);
+    setExportError("");
+    try {
+      const exp = new URLSearchParams(qs);
+      exp.delete("page");
+      const res = await fetch(`/api/audit/export?${exp}`);
+      if (!res.ok) throw new Error();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(await res.blob());
+      a.download = `audit-log-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch {
+      setExportError("Couldn't prepare the download. Please try again.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   const filtered = !!(q.trim() || userId || category || from || to);
   const pages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
   const first = data && data.total ? (page - 1) * data.pageSize + 1 : 0;
@@ -50,7 +72,18 @@ export default function AuditPage() {
 
   return (
     <>
-      <PageHeader title="Audit log" description="Everything each person did, and when. Only you can see this." />
+      <PageHeader title="Audit log" description="Everything each person did, and when. Only you can see this.">
+        <div className="flex flex-col items-end gap-1">
+          <button onClick={download} disabled={exporting || !data?.total}
+            title={filtered ? "Downloads only the entries matching your filters" : "Downloads every entry"}
+            className="inline-flex h-10 items-center gap-2 rounded-xl border border-[var(--app-line)] bg-white px-4 text-sm font-semibold text-[var(--app-ink)] shadow-sm transition-colors hover:bg-[var(--app-surface-sunk)] focus:outline-none focus:ring-2 focus:ring-[var(--app-brand)]/20 disabled:cursor-not-allowed disabled:opacity-50">
+            {exporting ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Download className="h-4 w-4 text-[var(--app-brand)]" aria-hidden />}
+            {exporting ? "Preparing…" : "Download Excel"}
+            {!exporting && data?.total ? <span className="tnum rounded-md bg-[var(--app-surface-sunk)] px-1.5 py-0.5 text-[11px] font-bold text-[var(--app-ink-3)]">{data.total}</span> : null}
+          </button>
+          {exportError ? <p role="alert" className="text-xs font-semibold text-red-600">{exportError}</p> : null}
+        </div>
+      </PageHeader>
       <Panel>
         <div className="space-y-3 border-b border-[var(--app-line-soft)] p-4">
           <div role="tablist" className="flex flex-wrap gap-1.5">
