@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Building2, Plus, UserPlus } from "lucide-react";
+import { Building2, Pencil, Plus, UserPlus } from "lucide-react";
 import { api } from "@/lib/format";
 import { PageHeader, Panel, PanelHeader, PanelSkeleton, EmptyState } from "@/components/ui/panel";
 import { NextStep } from "@/components/ui/guidance";
@@ -19,6 +19,8 @@ export default function OrganizationsPage() {
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<number | null>(null);
+  const [editId, setEditId] = useState<number | null>(null);
+  const [editName, setEditName] = useState("");
 
   const refresh = () => Promise.all([qc.invalidateQueries({ queryKey: ["organizations"] }), qc.invalidateQueries({ queryKey: ["team"] })]);
 
@@ -30,6 +32,13 @@ export default function OrganizationsPage() {
   async function toggle(o: Org) {
     setError(null);
     try { await api(`/api/organizations/${o.id}`, { method: "PATCH", json: { active: !o.active } }); await refresh(); }
+    catch (err) { setError((err as Error).message); }
+  }
+  async function rename(e: React.FormEvent, o: Org) {
+    e.preventDefault(); setError(null);
+    const next = editName.trim();
+    if (!next || next === o.name) { setEditId(null); return; }
+    try { await api(`/api/organizations/${o.id}`, { method: "PATCH", json: { name: next } }); setEditId(null); await refresh(); }
     catch (err) { setError((err as Error).message); }
   }
   async function remove(o: Org) {
@@ -61,9 +70,19 @@ export default function OrganizationsPage() {
           <ul>
             {orgs.map((o) => (
               <li key={o.id} className="flex flex-wrap items-center gap-4 border-t border-[var(--app-line-soft)] px-5 py-3.5 first:border-0">
-                <span className={`min-w-[8rem] flex-1 text-sm font-bold ${o.active ? "text-[var(--app-ink)]" : "text-[var(--app-ink-3)] line-through"}`}>{o.name}</span>
-                <span className="text-xs text-[var(--app-ink-3)]">{o._count.users} {o._count.users === 1 ? "person" : "people"}</span>
-                {confirmId === o.id ? (
+                {editId === o.id ? (
+                  <form onSubmit={(e) => void rename(e, o)} className="flex min-w-[8rem] flex-1 flex-wrap items-center gap-2">
+                    <Input className="max-w-xs" value={editName} onChange={(e) => setEditName(e.target.value)} autoFocus required />
+                    <Button type="submit" size="sm">Save</Button>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => setEditId(null)}>Cancel</Button>
+                  </form>
+                ) : (
+                  <>
+                    <span className={`min-w-[8rem] flex-1 text-sm font-bold ${o.active ? "text-[var(--app-ink)]" : "text-[var(--app-ink-3)] line-through"}`}>{o.name}</span>
+                    <span className="text-xs text-[var(--app-ink-3)]">{o._count.users} {o._count.users === 1 ? "person" : "people"}</span>
+                  </>
+                )}
+                {editId === o.id ? null : confirmId === o.id ? (
                   <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
                     <span className="text-xs text-[var(--app-late-ink)]">{o._count.users > 0 ? `${o._count.users} people will be left without an organization. Delete?` : "Delete this organization?"}</span>
                     <Button variant="destructive" size="sm" onClick={() => void remove(o)}>Yes, delete</Button>
@@ -71,6 +90,7 @@ export default function OrganizationsPage() {
                   </div>
                 ) : (
                   <div className="flex gap-1">
+                    <Button variant="ghost" size="sm" onClick={() => { setEditId(o.id); setEditName(o.name); setError(null); }}><Pencil className="h-3.5 w-3.5" />Edit</Button>
                     <Button variant="ghost" size="sm" onClick={() => void toggle(o)}>{o.active ? "Deactivate" : "Activate"}</Button>
                     <Button variant="ghost" size="sm" className="text-[var(--app-late-ink)] hover:text-[var(--app-late-ink)]" onClick={() => setConfirmId(o.id)}>Delete</Button>
                   </div>
