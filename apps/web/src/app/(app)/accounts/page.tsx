@@ -10,12 +10,15 @@ import { api, fmtDate, fmtMoney } from "@/lib/format";
 import { EmptyState, PageHeader, Panel, PanelHeader, PanelSkeleton } from "@/components/ui/panel";
 import { FilterBar } from "@/components/dashboard/insights";
 import { Donut } from "@/components/dashboard/charts";
+import { CalendarPanel } from "@/components/dashboard/calendar-panel";
+import type { CalendarEvent } from "@/lib/analytics";
 import { cn } from "@/lib/utils";
 
 import { ExportMenu, rangeQuery } from "@/components/export-menu";
 
 type Data = {
   days: number;
+  calendar: Record<string, CalendarEvent[]>;
   kpis: { quotes: number; accepted: number; declined: number; acceptRate: number | null; awaiting: number; avgDaysToClose: number | null; gstMissing: number; gstCopyMissing: number };
   trend: { label: string; quotes: number; accepted: number }[];
   rates: { unit: string; quotes: number; avg: number; min: number; max: number }[];
@@ -214,6 +217,11 @@ export default function AccountsPage() {
             </table>
           </div>
         )}
+      </Panel>
+
+      <Panel>
+        <PanelHeader title="Calendar" caption="Enquiries, samples and feedback by day" />
+        <CalendarPanel data={data.calendar} />
       </Panel>
 
       <Panel>
