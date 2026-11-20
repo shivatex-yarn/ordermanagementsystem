@@ -301,7 +301,8 @@ export default function EnquiryPage({ params }: { params: Promise<{ id: string }
   const finished = o.status === "CLOSED" || o.status === "CANCELLED";
   const canEdit = canCreateEnquiry(user?.role);
   // Marketing can still correct pricing, remarks and feedback after an enquiry closes. Cancelled stays read-only.
-  const canUpdate = sales && o.status !== "CANCELLED";
+  // On a closed enquiry the forms stay hidden until Marketing clicks "Edit enquiry".
+  const canUpdate = sales && o.status !== "CANCELLED" && (o.status !== "CLOSED" || editing);
 
   let next: React.ReactNode = null;
   if (o.status === "CANCELLED") next = <NextStep tone="info" eyebrow="Cancelled" title="This enquiry was cancelled" description={o.cancellationReason ?? undefined} />;
