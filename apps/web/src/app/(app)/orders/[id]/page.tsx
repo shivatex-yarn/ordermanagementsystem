@@ -389,7 +389,7 @@ export default function EnquiryPage({ params }: { params: Promise<{ id: string }
             </ol>
           </Panel>
           {canEdit && !editing ? (
-            <Button variant="outline" className="w-full" onClick={() => { setEditing(true); document.getElementById("enquiry-details")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>
+            <Button className="w-full bg-[var(--app-brand)] text-white shadow-[0_0_0_4px_rgba(79,70,229,0.15),0_6px_20px_rgba(79,70,229,0.45)] transition-shadow hover:bg-[var(--app-brand-strong)] hover:shadow-[0_0_0_6px_rgba(79,70,229,0.2),0_8px_28px_rgba(79,70,229,0.6)]" onClick={() => { setEditing(true); document.getElementById("enquiry-details")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>
               <Pencil className="h-4 w-4" aria-hidden />Edit enquiry
             </Button>
           ) : null}
