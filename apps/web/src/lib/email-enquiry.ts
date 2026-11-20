@@ -8,7 +8,7 @@ const appUrl = () => (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "") 
 
 export type EnquiryMail = {
   id: number; orderNumber: string; client: string; contact: string; division: string; enquiryDate: Date;
-  isSample: boolean; productDetails: string | null; phone: string | null; email: string | null; loggedBy: string;
+  isSample: boolean; productDetails: string | null; phone: string | null; email: string | null; loggedBy: string; organization?: string | null;
 };
 export type Audience = "admin" | "creator";
 
@@ -44,6 +44,7 @@ export function renderEnquiryCreatedEmail(e: EnquiryMail, audience: Audience): {
   const details = [
     row("Client", esc(e.client)),
     e.contact && e.contact !== e.client ? row("Contact person", esc(e.contact)) : "",
+    e.organization ? row("Organization", esc(e.organization)) : "",
     row("Division", esc(e.division)),
     row("Enquiry date", esc(fmtDate(e.enquiryDate))),
     row("Sample", e.isSample ? pill("Sample requested", "#eef0ff", "#4338ca") : pill("Full order", "#f2f4f7", "#475467")),
@@ -109,6 +110,7 @@ export function renderEnquiryCreatedEmail(e: EnquiryMail, audience: Audience): {
   const text = [
     subject, "",
     `${e.orderNumber} · ${e.client} · ${e.division}`,
+    e.organization ? `Organization: ${e.organization}` : "",
     `Enquiry date: ${fmtDate(e.enquiryDate)}`,
     `Sample: ${e.isSample ? "Yes" : "No"}`,
     isAdmin ? `Logged by: ${e.loggedBy}` : "",
@@ -126,14 +128,14 @@ export async function sendEnquiryCreatedEmails(orderId: number): Promise<void> {
       select: {
         id: true, orderNumber: true, enquiryDate: true, customerName: true, companyName: true, customerPhone: true, customerEmail: true,
         productDetails: true, isSample: true, division: { select: { name: true } },
-        createdBy: { select: { name: true, email: true, active: true } },
+        createdBy: { select: { name: true, email: true, active: true, organization: { select: { name: true } } } },
       },
     });
     if (!o) return;
     const admins = await prisma.user.findMany({ where: { role: "SUPER_ADMIN", active: true }, select: { email: true } });
     const data: EnquiryMail = {
       id: o.id, orderNumber: o.orderNumber, client: o.companyName || o.customerName, contact: o.customerName, division: o.division.name,
-      enquiryDate: o.enquiryDate, isSample: o.isSample, productDetails: o.productDetails, phone: o.customerPhone, email: o.customerEmail, loggedBy: o.createdBy.name,
+      enquiryDate: o.enquiryDate, isSample: o.isSample, productDetails: o.productDetails, phone: o.customerPhone, email: o.customerEmail, loggedBy: o.createdBy.name, organization: o.createdBy.organization?.name ?? null,
     };
     const sent = new Set<string>();
     const sends: Array<() => Promise<{ ok: boolean; error?: string }>> = [];
