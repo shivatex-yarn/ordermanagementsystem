@@ -15,8 +15,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const id = Number((await ctx.params).id);
   const order = await getScopedOrder(id, auth.payload);
   if (!order) return NextResponse.json({ error: "Enquiry not found" }, { status: 404 });
-  if (order.status === "CLOSED" || order.status === "CANCELLED") {
-    return NextResponse.json({ error: "This enquiry is already finished" }, { status: 409 });
+  if (order.status === "CANCELLED") {
+    return NextResponse.json({ error: "This enquiry was cancelled" }, { status: 409 });
   }
   const parsed = pricingSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
@@ -35,7 +35,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       pricingNotes: d.pricingNotes ?? null,
       pricedAt: new Date(),
       pricedById: Number(auth.payload.sub),
-      status: "PRICED",
+      // Correcting the price on a closed enquiry keeps it closed.
+      status: order.status === "CLOSED" ? "CLOSED" : "PRICED",
     },
   });
   await appendTimeline({

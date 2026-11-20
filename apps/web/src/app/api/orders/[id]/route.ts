@@ -73,8 +73,17 @@ export async function PATCH(req: Request, ctx: Ctx) {
       ...(d.isSample !== undefined ? { isSample: d.isSample } : {}),
     },
   });
-  await appendTimeline({ orderId: id, type: "ENQUIRY_EDITED", title: "Enquiry details edited", actorId: Number(auth.payload.sub) });
-  await logAudit({ actor: auth.payload, action: "ENQUIRY_EDITED", category: "ENQUIRY", entityType: "Order", entityId: id, entityLabel: existing.orderNumber, req });
+  // Name what changed so the History entry is useful.
+  const norm = (v: unknown) => (v instanceof Date ? v.toISOString().slice(0, 10) : v ?? "");
+  const labels: [keyof typeof existing, string][] = [
+    ["enquiryDate", "enquiry date"], ["customerName", "contact"], ["companyName", "company"], ["customerPhone", "phone"],
+    ["customerEmail", "email"], ["customerAddress", "address"], ["gstNumber", "GST number"], ["divisionId", "division"],
+    ["productDetails", "requirement"], ["isSample", "sample"],
+  ];
+  const changed = labels.filter(([k]) => norm(existing[k]) !== norm(order[k as keyof typeof order])).map(([, l]) => l);
+  const detail = changed.length ? `Changed ${changed.join(", ")}` : "No fields changed";
+  await appendTimeline({ orderId: id, type: "ENQUIRY_EDITED", title: "Enquiry details edited", detail, actorId: Number(auth.payload.sub) });
+  await logAudit({ actor: auth.payload, action: "ENQUIRY_EDITED", category: "ENQUIRY", entityType: "Order", entityId: id, entityLabel: existing.orderNumber, detail, req });
   return NextResponse.json(order);
 }
 
