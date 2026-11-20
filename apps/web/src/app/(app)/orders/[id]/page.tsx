@@ -300,10 +300,12 @@ export default function EnquiryPage({ params }: { params: Promise<{ id: string }
   const sales = canPrice(user?.role);
   const finished = o.status === "CLOSED" || o.status === "CANCELLED";
   const canEdit = canCreateEnquiry(user?.role);
+  // Marketing can still correct pricing, remarks and feedback after an enquiry closes. Cancelled stays read-only.
+  const canUpdate = sales && o.status !== "CANCELLED";
 
   let next: React.ReactNode = null;
   if (o.status === "CANCELLED") next = <NextStep tone="info" eyebrow="Cancelled" title="This enquiry was cancelled" description={o.cancellationReason ?? undefined} />;
-  else if (o.status === "CLOSED") next = <NextStep tone="done" eyebrow="Closed" title={`Client ${o.clientResponse === "ACCEPTED" ? "accepted" : "declined"}`} description="Nothing more to do on this enquiry." />;
+  else if (o.status === "CLOSED") next = <NextStep tone="done" eyebrow="Closed" title={`Client ${o.clientResponse === "ACCEPTED" ? "accepted" : "declined"}`} description={sales ? "Nothing more to do. You can still correct pricing, remarks or feedback below." : "Nothing more to do on this enquiry."} />;
   else if (o.status === "PLACED") next = sales
     ? <NextStep title="Add your pricing" description="Fill in the price below, then quote the client." actionLabel="Go to pricing" onAction={() => document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" })} />
     : <NextStep tone="wait" eyebrow="Waiting" title="Pricing is yet to be added" description="You'll see the price here as soon as it's added." />;
@@ -325,7 +327,7 @@ export default function EnquiryPage({ params }: { params: Promise<{ id: string }
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="space-y-6">
-          {sales && !finished ? (
+          {canUpdate ? (
             <Panel><PanelHeader title="Pricing" caption={o.pricedAt ? `Added by ${o.pricedBy?.name ?? "Marketing"} on ${fmtDate(o.pricedAt)}` : "Your price for this enquiry."} /><PricingForm o={o} /></Panel>
           ) : (
             <Panel>
@@ -341,14 +343,14 @@ export default function EnquiryPage({ params }: { params: Promise<{ id: string }
 
           <Panel>
             <PanelHeader title={<span className="flex items-center gap-2">{o.isSample ? <FlaskConical className="h-4 w-4 text-[var(--app-brand)]" aria-hidden /> : null}Remarks</span>} caption={o.isSample ? "Sample enquiry" : "Full order"} />
-            {sales && !finished ? <RemarksForm o={o} /> : o.sampleRemarks ? (
+            {canUpdate ? <RemarksForm o={o} /> : o.sampleRemarks ? (
               <p className="whitespace-pre-wrap p-5 text-sm text-[var(--app-ink)]">{o.sampleRemarks}</p>
             ) : <p className="p-5 text-sm text-[var(--app-ink-3)]">No remarks yet.</p>}
           </Panel>
 
           <Panel>
             <PanelHeader title="Client feedback" caption={o.clientFeedbackAt ? `Last recorded ${fmtDate(o.clientFeedbackAt)}` : undefined} />
-            {sales && !finished && o.pricedAt ? <FeedbackForm o={o} /> : !o.clientFeedback ? (
+            {canUpdate && o.pricedAt ? <FeedbackForm o={o} /> : !o.clientFeedback ? (
               <p className="p-5 text-sm text-[var(--app-ink-3)]">{sales && !o.pricedAt ? "Add pricing first, then record what the client says." : "No feedback yet."}</p>
             ) : null}
             <FeedbackHistory o={o} />
@@ -387,7 +389,7 @@ export default function EnquiryPage({ params }: { params: Promise<{ id: string }
             </ol>
           </Panel>
           {canEdit && !editing ? (
-            <Button variant="outline" className="w-full" onClick={() => { setEditing(true); document.getElementById("enquiry-details")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>
+            <Button className="w-full bg-[var(--app-brand)] text-white shadow-[0_0_0_4px_rgba(79,70,229,0.15),0_6px_20px_rgba(79,70,229,0.45)] transition-shadow hover:bg-[var(--app-brand-strong)] hover:shadow-[0_0_0_6px_rgba(79,70,229,0.2),0_8px_28px_rgba(79,70,229,0.6)]" onClick={() => { setEditing(true); document.getElementById("enquiry-details")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>
               <Pencil className="h-4 w-4" aria-hidden />Edit enquiry
             </Button>
           ) : null}
