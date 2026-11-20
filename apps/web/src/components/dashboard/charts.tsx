@@ -2,6 +2,7 @@
 
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { Analytics } from "@/lib/analytics";
+export { KpiStrip } from "@/components/dashboard/kpi-strip";
 
 const C = { brand: "#4f46e5", act: "#eda100", wait: "#378add", done: "#1baf7a", late: "#e24b4a", grey: "#98a2b3", grid: "#eceef2", axis: "#667085" };
 const STATUS_COLOR: Record<string, string> = { PLACED: C.act, PRICED: C.wait, CLOSED: C.done, CANCELLED: C.grey };
@@ -80,24 +81,5 @@ export function DivisionBars({ data }: { data: Analytics["divisionBars"] }) {
         </BarChart>
       </ResponsiveContainer>
     </div>
-  );
-}
-
-export function KpiStrip({ k }: { k: Analytics["kpis"] }) {
-  const items = [
-    { label: "Logged this month", value: String(k.loggedThisMonth) },
-    { label: "Avg time to price", value: k.avgHoursToPrice === null ? "—" : k.avgHoursToPrice >= 48 ? `${Math.round(k.avgHoursToPrice / 24)} days` : `${k.avgHoursToPrice} hrs` },
-    { label: "Client acceptance", value: k.acceptRate === null ? "—" : `${k.acceptRate}%` },
-    { label: "Sample requests", value: k.sampleShare === null ? "—" : `${k.sampleShare}%` },
-  ];
-  return (
-    <dl className="grid grid-cols-2 divide-x divide-y divide-[var(--app-line-soft)] sm:grid-cols-4 sm:divide-y-0">
-      {items.map((i) => (
-        <div key={i.label} className="px-5 py-4">
-          <dt className="text-xs font-semibold text-[var(--app-ink-3)]">{i.label}</dt>
-          <dd className="tnum mt-1 text-2xl font-extrabold tracking-tight text-[var(--app-ink)]">{i.value}</dd>
-        </div>
-      ))}
-    </dl>
   );
 }

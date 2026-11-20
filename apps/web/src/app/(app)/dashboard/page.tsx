@@ -15,7 +15,7 @@ import { StatusPill } from "@/components/ui/status-pill";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { Analytics } from "@/lib/analytics";
-import { DivisionBars, KpiStrip, ResponseDonut, StatusDonut, TrendChart } from "@/components/dashboard/charts";
+import { DivisionBars, KpiStrip, ResponseDonut, StatusDonut, TrendChart } from "@/components/dashboard/charts-lazy";
 import { CalendarPanel } from "@/components/dashboard/calendar-panel";
 
 type Row = { id: number; orderNumber: string; status: string; enquiryDate: string; customerName: string; companyName: string | null; isSample: boolean; pricePerUnit: string | null; priceUnit: string | null; division: { name: string } };
