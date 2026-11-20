@@ -6,7 +6,7 @@ const globalForPrisma = globalThis as unknown as { prisma: PrismaClient | undefi
  * Build an optimized DATABASE_URL for Neon serverless + PgBouncer pooler.
  *
  * Key parameters injected (only if not already present in the env URL):
- *   connection_limit     — 1 on Vercel (one per serverless instance avoids pool exhaustion), 5 elsewhere
+ *   connection_limit     — 3 on Vercel (the pooler absorbs it; 1 made parallel queries run one after another), 5 elsewhere
  *   pool_timeout         — 10 s on Vercel (fail fast), 30 s elsewhere
  *   connect_timeout=10   — abort TCP handshake in 10 s instead of the default 30 s
  *   pgbouncer=true       — tells Prisma to skip the prepared-statement protocol that
@@ -19,9 +19,9 @@ function buildDatabaseUrl(): string | undefined {
   if (!url) return url;
   try {
     const u = new URL(url);
-    // Serverless (Vercel): 1 connection per instance. Long-running Node (local dev, self-hosted):
+    // Serverless (Vercel): 3 connections per instance, so a page's parallel queries really run in parallel. Long-running Node (local dev, self-hosted):
     // a handful, otherwise parallel queries (e.g. the dashboard) queue behind one connection and hit P2024.
-    const defaultLimit = process.env.VERCEL ? "1" : "5";
+    const defaultLimit = process.env.VERCEL ? "3" : "5";
     if (!u.searchParams.has("connection_limit")) u.searchParams.set("connection_limit", defaultLimit);
     if (!u.searchParams.has("pool_timeout"))     u.searchParams.set("pool_timeout", process.env.VERCEL ? "10" : "30");
     if (!u.searchParams.has("connect_timeout"))  u.searchParams.set("connect_timeout", "10");

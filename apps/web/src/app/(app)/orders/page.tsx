@@ -67,7 +67,7 @@ function List() {
   const { data, isLoading } = useQuery({
     queryKey: ["orders", status, division, organization, q, from, to, page],
     queryFn: () => api<Data>(`/api/orders?${qs}`),
-    staleTime: 15_000,
+    staleTime: 60_000,
     placeholderData: keepPreviousData,
   });
   const counts = data?.counts ?? {};
