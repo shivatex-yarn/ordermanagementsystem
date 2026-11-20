@@ -4,7 +4,7 @@ import { use, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Check, FlaskConical } from "lucide-react";
+import { ArrowLeft, Check, FlaskConical, Pencil } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { api, CLIENT_RESPONSES, fmtDate, fmtDateTime, fmtMoney, PRICE_UNITS, todayInput } from "@/lib/format";
 import { Panel, PanelHeader, PageHeader, PanelSkeleton } from "@/components/ui/panel";
@@ -81,8 +81,8 @@ function PricingForm({ o }: { o: Order }) {
         <Field label="Quantity" optional htmlFor="q"><Input id="q" value={f.quantity} onChange={set("quantity")} placeholder="5,000 metres" /></Field>
         <Field label="Payment terms" optional htmlFor="pt"><Input id="pt" value={f.paymentTerms} onChange={set("paymentTerms")} placeholder="30 days" /></Field>
         <Field label="Delivery time" optional htmlFor="dt"><Input id="dt" value={f.deliveryTime} onChange={set("deliveryTime")} placeholder="2 weeks" /></Field>
-        <Field label="Notes" optional htmlFor="pn"><Input id="pn" value={f.pricingNotes} onChange={set("pricingNotes")} /></Field>
-      </div>
+        </div>
+      <Field label="Pricing remarks" optional htmlFor="pn"><textarea id="pn" className={textareaClass} value={f.pricingNotes} onChange={set("pricingNotes")} placeholder="Anything the client or team should know about this price" /></Field>
       <FormError message={error} />
       <div className="flex justify-end"><Button type="submit" disabled={busy}>{busy ? "Saving…" : o.pricedAt ? "Update pricing" : "Save pricing"}</Button></div>
     </form>
@@ -299,7 +299,7 @@ export default function EnquiryPage({ params }: { params: Promise<{ id: string }
   const o = data.order;
   const sales = canPrice(user?.role);
   const finished = o.status === "CLOSED" || o.status === "CANCELLED";
-  const canEdit = canCreateEnquiry(user?.role) && !finished;
+  const canEdit = canCreateEnquiry(user?.role);
 
   let next: React.ReactNode = null;
   if (o.status === "CANCELLED") next = <NextStep tone="info" eyebrow="Cancelled" title="This enquiry was cancelled" description={o.cancellationReason ?? undefined} />;
@@ -333,7 +333,7 @@ export default function EnquiryPage({ params }: { params: Promise<{ id: string }
               {o.pricedAt ? (
                 <dl className="divide-y divide-[var(--app-line-soft)] px-5 py-2">
                   <Row k="Price" v={`${fmtMoney(o.pricePerUnit)} per ${o.priceUnit}`} /><Row k="Quantity" v={o.quantity} />
-                  <Row k="Payment terms" v={o.paymentTerms} /><Row k="Delivery time" v={o.deliveryTime} /><Row k="Notes" v={o.pricingNotes} />
+                  <Row k="Payment terms" v={o.paymentTerms} /><Row k="Delivery time" v={o.deliveryTime} /><Row k="Pricing remarks" v={o.pricingNotes ? <span className="whitespace-pre-wrap font-semibold">{o.pricingNotes}</span> : null} />
                 </dl>
               ) : <p className="p-5 text-sm text-[var(--app-ink-3)]">No pricing yet.</p>}
             </Panel>
@@ -357,8 +357,8 @@ export default function EnquiryPage({ params }: { params: Promise<{ id: string }
         </div>
 
         <div className="space-y-6">
-          <Panel>
-            <PanelHeader title="Enquiry" action={canEdit && !editing ? <Button variant="outline" size="sm" onClick={() => setEditing(true)}>Edit</Button> : undefined} />
+          <Panel id="enquiry-details">
+            <PanelHeader title="Enquiry" />
             {editing ? <EditForm o={o} onDone={() => setEditing(false)} /> : <>
             <dl className="divide-y divide-[var(--app-line-soft)] px-5 py-2">
               <Row k="Contact" v={o.customerName} /><Row k="Company" v={o.companyName} /><Row k="Phone" v={o.customerPhone} />
@@ -386,6 +386,11 @@ export default function EnquiryPage({ params }: { params: Promise<{ id: string }
               ))}
             </ol>
           </Panel>
+          {canEdit && !editing ? (
+            <Button variant="outline" className="w-full" onClick={() => { setEditing(true); document.getElementById("enquiry-details")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>
+              <Pencil className="h-4 w-4" aria-hidden />Edit enquiry
+            </Button>
+          ) : null}
           {user?.role === "SUPER_ADMIN" ? <DeleteBox o={o} /> : null}
           {!finished && user && user.role !== "MANAGING_DIRECTOR" && user.role !== "ACCOUNTS" ? <CancelBox o={o} /> : null}
         </div>
