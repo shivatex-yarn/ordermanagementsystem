@@ -117,7 +117,7 @@ export async function exportEnquiryPdf(o: EnquiryDetail, generatedBy: string) {
   ]);
   section("Requirement", [["Division", o.division.name], ["Is a sample?", o.isSample ? "Yes" : "No"], ["Details", or(o.productDetails)], ["Logged by", o.createdBy.name]]);
   section("Pricing", o.pricedAt
-    ? [["Rate", o.pricePerUnit ? `${rupee(o.pricePerUnit, "Rs. ")} per ${o.priceUnit ?? ""}` : "-"], ["Quantity", or(o.quantity)], ["Payment terms", or(o.paymentTerms)], ["Delivery time", or(o.deliveryTime)], ["Notes", or(o.pricingNotes)], ["Priced by", `${o.pricedBy?.name ?? "-"}  ·  ${dt(o.pricedAt)}`]]
+    ? [["Rate", o.pricePerUnit ? `${rupee(o.pricePerUnit, "Rs. ")} per ${o.priceUnit ?? ""}` : "-"], ["Quantity", or(o.quantity)], ["Payment terms", or(o.paymentTerms)], ["Delivery time", or(o.deliveryTime)], ["Pricing remarks", or(o.pricingNotes)], ["Priced by", `${o.pricedBy?.name ?? "-"}  ·  ${dt(o.pricedAt)}`]]
     : [["Status", "Not priced yet"]]);
   if (o.isSample) section("Sample", [["Sent on", fmtD(o.sampleSentAt) || "-"], ["Courier", or(o.sampleCourierName)], ["Tracking ID", or(o.sampleTrackingId)], ["Remarks", or(o.sampleRemarks)]]);
   section("Client feedback", o.clientFeedback
@@ -216,7 +216,7 @@ export async function exportEnquiryExcel(o: EnquiryDetail, generatedBy: string) 
   block("Client", [["Contact person", o.customerName], ["Company", o.companyName], ["Phone", o.customerPhone], ["Email", o.customerEmail], ["GST number", o.gstNumber], ["Address", o.customerAddress]]);
   block("Requirement", [["Enquiry date", fmtD(o.enquiryDate)], ["Division", o.division.name], ["Is a sample?", o.isSample ? "Yes" : "No"], ["Details", o.productDetails], ["Logged by", o.createdBy.name]]);
   block("Pricing", o.pricedAt
-    ? [["Rate (INR)", o.pricePerUnit ? Number(o.pricePerUnit) : null], ["Per", o.priceUnit], ["Quantity", o.quantity], ["Payment terms", o.paymentTerms], ["Delivery time", o.deliveryTime], ["Notes", o.pricingNotes], ["Priced by", `${o.pricedBy?.name ?? "-"}, ${dt(o.pricedAt)}`]]
+    ? [["Rate (INR)", o.pricePerUnit ? Number(o.pricePerUnit) : null], ["Per", o.priceUnit], ["Quantity", o.quantity], ["Payment terms", o.paymentTerms], ["Delivery time", o.deliveryTime], ["Pricing remarks", o.pricingNotes], ["Priced by", `${o.pricedBy?.name ?? "-"}, ${dt(o.pricedAt)}`]]
     : [["Status", "Not priced yet"]]);
   const rateRow = ws.getRows(1, r)?.find((row) => row.getCell(1).value === "Rate (INR)");
   if (rateRow) rateRow.getCell(2).numFmt = "#,##0.00";

@@ -31,7 +31,7 @@ export async function GET(_req: Request, ctx: Ctx) {
   return NextResponse.json({ order });
 }
 
-/** Marketing corrects the enquiry details while it is still open. */
+/** Marketing corrects the enquiry details, at any stage. */
 export async function PATCH(req: Request, ctx: Ctx) {
   const auth = await withAuth();
   if (auth.response) return auth.response;
@@ -39,9 +39,6 @@ export async function PATCH(req: Request, ctx: Ctx) {
   const id = Number((await ctx.params).id);
   const existing = await getScopedOrder(id, auth.payload);
   if (!existing) return NextResponse.json({ error: "Enquiry not found" }, { status: 404 });
-  if (existing.status === "CLOSED" || existing.status === "CANCELLED") {
-    return NextResponse.json({ error: "This enquiry is finished and can't be edited" }, { status: 409 });
-  }
   const parsed = updateOrderSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
