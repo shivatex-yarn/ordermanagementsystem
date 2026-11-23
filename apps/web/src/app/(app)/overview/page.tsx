@@ -13,7 +13,7 @@ import { PageHeader, Panel, PanelHeader, PanelLink, PanelSkeleton, EmptyState } 
 import { StatusPill } from "@/components/ui/status-pill";
 import { cn } from "@/lib/utils";
 import type { Analytics } from "@/lib/analytics";
-import { DivisionBars, KpiStrip, ResponseDonut, StatusDonut, TrendChart } from "@/components/dashboard/charts";
+import { DivisionBars, KpiStrip, ResponseDonut, StatusDonut, TrendChart } from "@/components/dashboard/charts-lazy";
 import { CalendarPanel } from "@/components/dashboard/calendar-panel";
 
 type Overview = {

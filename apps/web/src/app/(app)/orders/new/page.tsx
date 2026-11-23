@@ -25,7 +25,7 @@ export default function NewEnquiryPage() {
     enquiryDate: todayInput(), customerName: "", companyName: "", customerPhone: "", customerEmail: "",
     customerAddress: "", gstNumber: "", productDetails: "",
   });
-  const [isSample, setIsSample] = useState(false);
+  const [kind, setKind] = useState<"SAMPLE" | "ORDER" | "ENQUIRY">("ORDER");
   const [gst, setGst] = useState<{ url: string; name: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -91,7 +91,7 @@ export default function NewEnquiryPage() {
     try {
       const order = await api<{ id: number }>("/api/orders", {
         method: "POST",
-        json: { ...f, divisionId: chosen, isSample, gstCopyUrl: gst?.url },
+        json: { ...f, divisionId: chosen, isSample: kind === "SAMPLE", justEnquiry: kind === "ENQUIRY", gstCopyUrl: gst?.url },
       });
       void qc.invalidateQueries({ queryKey: ["orders"] }); // don't block navigation on a list refetch
       router.push(`/orders/${order.id}`);
@@ -142,8 +142,8 @@ export default function NewEnquiryPage() {
             <Field label="Product / requirement details" required htmlFor="pd" hint="Describe the product, specification and quantity the client wants.">
               <textarea id="pd" required className={textareaClass} value={f.productDetails} onChange={set("productDetails")} placeholder="e.g. Laminated fabric, 120 gsm, 5,000 metres, navy blue" />
             </Field>
-            <Field label="Is this a sample?" hint="Choose Yes if the client wants a sample before ordering.">
-              <Segmented value={isSample} onChange={setIsSample} options={[{ value: true, label: "Yes, sample" }, { value: false, label: "No, full order" }]} />
+            <Field label="What does the client want?" hint="Sample: client wants to see a sample first. Full order: client is ready to order. Just enquiry: only asking for price or information.">
+              <Segmented value={kind} onChange={setKind} options={[{ value: "SAMPLE", label: "Sample" }, { value: "ORDER", label: "Full order" }, { value: "ENQUIRY", label: "Just enquiry" }]} />
             </Field>
           </div>
         </Panel>

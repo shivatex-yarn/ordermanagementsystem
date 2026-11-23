@@ -12,6 +12,7 @@ export const orderListSelect = {
   customerName: true,
   companyName: true,
   isSample: true,
+  justEnquiry: true,
   sampleSentAt: true,
   pricePerUnit: true,
   priceUnit: true,

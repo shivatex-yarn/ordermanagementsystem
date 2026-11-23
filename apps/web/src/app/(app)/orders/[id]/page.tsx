@@ -24,7 +24,7 @@ type Order = {
   id: number; divisionId: number; orderNumber: string; status: string; enquiryDate: string; /** Super admin only. */ createdAt?: string;
   customerName: string; companyName: string | null; customerPhone: string | null; customerEmail: string | null;
   customerAddress: string | null; gstNumber: string | null; gstCopyUrl: string | null;
-  productDetails: string | null; isSample: boolean;
+  productDetails: string | null; isSample: boolean; justEnquiry: boolean;
   sampleSentAt: string | null; sampleCourierName: string | null; sampleTrackingId: string | null; sampleRemarks: string | null;
   pricePerUnit: string | null; priceUnit: string | null; quantity: string | null; paymentTerms: string | null;
   deliveryTime: string | null; pricingNotes: string | null; pricedAt: string | null; pricedBy: { name: string } | null;
@@ -95,7 +95,7 @@ function RemarksForm({ o }: { o: Order }) {
   return (
     <form onSubmit={(e) => { e.preventDefault(); void run("sample", { sampleRemarks: text }); }} className="space-y-4 p-5">
       <Field label="Remarks" required htmlFor="sr">
-        <textarea id="sr" required className={textareaClass} value={text} onChange={(e) => setText(e.target.value)} placeholder={o.isSample ? "e.g. Sample sent by courier on Monday, client to confirm shade" : "e.g. Full order, client wants delivery before month end"} />
+        <textarea id="sr" required className={textareaClass} value={text} onChange={(e) => setText(e.target.value)} placeholder={o.isSample ? "e.g. Sample sent by courier on Monday, client to confirm shade" : o.justEnquiry ? "e.g. Client only wanted a price, will decide next week" : "e.g. Full order, client wants delivery before month end"} />
       </Field>
       <FormError message={error} />
       <div className="flex justify-end"><Button type="submit" disabled={busy || !text.trim()}>{busy ? "Saving…" : o.sampleRemarks ? "Update remarks" : "Save remarks"}</Button></div>
@@ -247,11 +247,11 @@ function EditForm({ o, onDone }: { o: Order; onDone: () => void }) {
     gstNumber: o.gstNumber ?? "", productDetails: o.productDetails ?? "",
   });
   const [divisionId, setDivisionId] = useState<number>(o.division.id);
-  const [isSample, setIsSample] = useState(o.isSample);
+  const [kind, setKind] = useState<"SAMPLE" | "ORDER" | "ENQUIRY">(o.isSample ? "SAMPLE" : o.justEnquiry ? "ENQUIRY" : "ORDER");
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setF((p) => ({ ...p, [k]: e.target.value }));
   const divisions = user?.divisions ?? [];
   return (
-    <form onSubmit={(e) => { e.preventDefault(); void run({ ...f, divisionId, isSample }); }} className="space-y-4 p-5">
+    <form onSubmit={(e) => { e.preventDefault(); void run({ ...f, divisionId, isSample: kind === "SAMPLE", justEnquiry: kind === "ENQUIRY" }); }} className="space-y-4 p-5">
       <Field label="Enquiry date" htmlFor="ed"><Input id="ed" type="date" required value={f.enquiryDate} onChange={set("enquiryDate")} /></Field>
       <Field label="Contact person" htmlFor="ec"><Input id="ec" required value={f.customerName} onChange={set("customerName")} /></Field>
       <Field label="Company" optional htmlFor="eco"><Input id="eco" value={f.companyName} onChange={set("companyName")} /></Field>
@@ -266,7 +266,7 @@ function EditForm({ o, onDone }: { o: Order; onDone: () => void }) {
         </select>
       </Field>
       <Field label="Product / requirement details" htmlFor="epd"><textarea id="epd" required className={textareaClass} value={f.productDetails} onChange={set("productDetails")} /></Field>
-      <Field label="Is this a sample?"><Segmented value={isSample} onChange={setIsSample} options={[{ value: true, label: "Yes, sample" }, { value: false, label: "No, full order" }]} /></Field>
+      <Field label="What does the client want?"><Segmented value={kind} onChange={setKind} options={[{ value: "SAMPLE", label: "Sample" }, { value: "ORDER", label: "Full order" }, { value: "ENQUIRY", label: "Just enquiry" }]} /></Field>
       <FormError message={error} />
       <div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={onDone}>Cancel</Button><Button type="submit" disabled={busy}>{busy ? "Saving…" : "Save changes"}</Button></div>
     </form>
@@ -341,12 +341,12 @@ export default function EnquiryPage({ params }: { params: Promise<{ id: string }
             </Panel>
           )}
 
-          <Panel>
-            <PanelHeader title={<span className="flex items-center gap-2">{o.isSample ? <FlaskConical className="h-4 w-4 text-[var(--app-brand)]" aria-hidden /> : null}Remarks</span>} caption={o.isSample ? "Sample enquiry" : "Full order"} />
+          {o.justEnquiry && o.clientResponse !== "ACCEPTED" && !o.sampleRemarks ? null : <Panel>
+            <PanelHeader title={<span className="flex items-center gap-2">{o.isSample ? <FlaskConical className="h-4 w-4 text-[var(--app-brand)]" aria-hidden /> : null}Remarks</span>} caption={o.isSample ? "Sample enquiry" : o.justEnquiry ? "Accepted enquiry" : "Full order"} />
             {canUpdate ? <RemarksForm o={o} /> : o.sampleRemarks ? (
               <p className="whitespace-pre-wrap p-5 text-sm text-[var(--app-ink)]">{o.sampleRemarks}</p>
             ) : <p className="p-5 text-sm text-[var(--app-ink-3)]">No remarks yet.</p>}
-          </Panel>
+          </Panel>}
 
           <Panel>
             <PanelHeader title="Client feedback" caption={o.clientFeedbackAt ? `Last recorded ${fmtDate(o.clientFeedbackAt)}` : undefined} />
@@ -366,7 +366,7 @@ export default function EnquiryPage({ params }: { params: Promise<{ id: string }
               <Row k="Contact" v={o.customerName} /><Row k="Company" v={o.companyName} /><Row k="Phone" v={o.customerPhone} />
               <Row k="Email" v={o.customerEmail} /><Row k="GST" v={o.gstNumber} />
               <Row k="GST copy" v={o.gstCopyUrl ? <a href={o.gstCopyUrl} download={`gst-${o.orderNumber}`} className="text-[var(--app-brand)] underline">Download</a> : null} />
-              <Row k="Sample" v={o.isSample ? "Yes" : "No"} /><Row k="Logged by" v={o.createdBy.name} />
+              <Row k="Client wants" v={o.isSample ? "A sample" : o.justEnquiry ? "Just an enquiry" : "A full order"} /><Row k="Logged by" v={o.createdBy.name} />
             </dl>
             <div className="border-t border-[var(--app-line-soft)] px-5 py-4">
               <p className="text-xs font-bold uppercase tracking-wide text-[var(--app-ink-3)]">Requirement</p>
