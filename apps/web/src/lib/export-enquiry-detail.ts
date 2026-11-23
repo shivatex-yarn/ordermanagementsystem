@@ -8,7 +8,7 @@ export type EnquiryDetail = {
   /** When the enquiry was entered. Only present for the Super admin. */
   createdAt?: string;
   customerName: string; companyName: string | null; customerPhone: string | null; customerEmail: string | null; customerAddress: string | null;
-  gstNumber: string | null; productDetails: string | null; isSample: boolean;
+  gstNumber: string | null; productDetails: string | null; isSample: boolean; justEnquiry?: boolean;
   sampleSentAt: string | null; sampleRemarks: string | null;
   pricePerUnit: string | null; priceUnit: string | null; quantity: string | null; paymentTerms: string | null; deliveryTime: string | null; pricingNotes: string | null;
   pricedAt: string | null; pricedBy: { name: string } | null;
@@ -126,11 +126,11 @@ export async function exportEnquiryPdf(o: EnquiryDetail, generatedBy: string) {
     ["Contact person", or(o.customerName)], ["Company", or(o.companyName)], ["Phone", or(o.customerPhone)], ["Email", or(o.customerEmail)],
     ["GST number", or(o.gstNumber)], ["Address", or(o.customerAddress)],
   ]);
-  section("Requirement", [["Division", o.division.name], ["Is a sample?", o.isSample ? "Yes" : "No"], ["Details", or(o.productDetails)], ["Logged by", o.createdBy.name]]);
+  section("Requirement", [["Division", o.division.name], ["Client wants", o.isSample ? "A sample" : o.justEnquiry ? "Just an enquiry" : "A full order"], ["Details", or(o.productDetails)], ["Logged by", o.createdBy.name]]);
   section("Pricing", o.pricedAt
     ? [["Rate", o.pricePerUnit ? `${rupee(o.pricePerUnit, "Rs. ")} per ${o.priceUnit ?? ""}` : "-"], ["Quantity", or(o.quantity)], ["Payment terms", or(o.paymentTerms)], ["Delivery time", or(o.deliveryTime)], ["Pricing remarks", or(o.pricingNotes)], ["Priced by", `${o.pricedBy?.name ?? "-"}  ·  ${dt(o.pricedAt)}`]]
     : [["Status", "Not priced yet"]]);
-  section("Remarks", [[o.isSample ? "Sample" : "Full order", or(o.sampleRemarks)]]);
+  section("Remarks", [[o.isSample ? "Sample" : o.justEnquiry ? "Just enquiry" : "Full order", or(o.sampleRemarks)]]);
   section("Client feedback", fbRows(o));
   if (o.cancellationReason) section("Cancellation", [["Reason", o.cancellationReason]]);
 
@@ -223,13 +223,13 @@ export async function exportEnquiryExcel(o: EnquiryDetail, generatedBy: string) 
   };
 
   block("Client", [["Contact person", o.customerName], ["Company", o.companyName], ["Phone", o.customerPhone], ["Email", o.customerEmail], ["GST number", o.gstNumber], ["Address", o.customerAddress]]);
-  block("Requirement", [["Enquiry date", fmtD(o.enquiryDate)], ...(o.createdAt ? [["Submitted on", dt(o.createdAt)] as [string, string]] : []), ["Division", o.division.name], ["Is a sample?", o.isSample ? "Yes" : "No"], ["Details", o.productDetails], ["Logged by", o.createdBy.name]]);
+  block("Requirement", [["Enquiry date", fmtD(o.enquiryDate)], ...(o.createdAt ? [["Submitted on", dt(o.createdAt)] as [string, string]] : []), ["Division", o.division.name], ["Client wants", o.isSample ? "A sample" : o.justEnquiry ? "Just an enquiry" : "A full order"], ["Details", o.productDetails], ["Logged by", o.createdBy.name]]);
   block("Pricing", o.pricedAt
     ? [["Rate (INR)", o.pricePerUnit ? Number(o.pricePerUnit) : null], ["Per", o.priceUnit], ["Quantity", o.quantity], ["Payment terms", o.paymentTerms], ["Delivery time", o.deliveryTime], ["Pricing remarks", o.pricingNotes], ["Priced by", `${o.pricedBy?.name ?? "-"}, ${dt(o.pricedAt)}`]]
     : [["Status", "Not priced yet"]]);
   const rateRow = ws.getRows(1, r)?.find((row) => row.getCell(1).value === "Rate (INR)");
   if (rateRow) rateRow.getCell(2).numFmt = "#,##0.00";
-  block("Remarks", [[o.isSample ? "Sample" : "Full order", o.sampleRemarks]]);
+  block("Remarks", [[o.isSample ? "Sample" : o.justEnquiry ? "Just enquiry" : "Full order", o.sampleRemarks]]);
   block("Client feedback", fbRows(o));
   if (o.cancellationReason) block("Cancellation", [["Reason", o.cancellationReason]]);
   ws.pageSetup = { orientation: "portrait", paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.5, right: 0.5, top: 0.6, bottom: 0.7, header: 0.3, footer: 0.3 } };

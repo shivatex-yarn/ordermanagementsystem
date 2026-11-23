@@ -66,6 +66,7 @@ export const createOrderSchema = z.object({
   divisionId: z.number().int().positive("Pick a division"),
   productDetails: z.string().min(1, "Describe what the client needs").max(10000),
   isSample: z.boolean().default(false),
+  justEnquiry: z.boolean().default(false),
   assignedToId: z.number().int().positive().optional(),
 });
 
@@ -83,6 +84,7 @@ export const updateOrderSchema = z
     divisionId: z.number().int().positive(),
     productDetails: z.string().min(1, "Describe what the client needs").max(10000),
     isSample: z.boolean(),
+    justEnquiry: z.boolean(),
   })
   .partial();
 

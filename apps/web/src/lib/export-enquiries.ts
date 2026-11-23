@@ -7,7 +7,7 @@ import { COMPANY_NAME } from "@/lib/branding";
 export type ExportRow = {
   orderNumber: string; status: string; enquiryDate: string; createdAt?: string; customerName: string; companyName: string | null;
   customerPhone: string | null; customerEmail: string | null; customerAddress: string | null; gstNumber: string | null;
-  productDetails: string | null; isSample: boolean; sampleRemarks: string | null;
+  productDetails: string | null; isSample: boolean; justEnquiry?: boolean; sampleRemarks: string | null;
   pricePerUnit: string | null; priceUnit: string | null; quantity: string | null;
   paymentTerms: string | null; deliveryTime: string | null; pricedAt: string | null; clientResponse: string | null;
   clientFeedback: string | null; clientFeedbackAt: string | null;
@@ -86,7 +86,7 @@ const ALL_XL_COLS: { header: string; key: string; width: number; fmt?: string; a
   { header: "GST number", key: "gst", width: 18 },
   { header: "Division", key: "division", width: 14 },
   { header: "Product / requirement", key: "product", width: 36 },
-  { header: "Sample?", key: "sample", width: 10, align: "center" },
+  { header: "Type", key: "sample", width: 13, align: "center" },
   { header: "Remarks", key: "remarks", width: 34 },
   { header: "Price (INR)", key: "price", width: 14, fmt: "#,##0.00", align: "right" },
   { header: "Per", key: "unit", width: 9, align: "center" },
@@ -160,7 +160,7 @@ function enquirySheet(wb: XlWorkbook, name: string, logoId: number | null, rows:
     const vals: Record<string, unknown> = {
       no: r.orderNumber, date: d(r.enquiryDate), submitted: r.createdAt ? new Date(r.createdAt) : "", client: r.companyName || r.customerName, contact: r.customerName,
       phone: r.customerPhone ?? "", email: r.customerEmail ?? "", gst: r.gstNumber ?? "", division: r.division.name,
-      product: r.productDetails ?? "", sample: r.isSample ? "Yes" : "No", remarks: r.sampleRemarks ?? "",
+      product: r.productDetails ?? "", sample: (r.isSample ? "Sample" : r.justEnquiry ? "Just enquiry" : "Full order"), remarks: r.sampleRemarks ?? "",
       price: r.pricePerUnit ? Number(r.pricePerUnit) : null, unit: r.priceUnit ?? "",
       qty: r.quantity ?? "", terms: r.paymentTerms ?? "", delivery: r.deliveryTime ?? "", pricedBy: r.pricedBy?.name ?? "",
       resp: r.clientResponse ? RESP[r.clientResponse] ?? r.clientResponse : "", feedback: r.clientFeedback ?? "",
@@ -350,9 +350,9 @@ export async function exportPdf(rows: ExportRow[], meta: ExportMeta) {
   const body = (g: ExportRow[], withDivision: boolean) =>
     g.map((r) => [
       r.orderNumber, r.createdAt ? `${fmtD(r.enquiryDate)}\nEntered ${fmtD(r.createdAt)}` : fmtD(r.enquiryDate), r.companyName || r.customerName, ...(withDivision ? [r.division.name] : []),
-      r.isSample ? "Yes" : "No", price(r), r.clientResponse ? RESP[r.clientResponse] ?? "" : "-", STATUS[r.status] ?? r.status, r.createdBy.name,
+      (r.isSample ? "Sample" : r.justEnquiry ? "Just enquiry" : "Full order"), price(r), r.clientResponse ? RESP[r.clientResponse] ?? "" : "-", STATUS[r.status] ?? r.status, r.createdBy.name,
     ]);
-  const heads = (withDivision: boolean) => ["ENQUIRY", "DATE", "CLIENT", ...(withDivision ? ["DIVISION"] : []), "SAMPLE", "PRICE", "CLIENT RESPONSE", "STATUS", "LOGGED BY"];
+  const heads = (withDivision: boolean) => ["ENQUIRY", "DATE", "CLIENT", ...(withDivision ? ["DIVISION"] : []), "TYPE", "PRICE", "CLIENT RESPONSE", "STATUS", "LOGGED BY"];
 
   const tableOpts = (withDivision: boolean, startY: number, g: ExportRow[]) => {
     const sampleCol = withDivision ? 4 : 3;
@@ -366,7 +366,7 @@ export async function exportPdf(rows: ExportRow[], meta: ExportMeta) {
       theme: "plain" as const,
       styles: { font: "helvetica", fontSize: 8.5, cellPadding: { top: 3, bottom: 3, left: 2.6, right: 2.6 }, textColor: INK, lineColor: HAIR, lineWidth: { bottom: 0.2 } as never },
       headStyles: { fillColor: SOFT, textColor: SLATE, fontStyle: "bold" as const, fontSize: 7, cellPadding: { top: 3.4, bottom: 3.4, left: 2.6, right: 2.6 } },
-      columnStyles: { 0: { fontStyle: "bold" as const, textColor: BRAND_DARK, cellWidth: 24 }, 1: { cellWidth: 25 }, [sampleCol]: { cellWidth: 16 }, [statusCol]: { cellWidth: 38 } },
+      columnStyles: { 0: { fontStyle: "bold" as const, textColor: BRAND_DARK, cellWidth: 24 }, 1: { cellWidth: 25 }, [sampleCol]: { cellWidth: 20 }, [statusCol]: { cellWidth: 38 } },
       willDrawPage: () => paint(),
       didParseCell: (h: import("jspdf-autotable").CellHookData) => {
         const i = h.column.index;

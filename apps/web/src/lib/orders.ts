@@ -12,6 +12,7 @@ export const orderListSelect = {
   customerName: true,
   companyName: true,
   isSample: true,
+  justEnquiry: true,
   sampleSentAt: true,
   pricePerUnit: true,
   priceUnit: true,
@@ -22,10 +23,19 @@ export const orderListSelect = {
   assignedTo: { select: { id: true, name: true } },
 } satisfies Prisma.OrderSelect;
 
-/** Build the `where` fragment that limits enquiries to the divisions a person can access. */
+/**
+ * Build the `where` fragment that limits enquiries to what a person may see:
+ * the divisions they can access and, for Marketing, only the enquiries they logged (or were assigned),
+ * so one Marketing person never sees another's.
+ */
 export async function scopeWhere(payload: { sub: string; role: Role }): Promise<Prisma.OrderWhereInput> {
   const ids = await accessibleDivisionIds(payload);
-  return ids === null ? {} : { divisionId: { in: ids } };
+  const where: Prisma.OrderWhereInput = ids === null ? {} : { divisionId: { in: ids } };
+  if (payload.role === "MARKETING") {
+    const me = Number(payload.sub);
+    where.OR = [{ createdById: me }, { assignedToId: me }];
+  }
+  return where;
 }
 
 export function newOrderNumber(id: number): string {
