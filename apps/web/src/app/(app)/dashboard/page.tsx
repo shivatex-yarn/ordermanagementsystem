@@ -40,7 +40,7 @@ export default function DashboardPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["dashboard", days, division, from, to],
     queryFn: () => api<Data>(`/api/dashboard?days=${days}${division ? `&divisionId=${division}` : ""}${from ? `&from=${from}` : ""}${to ? `&to=${to}` : ""}`),
-    staleTime: 20_000,
+    staleTime: 60_000,
     placeholderData: keepPreviousData,
   });
   if (isLoading || !data || !user) return <PanelSkeleton className="h-96" />;
