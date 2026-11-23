@@ -11,7 +11,8 @@ import { Panel, PanelHeader, PageHeader } from "@/components/ui/panel";
 import { Callout } from "@/components/ui/guidance";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Field, FormError, Segmented, textareaClass } from "@/components/ui/field";
+import { Field, FormError, textareaClass } from "@/components/ui/field";
+import { RequestTypeCards, type RequestKind } from "@/components/ui/request-type-cards";
 import { canCreateEnquiry } from "@/lib/roles";
 
 type Customer = { companyName: string | null; customerName: string; customerPhone: string | null; customerEmail: string | null; customerAddress: string | null; gstNumber: string | null };
@@ -25,7 +26,7 @@ export default function NewEnquiryPage() {
     enquiryDate: todayInput(), customerName: "", companyName: "", customerPhone: "", customerEmail: "",
     customerAddress: "", gstNumber: "", productDetails: "",
   });
-  const [kind, setKind] = useState<"SAMPLE" | "ORDER" | "ENQUIRY">("ORDER");
+  const [kind, setKind] = useState<RequestKind>("ORDER");
   const [gst, setGst] = useState<{ url: string; name: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -142,8 +143,8 @@ export default function NewEnquiryPage() {
             <Field label="Product / requirement details" required htmlFor="pd" hint="Describe the product, specification and quantity the client wants.">
               <textarea id="pd" required className={textareaClass} value={f.productDetails} onChange={set("productDetails")} placeholder="e.g. Laminated fabric, 120 gsm, 5,000 metres, navy blue" />
             </Field>
-            <Field label="What does the client want?" hint="Sample: client wants to see a sample first. Full order: client is ready to order. Enquiry only: only asking for price or information.">
-              <Segmented value={kind} onChange={setKind} options={[{ value: "SAMPLE", label: "Sample" }, { value: "ORDER", label: "Full order" }, { value: "ENQUIRY", label: "Enquiry only" }]} />
+            <Field label="What does the customer or client want?">
+              <RequestTypeCards value={kind} onChange={setKind} />
             </Field>
           </div>
         </Panel>
