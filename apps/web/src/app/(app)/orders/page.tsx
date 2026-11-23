@@ -26,6 +26,7 @@ type Row = {
   customerName: string;
   companyName: string | null;
   isSample: boolean;
+  justEnquiry: boolean;
   sampleSentAt: string | null;
   pricePerUnit: string | null;
   priceUnit: string | null;
@@ -181,7 +182,7 @@ function List() {
             {data.orders.map((o) => (
               <article key={o.id} className="group flex flex-col rounded-2xl border border-[var(--app-line)] bg-[var(--app-surface)] p-5 transition-all hover:-translate-y-0.5 hover:border-[var(--app-brand-line)]">
                 <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0"><p className="text-xs font-bold tracking-wide text-[var(--app-brand)]">{o.orderNumber}{o.isSample ? <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-[var(--app-brand-tint)] px-2 py-0.5 text-[10px]"><FlaskConical className="h-3 w-3" aria-hidden />Sample</span> : null}</p><h3 className="mt-1 truncate text-base font-extrabold text-[var(--app-ink)]">{o.companyName || o.customerName}</h3><p className="text-xs text-[var(--app-ink-3)]">{o.division.name} · {fmtDate(o.enquiryDate)}</p></div>
+                  <div className="min-w-0"><p className="text-xs font-bold tracking-wide text-[var(--app-brand)]">{o.orderNumber}{o.isSample ? <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-[var(--app-brand-tint)] px-2 py-0.5 text-[10px]"><FlaskConical className="h-3 w-3" aria-hidden />Sample</span> : null}{o.justEnquiry ? <span className="ml-2 inline-flex items-center rounded-full bg-[var(--app-surface-sunk)] px-2 py-0.5 text-[10px] font-bold text-[var(--app-ink-3)]">Just enquiry</span> : null}</p><h3 className="mt-1 truncate text-base font-extrabold text-[var(--app-ink)]">{o.companyName || o.customerName}</h3><p className="text-xs text-[var(--app-ink-3)]">{o.division.name} · {fmtDate(o.enquiryDate)}</p></div>
                   <StatusPill status={o.status} size="sm" />
                 </div>
                 <div className="my-5"><EnquiryStepper size="sm" isSample={o.isSample} priced={!!o.pricePerUnit} sampleSent={!!o.sampleSentAt} replied={!!o.clientResponse} closed={o.status === "CLOSED"} cancelled={o.status === "CANCELLED"} /></div>
@@ -206,7 +207,7 @@ function List() {
                   <tr key={o.id} className="border-t border-[var(--app-line-soft)] transition-colors hover:bg-[var(--app-surface-sunk)]">
                     <td className="px-5 py-3.5">
                       <Link href={`/orders/${o.id}`} className="font-bold text-[var(--app-brand)] hover:underline">{o.orderNumber}</Link>
-                      {o.isSample ? <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-[var(--app-brand-tint)] px-2 py-0.5 text-[10px] font-bold text-[var(--app-brand)]"><FlaskConical className="h-3 w-3" aria-hidden />Sample</span> : null}
+                      {o.isSample ? <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-[var(--app-brand-tint)] px-2 py-0.5 text-[10px] font-bold text-[var(--app-brand)]"><FlaskConical className="h-3 w-3" aria-hidden />Sample</span> : null}{o.justEnquiry ? <span className="ml-2 inline-flex items-center rounded-full bg-[var(--app-surface-sunk)] px-2 py-0.5 text-[10px] font-bold text-[var(--app-ink-3)]">Just enquiry</span> : null}
                     </td>
                     <td className="px-3 py-3.5"><span className="font-semibold text-[var(--app-ink)]">{o.companyName || o.customerName}</span>{o.companyName ? <span className="block text-xs text-[var(--app-ink-3)]">{o.customerName}</span> : null}</td>
                     <td className="px-3 py-3.5 text-[var(--app-ink-2)]">{o.division.name}</td>
