@@ -12,7 +12,8 @@ import { Callout, NextStep } from "@/components/ui/guidance";
 import { StatusPill } from "@/components/ui/status-pill";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Field, FormError, Segmented, selectClass, textareaClass } from "@/components/ui/field";
+import { Field, FormError, selectClass, textareaClass } from "@/components/ui/field";
+import { RequestTypeCards, type RequestKind } from "@/components/ui/request-type-cards";
 import { canCreateEnquiry, canPrice } from "@/lib/roles";
 import { feedbackHistory } from "@/lib/feedback-history";
 import { EnquiryStepper } from "@/components/enquiry-stepper";
@@ -247,7 +248,7 @@ function EditForm({ o, onDone }: { o: Order; onDone: () => void }) {
     gstNumber: o.gstNumber ?? "", productDetails: o.productDetails ?? "",
   });
   const [divisionId, setDivisionId] = useState<number>(o.division.id);
-  const [kind, setKind] = useState<"SAMPLE" | "ORDER" | "ENQUIRY">(o.isSample ? "SAMPLE" : o.justEnquiry ? "ENQUIRY" : "ORDER");
+  const [kind, setKind] = useState<RequestKind>(o.isSample ? "SAMPLE" : o.justEnquiry ? "ENQUIRY" : "ORDER");
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setF((p) => ({ ...p, [k]: e.target.value }));
   const divisions = user?.divisions ?? [];
   return (
@@ -266,7 +267,7 @@ function EditForm({ o, onDone }: { o: Order; onDone: () => void }) {
         </select>
       </Field>
       <Field label="Product / requirement details" htmlFor="epd"><textarea id="epd" required className={textareaClass} value={f.productDetails} onChange={set("productDetails")} /></Field>
-      <Field label="What does the client want?"><Segmented value={kind} onChange={setKind} options={[{ value: "SAMPLE", label: "Sample" }, { value: "ORDER", label: "Full order" }, { value: "ENQUIRY", label: "Enquiry only" }]} /></Field>
+      <Field label="What does the customer or client want?"><RequestTypeCards value={kind} onChange={setKind} /></Field>
       <FormError message={error} />
       <div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={onDone}>Cancel</Button><Button type="submit" disabled={busy}>{busy ? "Saving…" : "Save changes"}</Button></div>
     </form>
