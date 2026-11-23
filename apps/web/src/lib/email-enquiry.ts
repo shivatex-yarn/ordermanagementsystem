@@ -8,7 +8,7 @@ const appUrl = () => (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "") 
 
 export type EnquiryMail = {
   id: number; orderNumber: string; client: string; contact: string; division: string; enquiryDate: Date;
-  isSample: boolean; productDetails: string | null; phone: string | null; email: string | null; loggedBy: string; organization?: string | null;
+  isSample: boolean; justEnquiry?: boolean; productDetails: string | null; phone: string | null; email: string | null; loggedBy: string; organization?: string | null;
 };
 export type Audience = "admin" | "creator";
 
@@ -47,7 +47,7 @@ export function renderEnquiryCreatedEmail(e: EnquiryMail, audience: Audience): {
     e.organization ? row("Organization", esc(e.organization)) : "",
     row("Division", esc(e.division)),
     row("Enquiry date", esc(fmtDate(e.enquiryDate))),
-    row("Sample", e.isSample ? pill("Sample requested", "#eef0ff", "#4338ca") : pill("Full order", "#f2f4f7", "#475467")),
+    row("Sample", e.isSample ? pill("Sample requested", "#eef0ff", "#4338ca") : (e.justEnquiry ? pill("Just enquiry", "#f2f4f7", "#475467") : pill("Full order", "#f2f4f7", "#475467"))),
     e.phone ? row("Phone", esc(e.phone)) : "",
     e.email ? row("Email", esc(e.email)) : "",
     isAdmin ? row("Logged by", esc(e.loggedBy)) : "",
@@ -112,7 +112,7 @@ export function renderEnquiryCreatedEmail(e: EnquiryMail, audience: Audience): {
     `${e.orderNumber} · ${e.client} · ${e.division}`,
     e.organization ? `Organization: ${e.organization}` : "",
     `Enquiry date: ${fmtDate(e.enquiryDate)}`,
-    `Sample: ${e.isSample ? "Yes" : "No"}`,
+    `Client wants: ${e.isSample ? "Sample" : e.justEnquiry ? "Just an enquiry" : "Full order"}`,
     isAdmin ? `Logged by: ${e.loggedBy}` : "",
     e.productDetails ? `\nRequirement:\n${e.productDetails}` : "",
     `\nView the enquiry: ${link}`,
@@ -127,7 +127,7 @@ export async function sendEnquiryCreatedEmails(orderId: number): Promise<void> {
       where: { id: orderId },
       select: {
         id: true, orderNumber: true, enquiryDate: true, customerName: true, companyName: true, customerPhone: true, customerEmail: true,
-        productDetails: true, isSample: true, division: { select: { name: true } },
+        productDetails: true, isSample: true, justEnquiry: true, division: { select: { name: true } },
         createdBy: { select: { name: true, email: true, active: true, organization: { select: { name: true } } } },
       },
     });
@@ -135,7 +135,7 @@ export async function sendEnquiryCreatedEmails(orderId: number): Promise<void> {
     const admins = await prisma.user.findMany({ where: { role: "SUPER_ADMIN", active: true }, select: { email: true } });
     const data: EnquiryMail = {
       id: o.id, orderNumber: o.orderNumber, client: o.companyName || o.customerName, contact: o.customerName, division: o.division.name,
-      enquiryDate: o.enquiryDate, isSample: o.isSample, productDetails: o.productDetails, phone: o.customerPhone, email: o.customerEmail, loggedBy: o.createdBy.name, organization: o.createdBy.organization?.name ?? null,
+      enquiryDate: o.enquiryDate, isSample: o.isSample, justEnquiry: o.justEnquiry, productDetails: o.productDetails, phone: o.customerPhone, email: o.customerEmail, loggedBy: o.createdBy.name, organization: o.createdBy.organization?.name ?? null,
     };
     const sent = new Set<string>();
     const sends: Array<() => Promise<{ ok: boolean; error?: string }>> = [];

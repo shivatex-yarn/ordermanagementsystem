@@ -71,6 +71,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
       ...(d.divisionId ? { divisionId: d.divisionId } : {}),
       ...(d.productDetails ? { productDetails: d.productDetails.trim() } : {}),
       ...(d.isSample !== undefined ? { isSample: d.isSample } : {}),
+      ...(d.justEnquiry !== undefined || d.isSample ? { justEnquiry: !d.isSample && !!d.justEnquiry } : {}),
     },
   });
   // Name what changed so the History entry is useful.
@@ -78,7 +79,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
   const labels: [keyof typeof existing, string][] = [
     ["enquiryDate", "enquiry date"], ["customerName", "contact"], ["companyName", "company"], ["customerPhone", "phone"],
     ["customerEmail", "email"], ["customerAddress", "address"], ["gstNumber", "GST number"], ["divisionId", "division"],
-    ["productDetails", "requirement"], ["isSample", "sample"],
+    ["productDetails", "requirement"], ["isSample", "sample"], ["justEnquiry", "enquiry type"],
   ];
   const changed = labels.filter(([k]) => norm(existing[k]) !== norm(order[k as keyof typeof order])).map(([, l]) => l);
   const detail = changed.length ? `Changed ${changed.join(", ")}` : "No fields changed";

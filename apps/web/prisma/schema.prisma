@@ -170,6 +170,8 @@ model Order {
 
   // Sample
   isSample           Boolean   @default(false) @map("is_sample")
+  /// Price / information enquiry only: no sample, no firm order yet (isSample is false).
+  justEnquiry        Boolean   @default(false) @map("just_enquiry")
   sampleSentAt       DateTime? @map("sample_sent_at")
   sampleCourierName  String?   @map("sample_courier_name")
   sampleTrackingId   String?   @map("sample_tracking_id")
