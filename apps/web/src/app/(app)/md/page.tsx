@@ -8,13 +8,16 @@ import { ArrowDownRight, ArrowRight, ArrowUpRight, FlaskConical, Siren, X } from
 import { useAuth } from "@/hooks/use-auth";
 import { api, fmtDateTime } from "@/lib/format";
 import { PanelSkeleton } from "@/components/ui/panel";
+import { CalendarPanel } from "@/components/dashboard/calendar-panel";
+import type { CalendarEvent } from "@/lib/analytics";
 import { cn } from "@/lib/utils";
 
 import { ExportMenu, rangeQuery } from "@/components/export-menu";
 
 type Stats = { logged: number; priced: number; accepted: number; declined: number; replied: number; acceptRate: number | null; hoursToPrice: number | null; daysToClose: number | null; samples: number };
 type Data = {
-  days: number; comparedWith: { from: string; to: string }; current: Stats; previous: Stats;
+  days: number;
+  calendar: Record<string, CalendarEvent[]>; comparedWith: { from: string; to: string }; current: Stats; previous: Stats;
   trend: { label: string; logged: number; priced: number; accepted: number }[];
   funnel: { label: string; value: number }[];
   divisions: { name: string; logged: number; accepted: number; open: number; acceptRate: number | null; hoursToPrice: number | null }[];
@@ -320,6 +323,10 @@ export default function MdDashboard() {
           </ol>
         </section>
       </div>
+      <section className={cn(card, "pb-1 pt-5")}>
+        <div className="px-5"><H title="Calendar" sub="Enquiries, samples and feedback by day" /></div>
+        <CalendarPanel data={data.calendar} />
+      </section>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { withRole } from "@/lib/with-auth";
+import { calendarEvents } from "@/lib/analytics";
 
 const TZ = "Asia/Kolkata";
 const dayKey = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: TZ });
@@ -83,7 +84,9 @@ export async function GET(req: Request) {
   const open = live.filter((r) => r.status === "PLACED" || r.status === "PRICED");
   const gstMissing = open.filter((r) => !r.gstNumber);
 
+  const calendar = await calendarEvents({ ...(divisionId ? { divisionId } : {}), ...(organizationId ? { createdBy: { organizationId } } : {}) });
   return NextResponse.json({
+    calendar,
     days,
     kpis: {
       quotes: quotes.length,

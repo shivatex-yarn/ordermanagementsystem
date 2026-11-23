@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { withRole } from "@/lib/with-auth";
+import { calendarEvents } from "@/lib/analytics";
 
 const TZ = "Asia/Kolkata";
 const dayKey = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: TZ });
@@ -142,7 +143,9 @@ export async function GET(req: Request) {
   });
 
   const sampleSent = cur.filter((r) => r.isSample && r.sampleSentAt);
+  const calendar = await calendarEvents({ ...(divisionId ? { divisionId } : {}), ...(organizationId ? { createdBy: { organizationId } } : {}) });
   return NextResponse.json({
+    calendar,
     days, comparedWith: { from: dayKey(prevStart), to: dayKey(new Date(start.getTime() - 1)) },
     current: c, previous: p, trend,
     funnel: [{ label: "Logged", value: c.logged }, { label: "Priced", value: c.priced }, { label: "Client replied", value: c.replied }, { label: "Accepted", value: c.accepted }],
