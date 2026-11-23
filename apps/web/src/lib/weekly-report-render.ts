@@ -76,6 +76,7 @@ const countsOf = (rows: WeeklyRow[]) => ({
 export const GLOSSARY: [string, string][] = [
   ["Priced", "Sales has sent the quote (price) to the client. Counts every quoted enquiry, even if the client has answered since."],
   ["Samples", "A sample was requested for this enquiry and has been given or sent to the client."],
+  ["Just enquiries", "The client only asked for a price or information. No sample or firm order was requested."],
   ["Accepted", "The client agreed to the price. The enquiry is closed as won."],
   ["Declined", "The client said no. The enquiry is closed as lost; it can be reopened if the client comes back."],
   ["Negotiating", "The client replied but has not agreed yet (asking for a better price or changes). The enquiry is still open."],
@@ -137,13 +138,13 @@ export async function renderWeeklyPdf(data: WeeklyData): Promise<Buffer> {
   heading("Team performance", y); y += 3;
   autoTable(doc, {
     startY: y, margin: { left: M, right: M, top: 42 },
-    head: [["Person", "Divisions", "Priced", "Samples", "Accepted", "Declined", "Negotiating"]],
-    body: sec.people.map((p) => { const c = countsOf(p.rows); return [p.name, p.divisions.join(", ") || "-", String(c.priced), String(c.samples), String(c.accepted), String(c.declined), String(c.negotiating)]; }),
+    head: [["Person", "Divisions", "Priced", "Samples", "Just enquiries", "Accepted", "Declined", "Negotiating"]],
+    body: sec.people.map((p) => { const c = countsOf(p.rows); return [p.name, p.divisions.join(", ") || "-", String(c.priced), String(c.samples), String(c.justEnquiries), String(c.accepted), String(c.declined), String(c.negotiating)]; }),
     theme: "plain",
     styles: { font: "helvetica", fontSize: 9, cellPadding: { top: 2.6, bottom: 2.6, left: 3, right: 3 }, textColor: INK, lineColor: LINE, lineWidth: { bottom: 0.2 }, valign: "middle" },
     headStyles: { fillColor: INDIGO, textColor: [255, 255, 255], fontStyle: "bold", fontSize: 7.5, lineWidth: 0 },
     alternateRowStyles: { fillColor: SOFT },
-    columnStyles: { 0: { fontStyle: "bold", cellWidth: 38 }, 1: { textColor: MUTE, cellWidth: 48 }, 2: { halign: "center" }, 3: { halign: "center" }, 4: { halign: "center" }, 5: { halign: "center" }, 6: { halign: "center" } },
+    columnStyles: { 0: { fontStyle: "bold", cellWidth: 38 }, 1: { textColor: MUTE, cellWidth: 48 }, 2: { halign: "center" }, 3: { halign: "center" }, 4: { halign: "center" }, 5: { halign: "center" }, 6: { halign: "center" }, 7: { halign: "center" } },
     didParseCell: (h) => {
       if (h.section === "head" && h.column.index >= 2) h.cell.styles.halign = "center";
     },
@@ -258,7 +259,7 @@ export function renderWeeklyEmail(data: WeeklyData, fileName: string): { subject
     const S = totalsOf(sec);
     const rows = sec.people.map((p) => {
       const c = countsOf(p.rows);
-      return `<tr><td style="padding:9px 0;${cell}"><b>${esc(p.name)}</b></td><td align="center" style="${cell}">${c.priced}</td><td align="center" style="${cell}">${c.samples}</td><td align="center" style="${cell}">${c.accepted}</td><td align="center" style="${cell}">${c.declined}</td><td align="center" style="${cell}">${c.negotiating}</td></tr>`;
+      return `<tr><td style="padding:9px 0;${cell}"><b>${esc(p.name)}</b></td><td align="center" style="${cell}">${c.priced}</td><td align="center" style="${cell}">${c.samples}</td><td align="center" style="${cell}">${c.justEnquiries}</td><td align="center" style="${cell}">${c.accepted}</td><td align="center" style="${cell}">${c.declined}</td><td align="center" style="${cell}">${c.negotiating}</td></tr>`;
     }).join("");
     const attn = sec.attention.length
       ? `<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:14px 16px;margin-top:14px;font-size:13px;line-height:1.7;color:#7c2d12;"><b>Needs attention</b><br>${sec.attention.map((a) => `&bull; ${esc(a)}`).join("<br>")}</div>`
@@ -268,7 +269,7 @@ export function renderWeeklyEmail(data: WeeklyData, fileName: string): { subject
 <table role="presentation" width="100%" cellpadding="0" cellspacing="8" style="margin:-8px;"><tr>${kpi("Priced", S.priced, "#378add")}${kpi("Samples", S.samples, "#7c3aed")}${kpi("Accepted", S.accepted, "#1baf7a")}${kpi("Declined", S.declined, "#98a2b3")}${kpi("Negotiating", S.negotiating, "#eda100")}${kpi("Just enquiries", S.justEnquiries, "#64748b")}</tr></table>
 <div style="font-size:13px;font-weight:800;color:#101828;margin:18px 0 8px;">By person</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;color:#344054;border-collapse:collapse;">
-<tr style="color:#667085;font-size:11px;text-transform:uppercase;letter-spacing:.08em;"><td style="padding:6px 0;">Person</td><td align="center">Priced</td><td align="center">Samples</td><td align="center">Accepted</td><td align="center">Declined</td><td align="center">Negotiating</td></tr>${rows}</table>${attn}</td></tr>`;
+<tr style="color:#667085;font-size:11px;text-transform:uppercase;letter-spacing:.08em;"><td style="padding:6px 0;">Person</td><td align="center">Priced</td><td align="center">Samples</td><td align="center">Just enquiries</td><td align="center">Accepted</td><td align="center">Declined</td><td align="center">Negotiating</td></tr>${rows}</table>${attn}</td></tr>`;
   };
   const sectionsHtml = data.sections.map(block).join("");
   const html = `<!doctype html>
