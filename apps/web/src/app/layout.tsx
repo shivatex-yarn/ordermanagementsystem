@@ -1,14 +1,15 @@
 import type { Metadata } from "next";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import localFont from "next/font/local";
 import { Providers } from "@/components/providers";
 import { APP_NAME, COMPANY_NAME } from "@/lib/branding";
 import "./globals.css";
 
-const plusJakarta = Plus_Jakarta_Sans({
+/** Bundled with the app (SIL Open Font License) so production builds never depend on downloading it from Google. */
+const plusJakarta = localFont({
+  src: "./fonts/plus-jakarta-sans-latin-wght-normal.woff2",
   variable: "--font-plus-jakarta",
-  subsets: ["latin"],
   display: "swap",
-  weight: ["300", "400", "500", "600", "700", "800"],
+  weight: "200 800",
 });
 
 export const metadata: Metadata = {
