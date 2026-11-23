@@ -160,7 +160,7 @@ function enquirySheet(wb: XlWorkbook, name: string, logoId: number | null, rows:
     const vals: Record<string, unknown> = {
       no: r.orderNumber, date: d(r.enquiryDate), submitted: r.createdAt ? new Date(r.createdAt) : "", client: r.companyName || r.customerName, contact: r.customerName,
       phone: r.customerPhone ?? "", email: r.customerEmail ?? "", gst: r.gstNumber ?? "", division: r.division.name,
-      product: r.productDetails ?? "", sample: (r.isSample ? "Sample" : r.justEnquiry ? "Just enquiry" : "Full order"), remarks: r.sampleRemarks ?? "",
+      product: r.productDetails ?? "", sample: (r.isSample ? "Sample" : r.justEnquiry ? "Enquiry only" : "Full order"), remarks: r.sampleRemarks ?? "",
       price: r.pricePerUnit ? Number(r.pricePerUnit) : null, unit: r.priceUnit ?? "",
       qty: r.quantity ?? "", terms: r.paymentTerms ?? "", delivery: r.deliveryTime ?? "", pricedBy: r.pricedBy?.name ?? "",
       resp: r.clientResponse ? RESP[r.clientResponse] ?? r.clientResponse : "", feedback: r.clientFeedback ?? "",
@@ -350,7 +350,7 @@ export async function exportPdf(rows: ExportRow[], meta: ExportMeta) {
   const body = (g: ExportRow[], withDivision: boolean) =>
     g.map((r) => [
       r.orderNumber, r.createdAt ? `${fmtD(r.enquiryDate)}\nEntered ${fmtD(r.createdAt)}` : fmtD(r.enquiryDate), r.companyName || r.customerName, ...(withDivision ? [r.division.name] : []),
-      (r.isSample ? "Sample" : r.justEnquiry ? "Just enquiry" : "Full order"), price(r), r.clientResponse ? RESP[r.clientResponse] ?? "" : "-", STATUS[r.status] ?? r.status, r.createdBy.name,
+      (r.isSample ? "Sample" : r.justEnquiry ? "Enquiry only" : "Full order"), price(r), r.clientResponse ? RESP[r.clientResponse] ?? "" : "-", STATUS[r.status] ?? r.status, r.createdBy.name,
     ]);
   const heads = (withDivision: boolean) => ["ENQUIRY", "DATE", "CLIENT", ...(withDivision ? ["DIVISION"] : []), "TYPE", "PRICE", "CLIENT RESPONSE", "STATUS", "LOGGED BY"];
 

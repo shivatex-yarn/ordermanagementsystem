@@ -74,7 +74,7 @@ export async function POST(req: Request) {
     orderId: order.id,
     type: "ENQUIRY_CREATED",
     title: "Enquiry logged",
-    detail: d.isSample ? "Client wants a sample." : d.justEnquiry ? "Just an enquiry (price / information)." : null,
+    detail: d.isSample ? "Client wants a sample." : d.justEnquiry ? "Enquiry only (price / information)." : null,
     actorId: Number(auth.payload.sub),
   });
   // Audit + notifications are best-effort and nobody waits on them: run them after the response has gone out.

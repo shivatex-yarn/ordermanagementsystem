@@ -60,7 +60,7 @@ export default function OverviewPage() {
         <Tile label="Waiting for client" value={s.PRICED ?? 0} icon={Hourglass} tone="bg-[var(--app-wait-bg)] text-[var(--app-wait-ink)]" href="/orders?status=PRICED" />
         <Tile label="Closed" value={s.CLOSED ?? 0} icon={CheckCircle2} tone="bg-[var(--app-done-bg)] text-[var(--app-done-ink)]" href="/orders?status=CLOSED" />
         <Tile label="Sample requests" value={data.samples} icon={FlaskConical} tone="bg-[var(--app-brand-tint)] text-[var(--app-brand)]" href="/orders" />
-        <Tile label="Just enquiries" value={data.justEnquiries} icon={MessageCircleQuestion} tone="bg-[var(--app-surface-sunk)] text-[var(--app-ink-2)]" href="/orders" />
+        <Tile label="Enquiry only" value={data.justEnquiries} icon={MessageCircleQuestion} tone="bg-[var(--app-surface-sunk)] text-[var(--app-ink-2)]" href="/orders" />
       </div>
 
       <Panel><KpiStrip k={data.analytics.kpis} /></Panel>

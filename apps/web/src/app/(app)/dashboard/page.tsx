@@ -55,7 +55,7 @@ export default function DashboardPage() {
   } else if (marketing) {
     next = s.PLACED && data.needsPricing[0]
       ? <NextStep title={`${s.PLACED} enquiries need your pricing`} description="Open the oldest first, add the price, then record the sample and client feedback." actionLabel="Open oldest" actionHref={`/orders/${data.needsPricing[0].id}`} />
-      : <NextStep title="Log the next client enquiry" description="Enter the client, pick the division and say whether it's a sample, a full order or just an enquiry." actionLabel="New enquiry" actionHref="/orders/new" />;
+      : <NextStep title="Log the next client enquiry" description="Enter the client, pick the division and say whether it's a sample, a full order or enquiry only." actionLabel="New enquiry" actionHref="/orders/new" />;
   } else if (s.PLACED) {
     next = <NextStep title={`${s.PLACED} enquiries need your pricing`} description="Open the oldest first, add the price, then record the sample and client feedback." actionLabel="Open oldest" actionHref={`/orders/${data.needsPricing[0]?.id}`} />;
   } else if (s.PRICED) {
@@ -79,7 +79,7 @@ export default function DashboardPage() {
         <Tile label="Needs pricing" value={s.PLACED ?? 0} icon={CircleDashed} tone="bg-[var(--app-act-bg)] text-[var(--app-act-ink)]" href="/orders?status=PLACED" />
         <Tile label="Waiting for client" value={s.PRICED ?? 0} icon={Hourglass} tone="bg-[var(--app-wait-bg)] text-[var(--app-wait-ink)]" href="/orders?status=PRICED" />
         <Tile label="Samples to send" value={data.samplesToSend} icon={FlaskConical} tone="bg-[var(--app-brand-tint)] text-[var(--app-brand)]" href="/orders" />
-        <Tile label="Just enquiries open" value={data.justEnquiries} icon={MessageCircleQuestion} tone="bg-[var(--app-surface-sunk)] text-[var(--app-ink-2)]" href="/orders" />
+        <Tile label="Enquiry only open" value={data.justEnquiries} icon={MessageCircleQuestion} tone="bg-[var(--app-surface-sunk)] text-[var(--app-ink-2)]" href="/orders" />
         <Tile label="Closed" value={s.CLOSED ?? 0} icon={CheckCircle2} tone="bg-[var(--app-done-bg)] text-[var(--app-done-ink)]" href="/orders?status=CLOSED" />
       </div>
 

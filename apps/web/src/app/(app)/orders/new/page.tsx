@@ -142,8 +142,8 @@ export default function NewEnquiryPage() {
             <Field label="Product / requirement details" required htmlFor="pd" hint="Describe the product, specification and quantity the client wants.">
               <textarea id="pd" required className={textareaClass} value={f.productDetails} onChange={set("productDetails")} placeholder="e.g. Laminated fabric, 120 gsm, 5,000 metres, navy blue" />
             </Field>
-            <Field label="What does the client want?" hint="Sample: client wants to see a sample first. Full order: client is ready to order. Just enquiry: only asking for price or information.">
-              <Segmented value={kind} onChange={setKind} options={[{ value: "SAMPLE", label: "Sample" }, { value: "ORDER", label: "Full order" }, { value: "ENQUIRY", label: "Just enquiry" }]} />
+            <Field label="What does the client want?" hint="Sample: client wants to see a sample first. Full order: client is ready to order. Enquiry only: only asking for price or information.">
+              <Segmented value={kind} onChange={setKind} options={[{ value: "SAMPLE", label: "Sample" }, { value: "ORDER", label: "Full order" }, { value: "ENQUIRY", label: "Enquiry only" }]} />
             </Field>
           </div>
         </Panel>
