@@ -6,7 +6,7 @@ import { FilterBar, Funnel, OldestWaiting, TeamActivity, TopClients } from "@/co
 import { useState } from "react";
 
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { CheckCircle2, CircleDashed, FlaskConical, Hourglass, Plus } from "lucide-react";
+import { CheckCircle2, CircleDashed, FlaskConical, Hourglass, MessageCircleQuestion, Plus } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { api, fmtDate, fmtMoney } from "@/lib/format";
 import { PageHeader, Panel, PanelHeader, PanelLink, PanelSkeleton, EmptyState } from "@/components/ui/panel";
@@ -19,7 +19,7 @@ import { DivisionBars, KpiStrip, ResponseDonut, StatusDonut, TrendChart } from "
 import { CalendarPanel } from "@/components/dashboard/calendar-panel";
 
 type Row = { id: number; orderNumber: string; status: string; enquiryDate: string; customerName: string; companyName: string | null; isSample: boolean; pricePerUnit: string | null; priceUnit: string | null; division: { name: string } };
-type Data = { byStatus: Record<string, number>; byDivision: { name: string; count: number }[]; mine: number; samplesToSend: number; recent: Row[]; needsPricing: Row[]; analytics: Analytics };
+type Data = { byStatus: Record<string, number>; byDivision: { name: string; count: number }[]; mine: number; samplesToSend: number; justEnquiries: number; recent: Row[]; needsPricing: Row[]; analytics: Analytics };
 
 function Tile({ label, value, icon: Icon, tone, href }: { label: string; value: number; icon: React.ComponentType<{ className?: string }>; tone: string; href: string }) {
   return (
@@ -55,7 +55,7 @@ export default function DashboardPage() {
   } else if (marketing) {
     next = s.PLACED && data.needsPricing[0]
       ? <NextStep title={`${s.PLACED} enquiries need your pricing`} description="Open the oldest first, add the price, then record the sample and client feedback." actionLabel="Open oldest" actionHref={`/orders/${data.needsPricing[0].id}`} />
-      : <NextStep title="Log the next client enquiry" description="Enter the client, pick the division and say whether it's a sample." actionLabel="New enquiry" actionHref="/orders/new" />;
+      : <NextStep title="Log the next client enquiry" description="Enter the client, pick the division and say whether it's a sample, a full order or just an enquiry." actionLabel="New enquiry" actionHref="/orders/new" />;
   } else if (s.PLACED) {
     next = <NextStep title={`${s.PLACED} enquiries need your pricing`} description="Open the oldest first, add the price, then record the sample and client feedback." actionLabel="Open oldest" actionHref={`/orders/${data.needsPricing[0]?.id}`} />;
   } else if (s.PRICED) {
@@ -75,10 +75,11 @@ export default function DashboardPage() {
       <OldestWaiting o={data.analytics.oldestWaiting} />
       <FilterBar days={days} onDays={setDays} from={from} to={to} onRange={(f, t) => { setFrom(f); setTo(t); }} division={division} onDivision={setDivision} divisions={user.divisions} />
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
         <Tile label="Needs pricing" value={s.PLACED ?? 0} icon={CircleDashed} tone="bg-[var(--app-act-bg)] text-[var(--app-act-ink)]" href="/orders?status=PLACED" />
         <Tile label="Waiting for client" value={s.PRICED ?? 0} icon={Hourglass} tone="bg-[var(--app-wait-bg)] text-[var(--app-wait-ink)]" href="/orders?status=PRICED" />
         <Tile label="Samples to send" value={data.samplesToSend} icon={FlaskConical} tone="bg-[var(--app-brand-tint)] text-[var(--app-brand)]" href="/orders" />
+        <Tile label="Just enquiries open" value={data.justEnquiries} icon={MessageCircleQuestion} tone="bg-[var(--app-surface-sunk)] text-[var(--app-ink-2)]" href="/orders" />
         <Tile label="Closed" value={s.CLOSED ?? 0} icon={CheckCircle2} tone="bg-[var(--app-done-bg)] text-[var(--app-done-ink)]" href="/orders?status=CLOSED" />
       </div>
 

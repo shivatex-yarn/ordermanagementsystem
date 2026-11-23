@@ -12,7 +12,7 @@ export async function GET(req: Request) {
   const scope = await scopeWhere(auth.payload);
 
   const sp = new URL(req.url).searchParams;
-  const [byStatus, byDivision, divisions, recent, mine, samplesToSend, needsPricing] = await Promise.all([
+  const [byStatus, byDivision, divisions, recent, mine, samplesToSend, needsPricing, justEnquiries] = await Promise.all([
     prisma.order.groupBy({ by: ["status"], where: scope, _count: { _all: true } }),
     prisma.order.groupBy({ by: ["divisionId"], where: scope, _count: { _all: true } }),
     prisma.division.findMany({ select: { id: true, name: true } }),
@@ -20,6 +20,7 @@ export async function GET(req: Request) {
     prisma.order.count({ where: { ...scope, createdById: me } }),
     prisma.order.count({ where: { ...scope, isSample: true, sampleSentAt: null, status: { in: ["PLACED", "PRICED"] } } }),
     prisma.order.findMany({ where: { ...scope, status: "PLACED" }, orderBy: { enquiryDate: "asc" }, take: 5, select: orderListSelect }),
+    prisma.order.count({ where: { ...scope, justEnquiry: true, status: { in: ["PLACED", "PRICED"] } } }),
   ]);
   const names = new Map(divisions.map((d) => [d.id, d.name]));
   return NextResponse.json({
@@ -27,6 +28,7 @@ export async function GET(req: Request) {
     byDivision: byDivision.map((d) => ({ name: names.get(d.divisionId) ?? "Unknown", count: d._count._all })).sort((a, b) => b.count - a.count),
     mine,
     samplesToSend,
+    justEnquiries,
     recent,
     needsPricing,
     analytics: await computeAnalytics(scope, { days: Number(sp.get("days")) || 30, divisionId: Number(sp.get("divisionId")) || undefined, from: sp.get("from") || undefined, to: sp.get("to") || undefined }),

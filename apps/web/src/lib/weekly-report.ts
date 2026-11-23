@@ -34,7 +34,7 @@ const loadOrders = (start: Date, end: Date) =>
     where: { createdAt: { gte: start, lt: end } },
     orderBy: [{ createdAt: "asc" }],
     select: {
-      id: true, orderNumber: true, enquiryDate: true, customerName: true, companyName: true, status: true, isSample: true, sampleSentAt: true,
+      id: true, orderNumber: true, enquiryDate: true, customerName: true, companyName: true, status: true, isSample: true, justEnquiry: true, sampleSentAt: true,
       pricePerUnit: true, priceUnit: true, pricedAt: true, clientResponse: true, clientFeedback: true,
       division: { select: { name: true } }, createdBy: { select: { id: true, name: true, organizationId: true, active: true } },
     },
@@ -62,7 +62,7 @@ async function buildSection(title: string, orders: OrderRow[], marketers: Market
       statusLabel: label, tone, price, response,
       priced: o.pricedAt !== null, accepted: o.status === "CLOSED" && o.clientResponse === "ACCEPTED", declined: o.status === "CLOSED" && o.clientResponse === "DECLINED",
       negotiating: o.status === "PRICED" && o.clientResponse === "NEGOTIATING",
-      open: o.status === "PLACED" || o.status === "PRICED", sampleSent: o.isSample && o.sampleSentAt !== null,
+      open: o.status === "PLACED" || o.status === "PRICED", sampleSent: o.isSample && o.sampleSentAt !== null, justEnquiry: o.justEnquiry,
     };
     person(o.createdBy.id, o.createdBy.name, []).rows.push(row);
   }

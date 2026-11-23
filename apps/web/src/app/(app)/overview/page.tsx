@@ -7,7 +7,7 @@ import { useState } from "react";
 
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
-import { CheckCircle2, CircleDashed, FlaskConical, Hourglass, ListChecks } from "lucide-react";
+import { CheckCircle2, CircleDashed, FlaskConical, Hourglass, ListChecks, MessageCircleQuestion } from "lucide-react";
 import { api, fmtDate, fmtMoney } from "@/lib/format";
 import { PageHeader, Panel, PanelHeader, PanelLink, PanelSkeleton, EmptyState } from "@/components/ui/panel";
 import { StatusPill } from "@/components/ui/status-pill";
@@ -20,6 +20,7 @@ type Overview = {
   byStatus: Record<string, number>;
   byDivision: { name: string; count: number }[];
   samples: number;
+  justEnquiries: number;
   recent: { id: number; orderNumber: string; status: string; enquiryDate: string; customerName: string; companyName: string | null; pricePerUnit: string | null; priceUnit: string | null; division: { name: string } }[];
   analytics: Analytics;
   feedback: { id: number; orderNumber: string; customerName: string; companyName: string | null; clientFeedback: string | null; clientResponse: string | null; clientFeedbackAt: string | null; division: { name: string } }[];
@@ -54,11 +55,12 @@ export default function OverviewPage() {
       <PageHeader title="Overview" description="Every division at a glance. Read-only." />
       <OldestWaiting o={data.analytics.oldestWaiting} />
       <FilterBar days={days} onDays={setDays} from={from} to={to} onRange={(f, t) => { setFrom(f); setTo(t); }} division={division} onDivision={setDivision} divisions={user?.divisions ?? []} />
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
         <Tile label="Needs pricing" value={s.PLACED ?? 0} icon={CircleDashed} tone="bg-[var(--app-act-bg)] text-[var(--app-act-ink)]" href="/orders?status=PLACED" />
         <Tile label="Waiting for client" value={s.PRICED ?? 0} icon={Hourglass} tone="bg-[var(--app-wait-bg)] text-[var(--app-wait-ink)]" href="/orders?status=PRICED" />
         <Tile label="Closed" value={s.CLOSED ?? 0} icon={CheckCircle2} tone="bg-[var(--app-done-bg)] text-[var(--app-done-ink)]" href="/orders?status=CLOSED" />
         <Tile label="Sample requests" value={data.samples} icon={FlaskConical} tone="bg-[var(--app-brand-tint)] text-[var(--app-brand)]" href="/orders" />
+        <Tile label="Just enquiries" value={data.justEnquiries} icon={MessageCircleQuestion} tone="bg-[var(--app-surface-sunk)] text-[var(--app-ink-2)]" href="/orders" />
       </div>
 
       <Panel><KpiStrip k={data.analytics.kpis} /></Panel>
