@@ -12,7 +12,7 @@ export type Tone = "good" | "grey" | "wait" | "warn";
 export type WeeklyRow = {
   orderNumber: string; enquiryDate: Date; client: string; division: string;
   statusLabel: string; tone: Tone; price: string; response: string;
-  priced: boolean; accepted: boolean; declined: boolean; negotiating: boolean; open: boolean; sampleSent: boolean;
+  priced: boolean; accepted: boolean; declined: boolean; negotiating: boolean; open: boolean; sampleSent: boolean; justEnquiry: boolean;
 };
 export type WeeklyPerson = {
   name: string; divisions: string[]; rows: WeeklyRow[];
@@ -63,12 +63,13 @@ export function totalsOf(d: WeeklyData | WeeklySection) {
     negotiating: rows.filter((r) => r.negotiating).length,
     open: rows.filter((r) => r.open).length,
     samples: rows.filter((r) => r.sampleSent).length,
+    justEnquiries: rows.filter((r) => r.justEnquiry).length,
   };
 }
 const countsOf = (rows: WeeklyRow[]) => ({
   logged: rows.length, priced: rows.filter((r) => r.priced).length, accepted: rows.filter((r) => r.accepted).length,
   declined: rows.filter((r) => r.declined).length, negotiating: rows.filter((r) => r.negotiating).length,
-  open: rows.filter((r) => r.open).length, samples: rows.filter((r) => r.sampleSent).length,
+  open: rows.filter((r) => r.open).length, samples: rows.filter((r) => r.sampleSent).length, justEnquiries: rows.filter((r) => r.justEnquiry).length,
 });
 
 /** What each column means, in plain words. Shown in the email and the PDF. */
@@ -122,8 +123,8 @@ export async function renderWeeklyPdf(data: WeeklyData): Promise<Buffer> {
   doc.setFont("helvetica", "normal").setFontSize(9.5).setTextColor(...MUTE)
     .text(`Enquiries logged ${dFull(data.start)} to ${dFull(data.endDay)} · Generated ${dFull(data.generatedAt)}, ${data.generatedAt.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", timeZone: IST })} IST`, M, y);
   y += 8;
-  const kpis: [string, number, RGB][] = [["Priced", T.priced, [55, 138, 221]], ["Samples given", T.samples, [124, 58, 237]], ["Accepted", T.accepted, [27, 175, 122]], ["Declined", T.declined, [152, 162, 179]], ["Negotiating", T.negotiating, [237, 161, 0]]];
-  const gap = 3, kw = (CW - gap * 4) / 5;
+  const kpis: [string, number, RGB][] = [["Priced", T.priced, [55, 138, 221]], ["Samples given", T.samples, [124, 58, 237]], ["Accepted", T.accepted, [27, 175, 122]], ["Declined", T.declined, [152, 162, 179]], ["Negotiating", T.negotiating, [237, 161, 0]], ["Just enquiries", T.justEnquiries, [100, 116, 139]]];
+  const gap = 3, kw = (CW - gap * 5) / 6;
   kpis.forEach(([label, v, col], i) => {
     const x = M + i * (kw + gap);
     doc.setFillColor(...SOFT).setDrawColor(...LINE).setLineWidth(0.25).roundedRect(x, y, kw, 20, 3, 3, "FD");
@@ -197,7 +198,7 @@ export async function renderWeeklyPdf(data: WeeklyData): Promise<Buffer> {
     doc.setFont("helvetica", "bold").setFontSize(8.5).setTextColor(255, 255, 255).text(initials(p.name), M + 7, y + 7.6, { align: "center" });
     doc.setFontSize(11).setTextColor(...INK).text(p.name, M + 14, y + 5.6);
     doc.setFont("helvetica", "normal").setFontSize(8).setTextColor(...MUTE).text(p.divisions.join(", ") || "No division mapped", M + 14, y + 10.2);
-    doc.setFont("helvetica", "bold").setFontSize(8.5).setTextColor(...INDIGO_D).text(`${c.priced} priced · ${c.samples} samples · ${c.accepted} accepted · ${c.declined} declined · ${c.negotiating} negotiating`, W - M - 4, y + 7.8, { align: "right" });
+    doc.setFont("helvetica", "bold").setFontSize(8.5).setTextColor(...INDIGO_D).text(`${c.priced} priced · ${c.samples} samples · ${c.justEnquiries} just enquiries · ${c.accepted} accepted · ${c.declined} declined · ${c.negotiating} negotiating`, W - M - 4, y + 7.8, { align: "right" });
     y += 15;
     if (!p.rows.length) {
       doc.setFillColor(255, 241, 242).setDrawColor(254, 205, 211).setLineWidth(0.3).roundedRect(M, y, CW, 9, 2, 2, "FD");
@@ -264,7 +265,7 @@ export function renderWeeklyEmail(data: WeeklyData, fileName: string): { subject
       : "";
     return `<tr><td style="padding:26px 28px 4px;">
 <div style="font-size:20px;font-weight:800;color:#4338ca;border-left:4px solid #4f46e5;padding-left:12px;margin-bottom:14px;">${esc(sec.title)}</div>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="8" style="margin:-8px;"><tr>${kpi("Priced", S.priced, "#378add")}${kpi("Samples", S.samples, "#7c3aed")}${kpi("Accepted", S.accepted, "#1baf7a")}${kpi("Declined", S.declined, "#98a2b3")}${kpi("Negotiating", S.negotiating, "#eda100")}</tr></table>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="8" style="margin:-8px;"><tr>${kpi("Priced", S.priced, "#378add")}${kpi("Samples", S.samples, "#7c3aed")}${kpi("Accepted", S.accepted, "#1baf7a")}${kpi("Declined", S.declined, "#98a2b3")}${kpi("Negotiating", S.negotiating, "#eda100")}${kpi("Just enquiries", S.justEnquiries, "#64748b")}</tr></table>
 <div style="font-size:13px;font-weight:800;color:#101828;margin:18px 0 8px;">By person</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;color:#344054;border-collapse:collapse;">
 <tr style="color:#667085;font-size:11px;text-transform:uppercase;letter-spacing:.08em;"><td style="padding:6px 0;">Person</td><td align="center">Priced</td><td align="center">Samples</td><td align="center">Accepted</td><td align="center">Declined</td><td align="center">Negotiating</td></tr>${rows}</table>${attn}</td></tr>`;
@@ -292,10 +293,10 @@ ${sectionsHtml}
 </td></tr></table></body></html>`;
   const text = [
     subject, "",
-    `${T.priced} priced, ${T.samples} samples given, ${T.accepted} accepted, ${T.declined} declined, ${T.negotiating} negotiating.`, "",
+    `${T.priced} priced, ${T.samples} samples given, ${T.justEnquiries} just enquiries, ${T.accepted} accepted, ${T.declined} declined, ${T.negotiating} negotiating.`, "",
     ...data.sections.flatMap((sec) => [
       "", sec.title.toUpperCase(),
-      ...sec.people.map((p) => { const c = countsOf(p.rows); return `${p.name}: ${c.priced} priced, ${c.samples} samples, ${c.accepted} accepted, ${c.declined} declined, ${c.negotiating} negotiating`; }),
+      ...sec.people.map((p) => { const c = countsOf(p.rows); return `${p.name}: ${c.priced} priced, ${c.samples} samples, ${c.justEnquiries} just enquiries, ${c.accepted} accepted, ${c.declined} declined, ${c.negotiating} negotiating`; }),
       ...(sec.attention.length ? ["Needs attention:", ...sec.attention.map((a) => `- ${a}`)] : []),
     ]),
     "", "WHAT THE NUMBERS MEAN", ...GLOSSARY.map(([k, v]) => `${k}: ${v}`),
