@@ -15,7 +15,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const id = Number((await ctx.params).id);
   const order = await getScopedOrder(id, auth.payload);
   if (!order) return NextResponse.json({ error: "Enquiry not found" }, { status: 404 });
-  if (order.justEnquiry && order.clientResponse !== "ACCEPTED") return NextResponse.json({ error: "Remarks open once the client accepts a just-enquiry" }, { status: 400 });
+  if (order.justEnquiry && order.clientResponse !== "ACCEPTED") return NextResponse.json({ error: "Remarks open once the client accepts an enquiry-only request" }, { status: 400 });
   const parsed = sampleSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });

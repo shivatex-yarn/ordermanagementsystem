@@ -76,7 +76,7 @@ const countsOf = (rows: WeeklyRow[]) => ({
 export const GLOSSARY: [string, string][] = [
   ["Priced", "Sales has sent the quote (price) to the client. Counts every quoted enquiry, even if the client has answered since."],
   ["Samples", "A sample was requested for this enquiry and has been given or sent to the client."],
-  ["Just enquiries", "The client only asked for a price or information. No sample or firm order was requested."],
+  ["Enquiry only", "The client only asked for a price or information. No sample or firm order was requested."],
   ["Accepted", "The client agreed to the price. The enquiry is closed as won."],
   ["Declined", "The client said no. The enquiry is closed as lost; it can be reopened if the client comes back."],
   ["Negotiating", "The client replied but has not agreed yet (asking for a better price or changes). The enquiry is still open."],
@@ -124,7 +124,7 @@ export async function renderWeeklyPdf(data: WeeklyData): Promise<Buffer> {
   doc.setFont("helvetica", "normal").setFontSize(9.5).setTextColor(...MUTE)
     .text(`Enquiries logged ${dFull(data.start)} to ${dFull(data.endDay)} · Generated ${dFull(data.generatedAt)}, ${data.generatedAt.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", timeZone: IST })} IST`, M, y);
   y += 8;
-  const kpis: [string, number, RGB][] = [["Priced", T.priced, [55, 138, 221]], ["Samples given", T.samples, [124, 58, 237]], ["Accepted", T.accepted, [27, 175, 122]], ["Declined", T.declined, [152, 162, 179]], ["Negotiating", T.negotiating, [237, 161, 0]], ["Just enquiries", T.justEnquiries, [100, 116, 139]]];
+  const kpis: [string, number, RGB][] = [["Priced", T.priced, [55, 138, 221]], ["Samples given", T.samples, [124, 58, 237]], ["Accepted", T.accepted, [27, 175, 122]], ["Declined", T.declined, [152, 162, 179]], ["Negotiating", T.negotiating, [237, 161, 0]], ["Enquiry only", T.justEnquiries, [100, 116, 139]]];
   const gap = 3, kw = (CW - gap * 5) / 6;
   kpis.forEach(([label, v, col], i) => {
     const x = M + i * (kw + gap);
@@ -138,7 +138,7 @@ export async function renderWeeklyPdf(data: WeeklyData): Promise<Buffer> {
   heading("Team performance", y); y += 3;
   autoTable(doc, {
     startY: y, margin: { left: M, right: M, top: 42 },
-    head: [["Person", "Divisions", "Priced", "Samples", "Just enquiries", "Accepted", "Declined", "Negotiating"]],
+    head: [["Person", "Divisions", "Priced", "Samples", "Enquiry only", "Accepted", "Declined", "Negotiating"]],
     body: sec.people.map((p) => { const c = countsOf(p.rows); return [p.name, p.divisions.join(", ") || "-", String(c.priced), String(c.samples), String(c.justEnquiries), String(c.accepted), String(c.declined), String(c.negotiating)]; }),
     theme: "plain",
     styles: { font: "helvetica", fontSize: 9, cellPadding: { top: 2.6, bottom: 2.6, left: 3, right: 3 }, textColor: INK, lineColor: LINE, lineWidth: { bottom: 0.2 }, valign: "middle" },
@@ -199,7 +199,7 @@ export async function renderWeeklyPdf(data: WeeklyData): Promise<Buffer> {
     doc.setFont("helvetica", "bold").setFontSize(8.5).setTextColor(255, 255, 255).text(initials(p.name), M + 7, y + 7.6, { align: "center" });
     doc.setFontSize(11).setTextColor(...INK).text(p.name, M + 14, y + 5.6);
     doc.setFont("helvetica", "normal").setFontSize(8).setTextColor(...MUTE).text(p.divisions.join(", ") || "No division mapped", M + 14, y + 10.2);
-    doc.setFont("helvetica", "bold").setFontSize(8.5).setTextColor(...INDIGO_D).text(`${c.priced} priced · ${c.samples} samples · ${c.justEnquiries} just enquiries · ${c.accepted} accepted · ${c.declined} declined · ${c.negotiating} negotiating`, W - M - 4, y + 7.8, { align: "right" });
+    doc.setFont("helvetica", "bold").setFontSize(8.5).setTextColor(...INDIGO_D).text(`${c.priced} priced · ${c.samples} samples · ${c.justEnquiries} enquiry only · ${c.accepted} accepted · ${c.declined} declined · ${c.negotiating} negotiating`, W - M - 4, y + 7.8, { align: "right" });
     y += 15;
     if (!p.rows.length) {
       doc.setFillColor(255, 241, 242).setDrawColor(254, 205, 211).setLineWidth(0.3).roundedRect(M, y, CW, 9, 2, 2, "FD");
@@ -266,10 +266,10 @@ export function renderWeeklyEmail(data: WeeklyData, fileName: string): { subject
       : "";
     return `<tr><td style="padding:26px 28px 4px;">
 <div style="font-size:20px;font-weight:800;color:#4338ca;border-left:4px solid #4f46e5;padding-left:12px;margin-bottom:14px;">${esc(sec.title)}</div>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="8" style="margin:-8px;"><tr>${kpi("Priced", S.priced, "#378add")}${kpi("Samples", S.samples, "#7c3aed")}${kpi("Accepted", S.accepted, "#1baf7a")}${kpi("Declined", S.declined, "#98a2b3")}${kpi("Negotiating", S.negotiating, "#eda100")}${kpi("Just enquiries", S.justEnquiries, "#64748b")}</tr></table>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="8" style="margin:-8px;"><tr>${kpi("Priced", S.priced, "#378add")}${kpi("Samples", S.samples, "#7c3aed")}${kpi("Accepted", S.accepted, "#1baf7a")}${kpi("Declined", S.declined, "#98a2b3")}${kpi("Negotiating", S.negotiating, "#eda100")}${kpi("Enquiry only", S.justEnquiries, "#64748b")}</tr></table>
 <div style="font-size:13px;font-weight:800;color:#101828;margin:18px 0 8px;">By person</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;color:#344054;border-collapse:collapse;">
-<tr style="color:#667085;font-size:11px;text-transform:uppercase;letter-spacing:.08em;"><td style="padding:6px 0;">Person</td><td align="center">Priced</td><td align="center">Samples</td><td align="center">Just enquiries</td><td align="center">Accepted</td><td align="center">Declined</td><td align="center">Negotiating</td></tr>${rows}</table>${attn}</td></tr>`;
+<tr style="color:#667085;font-size:11px;text-transform:uppercase;letter-spacing:.08em;"><td style="padding:6px 0;">Person</td><td align="center">Priced</td><td align="center">Samples</td><td align="center">Enquiry only</td><td align="center">Accepted</td><td align="center">Declined</td><td align="center">Negotiating</td></tr>${rows}</table>${attn}</td></tr>`;
   };
   const sectionsHtml = data.sections.map(block).join("");
   const html = `<!doctype html>
@@ -294,10 +294,10 @@ ${sectionsHtml}
 </td></tr></table></body></html>`;
   const text = [
     subject, "",
-    `${T.priced} priced, ${T.samples} samples given, ${T.justEnquiries} just enquiries, ${T.accepted} accepted, ${T.declined} declined, ${T.negotiating} negotiating.`, "",
+    `${T.priced} priced, ${T.samples} samples given, ${T.justEnquiries} enquiry only, ${T.accepted} accepted, ${T.declined} declined, ${T.negotiating} negotiating.`, "",
     ...data.sections.flatMap((sec) => [
       "", sec.title.toUpperCase(),
-      ...sec.people.map((p) => { const c = countsOf(p.rows); return `${p.name}: ${c.priced} priced, ${c.samples} samples, ${c.justEnquiries} just enquiries, ${c.accepted} accepted, ${c.declined} declined, ${c.negotiating} negotiating`; }),
+      ...sec.people.map((p) => { const c = countsOf(p.rows); return `${p.name}: ${c.priced} priced, ${c.samples} samples, ${c.justEnquiries} enquiry only, ${c.accepted} accepted, ${c.declined} declined, ${c.negotiating} negotiating`; }),
       ...(sec.attention.length ? ["Needs attention:", ...sec.attention.map((a) => `- ${a}`)] : []),
     ]),
     "", "WHAT THE NUMBERS MEAN", ...GLOSSARY.map(([k, v]) => `${k}: ${v}`),

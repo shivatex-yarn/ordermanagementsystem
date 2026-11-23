@@ -266,7 +266,7 @@ function EditForm({ o, onDone }: { o: Order; onDone: () => void }) {
         </select>
       </Field>
       <Field label="Product / requirement details" htmlFor="epd"><textarea id="epd" required className={textareaClass} value={f.productDetails} onChange={set("productDetails")} /></Field>
-      <Field label="What does the client want?"><Segmented value={kind} onChange={setKind} options={[{ value: "SAMPLE", label: "Sample" }, { value: "ORDER", label: "Full order" }, { value: "ENQUIRY", label: "Just enquiry" }]} /></Field>
+      <Field label="What does the client want?"><Segmented value={kind} onChange={setKind} options={[{ value: "SAMPLE", label: "Sample" }, { value: "ORDER", label: "Full order" }, { value: "ENQUIRY", label: "Enquiry only" }]} /></Field>
       <FormError message={error} />
       <div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={onDone}>Cancel</Button><Button type="submit" disabled={busy}>{busy ? "Saving…" : "Save changes"}</Button></div>
     </form>
@@ -366,7 +366,7 @@ export default function EnquiryPage({ params }: { params: Promise<{ id: string }
               <Row k="Contact" v={o.customerName} /><Row k="Company" v={o.companyName} /><Row k="Phone" v={o.customerPhone} />
               <Row k="Email" v={o.customerEmail} /><Row k="GST" v={o.gstNumber} />
               <Row k="GST copy" v={o.gstCopyUrl ? <a href={o.gstCopyUrl} download={`gst-${o.orderNumber}`} className="text-[var(--app-brand)] underline">Download</a> : null} />
-              <Row k="Client wants" v={o.isSample ? "A sample" : o.justEnquiry ? "Just an enquiry" : "A full order"} /><Row k="Logged by" v={o.createdBy.name} />
+              <Row k="Client wants" v={o.isSample ? "A sample" : o.justEnquiry ? "Enquiry only" : "A full order"} /><Row k="Logged by" v={o.createdBy.name} />
             </dl>
             <div className="border-t border-[var(--app-line-soft)] px-5 py-4">
               <p className="text-xs font-bold uppercase tracking-wide text-[var(--app-ink-3)]">Requirement</p>
